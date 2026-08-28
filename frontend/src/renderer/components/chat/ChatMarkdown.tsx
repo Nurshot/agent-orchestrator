@@ -40,6 +40,7 @@ import { WrapText } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { canonicalLanguage } from "../../lib/code-highlight";
 import { fenceOf } from "../../lib/markdown-fence";
+import { isSessionLink, remarkSessionLinks } from "../../lib/session-links";
 import {
 	isPotentialWorkspaceFileLink,
 	isWebLink,
@@ -69,7 +70,7 @@ export const ActivityTitle = memo(function ActivityTitle({ text }: { text: strin
 });
 
 /** GitHub-flavoured markdown: tables, strikethrough, task lists, autolinks. */
-const PLUGINS = [remarkGfm];
+const PLUGINS = [remarkGfm, remarkSessionLinks];
 
 /**
  * Whether the prose is still arriving, for the fences inside it.
@@ -82,27 +83,31 @@ const StreamingProse = createContext(false);
 const OpenChatLink = createContext<{
 	open?: (url: string) => void;
 	openFile?: (path: string) => void;
+	openSession?: (url: string) => void;
 	workspacePaths: string[];
 }>({ workspacePaths: [] });
 
 export function ChatLinkProvider({
 	onLinkOpen,
 	onFileOpen,
+	onSessionLinkOpen,
 	workspacePaths = [],
 	children,
 }: {
 	onLinkOpen?: (url: string) => void;
 	onFileOpen?: (path: string) => void;
+	onSessionLinkOpen?: (url: string) => void;
 	workspacePaths?: string[];
 	children: ReactNode;
 }) {
-	return <OpenChatLink.Provider value={{ open: onLinkOpen, openFile: onFileOpen, workspacePaths }}>{children}</OpenChatLink.Provider>;
+	return <OpenChatLink.Provider value={{ open: onLinkOpen, openFile: onFileOpen, openSession: onSessionLinkOpen, workspacePaths }}>{children}</OpenChatLink.Provider>;
 }
 
 function chatUrlTransform(url: string, key: string): string | undefined {
 	// react-markdown correctly strips unknown schemes, but a Windows absolute
 	// path resembles one (C:). Preserve only hrefs that look like local paths;
 	// the click still goes through the workspace-confined preview endpoint.
+	if (isSessionLink(url)) return url;
 	if (key === "href" && isPotentialWorkspaceFileLink(url)) return url;
 	return defaultUrlTransform(url);
 }
@@ -230,9 +235,10 @@ function compactEmoji(children: ReactNode): ReactNode {
 }
 
 function MarkdownLink({ href, children }: { href?: string; children?: ReactNode }) {
-	const { open: onLinkOpen, openFile: onFileOpen, workspacePaths } = useContext(OpenChatLink);
+	const { open: onLinkOpen, openFile: onFileOpen, openSession: onSessionLinkOpen, workspacePaths } = useContext(OpenChatLink);
 	const filePath = href ? workspaceFilePath(href, workspacePaths) : undefined;
-	const browserLink = href ? isWebLink(href) || !!filePath || isPotentialWorkspaceFileLink(href) : false;
+	const sessionLink = Boolean(href && isSessionLink(href));
+	const browserLink = href ? !sessionLink && (isWebLink(href) || !!filePath || isPotentialWorkspaceFileLink(href)) : false;
 	return (
 		<AppLink
 			href={href}
@@ -241,6 +247,11 @@ function MarkdownLink({ href, children }: { href?: string; children?: ReactNode 
 			filePath={filePath}
 			onFileOpen={onFileOpen}
 			onClick={(event) => {
+				if (href && sessionLink) {
+					event.preventDefault();
+					onSessionLinkOpen?.(href);
+					return;
+				}
 				if (href && !browserLink) {
 					event.preventDefault();
 					void openLinkInSystemBrowser(href);
