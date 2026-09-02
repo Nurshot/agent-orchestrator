@@ -160,6 +160,7 @@ var (
 	ErrSpawnPrompt         = errors.New("prompt")
 	ErrSpawnCreate         = errors.New("create")
 	ErrSpawnSystemPrompt   = errors.New("system prompt file")
+	ErrSpawnArtifactDir    = errors.New("artifact dir")
 	ErrWorkspaceCreate     = errors.New("workspace")
 	ErrWorkspaceProvision  = errors.New("provision")
 	ErrSpawnAttachments    = errors.New("attachments")
@@ -956,21 +957,32 @@ func (m *Manager) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Sess
 		}
 	}
 
-	prompt, systemPrompt, err := m.buildSpawnTexts(ctx, cfg)
-	if err != nil {
-		return domain.SessionRecord{}, 0, 0, wrapSpawnStageEarly(ErrSpawnPrompt, err)
-	}
-	promptBytes := len(prompt)
-	systemPromptBytes := len(systemPrompt)
-
 	rec, err := m.store.CreateSession(ctx, seedRecord(cfg, project.Config, m.clock()))
 	if err != nil {
 		return domain.SessionRecord{}, 0, 0, wrapSpawnStageEarly(ErrSpawnCreate, err)
 	}
 	m.markFreshSessionStatusReady(rec.ID)
 	id := rec.ID
+	if rec.Metadata.ArtifactDir, err = m.reserveArtifactDir(id); err != nil {
+		m.rollbackSpawnSeedRow(ctx, id)
+		return domain.SessionRecord{}, 0, 0, wrapSpawnStage(id, ErrSpawnArtifactDir, err)
+	}
+	if err := m.store.UpdateSession(ctx, rec); err != nil {
+		m.cleanupArtifactDir(id)
+		m.rollbackSpawnSeedRow(ctx, id)
+		return domain.SessionRecord{}, 0, 0, wrapSpawnStage(id, ErrSpawnArtifactDir, err)
+	}
+	prompt, systemPrompt, err := m.buildSpawnTexts(ctx, cfg, id)
+	if err != nil {
+		m.cleanupArtifactDir(id)
+		m.rollbackSpawnSeedRow(ctx, id)
+		return domain.SessionRecord{}, 0, 0, wrapSpawnStage(id, ErrSpawnPrompt, err)
+	}
+	promptBytes := len(prompt)
+	systemPromptBytes := len(systemPrompt)
 	systemPromptFile, err := m.prepareSystemPromptFile(id, cfg.Harness, systemPrompt)
 	if err != nil {
+		m.cleanupArtifactDir(id)
 		m.rollbackSpawnSeedRowAfterFailure(ctx, id)
 		return domain.SessionRecord{}, 0, 0, wrapSpawnStage(id, ErrSpawnSystemPrompt, err)
 	}
@@ -1123,6 +1135,7 @@ func (m *Manager) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Sess
 		Prompt:                    prompt,
 		LatestUserPrompt:          prompt,
 		BrowserCapabilityVerifier: rec.Metadata.BrowserCapabilityVerifier,
+		ArtifactDir:               rec.Metadata.ArtifactDir,
 		// The user-visible resolved selection is Model for regular harnesses and
 		// Mode for adapters whose catalog is a mode list (e.g. Amp). If an explicit
 		// Model override exists it wins; otherwise fall back to the resolved Mode.
@@ -2477,7 +2490,7 @@ func (m *Manager) relaunchSessionWithPolicyAndGeneration(ctx context.Context, op
 	}
 	// Recompute standing instructions, then reapply the durable finalized inbound
 	// handoff for this exact native conversation when one exists.
-	systemPrompt, err := m.buildSystemPrompt(ctx, rec.Kind, rec.ProjectID)
+	systemPrompt, err := m.buildSystemPrompt(ctx, rec.Kind, rec.ProjectID, rec.ID)
 	if err != nil {
 		return RestoreResult{}, fmt.Errorf("%s %s: system prompt: %w", operation, rec.ID, err)
 	}
@@ -4151,6 +4164,7 @@ func seedRecord(cfg ports.SpawnConfig, projectConfig domain.ProjectConfig, now t
 		// statement that can change it afterwards.
 		Mode:              domain.NormalizeSessionMode(cfg.RequestedMode),
 		Metadata:          domain.SessionMetadata{Permissions: applySpawnAgentConfig(effectiveAgentConfig(cfg.Harness, cfg.Kind, projectConfig), cfg.AgentConfig).Permissions},
+		OutputType:        domain.SessionOutputNone,
 		AutoReviewEnabled: projectConfig.AutoReview,
 		AutoInjectReview:  true,
 		AutoInjectCI:      true,
@@ -4343,9 +4357,9 @@ func appendAttachmentReferences(prompt string, refs []string) string {
 // standing instructions rather than part of the human's task request. A
 // promptless spawn delivers no user prompt at all: the agent simply lands at an
 // empty input box rather than receiving an auto-generated kickoff turn.
-func (m *Manager) buildSpawnTexts(ctx context.Context, cfg ports.SpawnConfig) (prompt, systemPrompt string, err error) {
+func (m *Manager) buildSpawnTexts(ctx context.Context, cfg ports.SpawnConfig, sessionID domain.SessionID) (prompt, systemPrompt string, err error) {
 	prompt = buildPrompt(cfg)
-	systemPrompt, err = m.buildSystemPrompt(ctx, cfg.Kind, cfg.ProjectID)
+	systemPrompt, err = m.buildSystemPrompt(ctx, cfg.Kind, cfg.ProjectID, sessionID)
 	if err != nil {
 		return "", "", err
 	}
@@ -4356,7 +4370,7 @@ func (m *Manager) buildSpawnTexts(ctx context.Context, cfg ports.SpawnConfig) (p
 // given kind from current store state. Restore recomputes them through here
 // rather than persisting them, so a restored worker points at the orchestrator
 // that is active now, not the one from its original spawn.
-func (m *Manager) buildSystemPrompt(ctx context.Context, kind domain.SessionKind, projectID domain.ProjectID) (string, error) {
+func (m *Manager) buildSystemPrompt(ctx context.Context, kind domain.SessionKind, projectID domain.ProjectID, sessionID domain.SessionID) (string, error) {
 	project, err := m.loadProject(ctx, projectID)
 	if err != nil {
 		return "", err
@@ -4404,6 +4418,9 @@ func (m *Manager) buildSystemPrompt(ctx context.Context, kind domain.SessionKind
 	}
 	if pointer := strings.TrimSpace(m.aoSkillPointer()); pointer != "" {
 		cfg.AdditionalSections = append(cfg.AdditionalSections, pointer)
+	}
+	if artifactPrompt := strings.TrimSpace(m.artifactPrompt(sessionID)); artifactPrompt != "" {
+		cfg.AdditionalSections = append(cfg.AdditionalSections, artifactPrompt)
 	}
 	return buildSystemPromptText(cfg), nil
 }
@@ -4510,6 +4527,44 @@ func (m *Manager) systemPromptDir(id domain.SessionID) string {
 		return ""
 	}
 	return filepath.Join(m.dataDir, "prompts", string(id))
+}
+
+func (m *Manager) artifactDir(id domain.SessionID) string {
+	if strings.TrimSpace(m.dataDir) == "" {
+		return ""
+	}
+	return filepath.Join(m.dataDir, "artifacts", string(id))
+}
+
+func (m *Manager) reserveArtifactDir(id domain.SessionID) (string, error) {
+	dir := m.artifactDir(id)
+	if dir == "" {
+		return "", nil
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		m.logger.Warn("artifact dir unavailable; reserving path only", "session", id, "path", dir, "err", err)
+	}
+	return dir, nil
+}
+
+func (m *Manager) cleanupArtifactDir(id domain.SessionID) {
+	dir := m.artifactDir(id)
+	if dir == "" {
+		return
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		m.logger.Warn("artifact dir cleanup failed", "session", id, "path", dir, "err", err)
+	}
+}
+
+func (m *Manager) artifactPrompt(id domain.SessionID) string {
+	dir := filepath.ToSlash(m.artifactDir(id))
+	if dir == "" {
+		return ""
+	}
+	return "## Session Artifacts\n\n" +
+		"For non-PR deliverables, write the final files into `" + dir + "` instead of the git workspace. " +
+		"Keep artifacts out of git, preserve any relative asset links between files you place there, and continue using the workspace for code changes that belong in a PR."
 }
 
 func (m *Manager) cleanupSystemPromptDir(id domain.SessionID) {

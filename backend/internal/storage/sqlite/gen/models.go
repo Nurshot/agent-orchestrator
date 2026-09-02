@@ -582,6 +582,8 @@ type Session struct {
 	NativeCheckpointEvidence         string
 	LatestAssistantUpdateAt          sql.NullTime
 	NativeIdentityObservedAt         sql.NullTime
+	ArtifactDir                      string
+	SessionOutputType                string
 }
 
 type SessionCleanupFact struct {
