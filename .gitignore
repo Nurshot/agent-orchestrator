@@ -33,6 +33,7 @@ session-events.jsonl.*
 
 # Local scratch workspace (icon generation, throwaway scripts)
 .cache/
+.worktrees/
 frontend/.tanstack/
 
 # AO reviewer scratch output. The reviewer agent runs inside the worker's
