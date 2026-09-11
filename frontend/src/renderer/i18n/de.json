@@ -648,6 +648,8 @@
 	"standalone.workspaceName": "Notizblock",
 	"notify.all": "Alle",
 	"notify.bell": "Benachrichtigungen",
+	"notify.clearAll": "Alle löschen",
+	"notify.couldNotClearAll": "Benachrichtigungen konnten nicht gelöscht werden",
 	"notify.couldNotMarkAllRead": "Benachrichtigungen konnten nicht als gelesen markiert werden",
 	"notify.couldNotMarkRead": "Benachrichtigung konnte nicht als gelesen markiert werden",
 	"notify.earlierLoadFailed": "Frühere Benachrichtigungen konnten nicht geladen werden.",
