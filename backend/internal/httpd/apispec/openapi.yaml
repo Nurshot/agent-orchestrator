@@ -7784,10 +7784,18 @@ components:
       type: object
     ClearNotificationsResponse:
       properties:
+        clearEpoch:
+          description: Daemon epoch for ordering notification clears across one daemon
+            lifetime.
+          type: string
         clearId:
           description: Identifier shared with the ordered notification_cleared stream
             event.
           type: string
+        clearSequence:
+          description: Monotonic notification-clear sequence within clearEpoch.
+          format: int64
+          type: integer
         clearedCount:
           description: Number of notifications deleted.
           format: int64
@@ -7795,6 +7803,8 @@ components:
       required:
       - clearedCount
       - clearId
+      - clearEpoch
+      - clearSequence
       type: object
     ClonePreparationResult:
       properties:
