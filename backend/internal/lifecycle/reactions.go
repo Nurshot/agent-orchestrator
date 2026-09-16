@@ -618,8 +618,6 @@ func scmToPRObservation(o ports.SCMObservation) ports.PRObservation {
 	if pr.Mergeability == "" {
 		pr.Mergeability = domain.MergeUnknown
 	}
-	pr.Comments = scmReviewCommentObservations(o.Review.Threads)
-
 	checkCommit := firstSCMNonEmpty(o.CI.HeadSHA, o.PR.HeadSHA)
 	for _, ch := range o.CI.FailedChecks {
 		status := domain.PRCheckStatus(ch.Status)
