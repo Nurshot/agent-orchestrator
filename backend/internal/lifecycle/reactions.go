@@ -585,11 +585,8 @@ func scmObservationIsReadyToMerge(o ports.SCMObservation) bool {
 
 func hasUnresolvedSCMComments(threads []ports.SCMReviewThreadObservation) bool {
 	for _, th := range threads {
-		if th.Resolved || th.IsBot {
-			continue
-		}
 		for _, c := range th.Comments {
-			if !c.IsBot {
+			if domain.IsActionableReviewComment(th.Resolved, c.IsBot, th.Path, th.Line) {
 				return true
 			}
 		}
@@ -647,7 +644,7 @@ func scmToPRObservation(o ports.SCMObservation) ports.PRObservation {
 func prCommentObservations(comments []domain.PullRequestComment) []ports.PRCommentObservation {
 	out := make([]ports.PRCommentObservation, 0, len(comments))
 	for _, comment := range comments {
-		if comment.Resolved || (comment.IsBot && !anchoredReviewComment(comment.File, comment.Line)) {
+		if !domain.IsActionableReviewComment(comment.Resolved, comment.IsBot, comment.File, comment.Line) {
 			continue
 		}
 		out = append(out, ports.PRCommentObservation{
@@ -666,14 +663,6 @@ func prCommentObservations(comments []domain.PullRequestComment) []ports.PRComme
 	return out
 }
 
-// anchoredReviewComment identifies a code location that gives automated
-// review feedback enough context to act on. Bot-authored general comments are
-// often status chatter and should not wake an agent; human comments remain
-// actionable regardless of whether they have an anchor.
-func anchoredReviewComment(file string, line int) bool {
-	return strings.TrimSpace(file) != "" && line > 0
-}
-
 func scmReviewCommentObservations(threads []ports.SCMReviewThreadObservation) []ports.PRCommentObservation {
 	var out []ports.PRCommentObservation
 	for _, thread := range threads {
@@ -684,7 +673,7 @@ func scmReviewCommentObservations(threads []ports.SCMReviewThreadObservation) []
 			// Thread bot-ness is aggregate metadata and may describe a bot-started
 			// thread that later receives human feedback. Use each comment's identity
 			// when deciding whether the unanchored-comment filter applies.
-			if comment.IsBot && !anchoredReviewComment(thread.Path, thread.Line) {
+			if !domain.IsActionableReviewComment(thread.Resolved, comment.IsBot, thread.Path, thread.Line) {
 				continue
 			}
 			out = append(out, ports.PRCommentObservation{

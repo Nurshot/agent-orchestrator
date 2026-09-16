@@ -4524,6 +4524,55 @@ func TestSCMObservation_AnchoredBotReviewSuppressesReadyNotification(t *testing.
 	}
 }
 
+func TestSCMObservation_AnchoredBotReviewResolvesExistingReadyNotification(t *testing.T) {
+	st := newFakeStore()
+	sink := &fakeNotificationSink{}
+	m := New(st, nil, WithNotificationSink(sink))
+	st.sessions["mer-1"] = working("mer-1")
+	prURL := "https://github.com/o/r/pull/1"
+	ready := ports.SCMObservation{
+		Fetched: true,
+		PR:      ports.SCMPRObservation{URL: prURL, Number: 1},
+		CI:      ports.SCMCIObservation{Summary: string(domain.CIPassing)},
+		Review:  ports.SCMReviewObservation{Decision: string(domain.ReviewApproved)},
+		Mergeability: ports.SCMMergeabilityObservation{
+			State: string(domain.MergeMergeable),
+		},
+	}
+	if err := m.ApplySCMObservation(ctx, "mer-1", ready); err != nil {
+		t.Fatal(err)
+	}
+	if len(sink.intents) != 1 || sink.intents[0].Type != domain.NotificationReadyToMerge {
+		t.Fatalf("initial intents = %+v, want one ready-to-merge notification", sink.intents)
+	}
+
+	st.comments[prURL] = []domain.PullRequestComment{{
+		ID: "bot-1", ThreadID: "thread-1", Author: "react-doctor[bot]", IsBot: true,
+		File: "src/App.tsx", Line: 42, Body: "avoid this pattern", AutoInjectReview: true,
+	}}
+	blocked := ready
+	blocked.Review = ports.SCMReviewObservation{
+		Decision: string(domain.ReviewApproved),
+		Threads: []ports.SCMReviewThreadObservation{{
+			ID: "thread-1", Path: "src/App.tsx", Line: 42, IsBot: true,
+			Comments: []ports.SCMReviewCommentObservation{{ID: "bot-1", Author: "react-doctor[bot]", IsBot: true, Body: "avoid this pattern"}},
+		}},
+	}
+	if err := m.ApplySCMObservation(ctx, "mer-1", blocked); err != nil {
+		t.Fatal(err)
+	}
+	if len(sink.intents) != 1 {
+		t.Fatalf("bot feedback emitted a competing intent: %+v", sink.intents)
+	}
+	if len(sink.resolutions) != 1 {
+		t.Fatalf("resolutions = %+v, want existing ready notification resolved", sink.resolutions)
+	}
+	got := sink.resolutions[0]
+	if got.Type != domain.NotificationReadyToMerge || got.SessionID != "mer-1" || got.PRURL != prURL {
+		t.Fatalf("resolution = %+v", got)
+	}
+}
+
 func TestSCMObservation_AnchoredBotReviewNudgesAgent(t *testing.T) {
 	m, st, msg := newManager()
 	st.sessions["mer-1"] = working("mer-1")
