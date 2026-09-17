@@ -98,7 +98,7 @@ func TestLiveGeminiReleaseContract(t *testing.T) {
 		t.Fatalf("decode contract fixture: %v", err)
 	}
 	if !proven.PromptExport || !proven.SessionID || !proven.Restore || !proven.Hooks || !proven.ACP {
-		t.Fatalf("release contract is not behaviorally proven for %s; run and record prompt export, session ID, restore, hooks, and ACP probes before registration", contract.Platform)
+		t.Fatalf("release contract is not behaviorally proven for Gemini %s (%s, SHA-256 %s); run and record prompt export, session ID, restore, hooks, and ACP probes before registration", contract.Version, contract.Platform, contract.BinarySHA256)
 	}
 }
 
