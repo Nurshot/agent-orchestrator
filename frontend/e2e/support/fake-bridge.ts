@@ -272,6 +272,7 @@ export async function installFakeBridge(page: Page, opts: FakeBridgeOptions = {}
 					download: async () => undefined,
 					install: async () => undefined,
 					isPostUpdateRelaunch: async () => false,
+					relaunch: async () => undefined,
 					onStatus: (listener: (status: UpdateStatus) => void) => {
 						updateListeners.add(listener);
 						return () => {
@@ -290,6 +291,8 @@ export async function installFakeBridge(page: Page, opts: FakeBridgeOptions = {}
 					getSession: async () => null,
 					signIn: async () => undefined,
 					signOut: async () => undefined,
+					cancelProviderAuth: async () => undefined,
+					connectProviderAuth: async () => undefined,
 					localAuthAvailable: async () => false,
 					localRegister: async () => {
 						throw new Error("local auth is unavailable in e2e");
@@ -821,6 +824,7 @@ export async function installFakeAgent(page: Page, opts: FakeAgentOptions = {}):
 					download: async () => undefined,
 					install: async () => undefined,
 					isPostUpdateRelaunch: async () => false,
+					relaunch: async () => undefined,
 					onStatus: unsubscribe,
 					onTelemetry: unsubscribe,
 				},
@@ -834,6 +838,8 @@ export async function installFakeAgent(page: Page, opts: FakeAgentOptions = {}):
 					getSession: async () => null,
 					signIn: async () => undefined,
 					signOut: async () => undefined,
+					cancelProviderAuth: async () => undefined,
+					connectProviderAuth: async () => undefined,
 					localAuthAvailable: async () => false,
 					localRegister: async () => {
 						throw new Error("local auth is unavailable in e2e");

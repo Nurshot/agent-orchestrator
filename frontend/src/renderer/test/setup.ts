@@ -330,6 +330,7 @@ if (typeof window !== "undefined") {
 			download: async () => undefined,
 			install: async () => undefined,
 			isPostUpdateRelaunch: async () => false,
+			relaunch: async () => undefined,
 			onStatus: () => () => undefined,
 		onTelemetry: () => () => undefined,
 		},
@@ -341,6 +342,8 @@ if (typeof window !== "undefined") {
 			getSession: async () => null,
 			signIn: async () => undefined,
 			signOut: async () => undefined,
+			cancelProviderAuth: async () => undefined,
+			connectProviderAuth: async () => undefined,
 			localAuthAvailable: async () => false,
 			localRegister: async () => {
 				throw new Error("not available in tests");
