@@ -49,8 +49,11 @@ export function feedFilename(channel, platform) {
 //          FileWithEmbeddedBlockMapDifferentialDownloader, which reads the
 //          blockmap from the AppImage's own tail at
 //          `fileSize - (blockMapSize + 4)` and therefore hard-requires
-//          blockMapSize in the yml. With it absent, linux differential updates
-//          cannot run at all and every client falls back to a full download.
+//          blockMapSize in the yml. Without it the attempt still RUNS, computes
+//          a NaN offset, dies with ERR_OUT_OF_RANGE before any byte is fetched,
+//          and only then falls back to the full download (#5576). Clients run
+//          with autoUpdater.disableDifferentialDownload on Linux
+//          (auto-updater.ts applyUpdaterPolicy) so the doomed attempt never starts.
 //          The linux .blockmap sidecars we publish are consumed by nothing (see
 //          the note in generateFeeds).
 //   mac:   no sidecar is generated on any channel. Absence is the global

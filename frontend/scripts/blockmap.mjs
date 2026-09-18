@@ -20,8 +20,11 @@ const { buildBlockMap } = require("app-builder-lib/out/targets/blockmap/blockmap
 //   linux: does NOT select a sidecar path. AppImageUpdater has no sidecar path
 //          at all; it uses FileWithEmbeddedBlockMapDifferentialDownloader,
 //          reading the blockmap from the AppImage tail and requiring
-//          blockMapSize. Without it, linux differential updates are off
-//          entirely and the sidecars we write for linux are read by nobody.
+//          blockMapSize. Without it the attempt still runs, computes a NaN
+//          offset, and throws ERR_OUT_OF_RANGE before fetching anything, then
+//          falls back to the full download (#5576); clients set
+//          autoUpdater.disableDifferentialDownload on Linux so the attempt is
+//          skipped outright. The sidecars we write for linux are read by nobody.
 //   mac:   release feeds never call writeBlockmap. Absent sidecars protect
 //          legacy clients on every channel (#3034, #3151, #3267 decision 4).
 // An explicit destination is used only by the isolated v2 preparation module;
