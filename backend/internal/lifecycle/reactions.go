@@ -556,13 +556,6 @@ func (m *Manager) notificationIntentForSCM(rec domain.SessionRecord, o ports.SCM
 	if rec.IsTerminated || rec.Activity.State.NeedsInput() || !scmObservationIsReadyToMerge(o) {
 		return nil
 	}
-	// Bot-authored inline findings are actionable feedback even when the
-	// provider reports no formal review blocker. Keep the ready notification
-	// from racing that feedback; unanchored bot chatter is filtered by the
-	// projection below and remains eligible for a ready notification.
-	if hasUnresolvedComments(scmReviewCommentObservations(o.Review.Threads)) {
-		return nil
-	}
 	base.Type = domain.NotificationReadyToMerge
 	return &base
 }
@@ -657,35 +650,6 @@ func prCommentObservations(comments []domain.PullRequestComment) []ports.PRComme
 			Resolved:         comment.Resolved,
 			AutoInjectReview: comment.AutoInjectReview,
 		})
-	}
-	return out
-}
-
-func scmReviewCommentObservations(threads []ports.SCMReviewThreadObservation) []ports.PRCommentObservation {
-	var out []ports.PRCommentObservation
-	for _, thread := range threads {
-		if thread.Resolved {
-			continue
-		}
-		for _, comment := range thread.Comments {
-			// Thread bot-ness is aggregate metadata and may describe a bot-started
-			// thread that later receives human feedback. Use each comment's identity
-			// when deciding whether the unanchored-comment filter applies.
-			if !domain.IsActionableReviewComment(thread.Resolved, comment.IsBot, thread.Path, thread.Line) {
-				continue
-			}
-			out = append(out, ports.PRCommentObservation{
-				ID:       comment.ID,
-				ThreadID: thread.ID,
-				ReviewID: comment.ReviewID,
-				Author:   comment.Author,
-				File:     thread.Path,
-				Line:     thread.Line,
-				Body:     comment.Body,
-				URL:      comment.URL,
-				Resolved: thread.Resolved,
-			})
-		}
 	}
 	return out
 }

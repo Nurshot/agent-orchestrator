@@ -4597,21 +4597,6 @@ func TestSCMObservation_AnchoredBotReviewNudgesAgent(t *testing.T) {
 	}
 }
 
-func TestSCMReviewCommentObservationsFilterBotChatter(t *testing.T) {
-	got := scmReviewCommentObservations([]ports.SCMReviewThreadObservation{
-		{ID: "anchored", Path: "src/App.tsx", Line: 42, IsBot: true, Comments: []ports.SCMReviewCommentObservation{{ID: "bot-1", IsBot: true, Body: "inline finding"}}},
-		{ID: "chatter", IsBot: true, Comments: []ports.SCMReviewCommentObservation{{ID: "bot-2", IsBot: true, Body: "summary chatter"}}},
-		{ID: "human", IsBot: true, Comments: []ports.SCMReviewCommentObservation{{ID: "human-1", Author: "alice", Body: "please fix this"}}},
-		{ID: "resolved", Path: "src/App.tsx", Line: 43, Resolved: true, IsBot: true, Comments: []ports.SCMReviewCommentObservation{{ID: "bot-3", IsBot: true, Body: "already resolved"}}},
-	})
-	if len(got) != 2 {
-		t.Fatalf("got %d projected comments, want anchored bot and human reply: %+v", len(got), got)
-	}
-	if got[0].ID != "bot-1" || got[0].File != "src/App.tsx" || got[0].Line != 42 || got[1].ID != "human-1" {
-		t.Fatalf("projected comments = %+v", got)
-	}
-}
-
 // Merging the PR is what resolves a ready-to-merge ping. So is the PR ceasing
 // to be mergeable — either way there is nothing left for the user to merge.
 func TestSCMObservation_ResolvesReadyToMergeWhenNoLongerReady(t *testing.T) {
