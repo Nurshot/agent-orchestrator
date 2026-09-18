@@ -70,7 +70,7 @@ depends on it.
 | --- | --- | --- | --- |
 | Aider | none | One-shot `--message`/`--message-file` only; no persistent agent protocol. | Blocked: no ACP or native structured control surface. |
 | Amp | none | `@ampcode/cli` (renamed from `@sourcegraph/amp`); no ACP entrypoint published. | Blocked. |
-| Crush | native server protocol, not ACP | `internal/server`, `internal/proto/server.go`, and a `/control` endpoint implement Crush's own client/server API. | Blocked for the ACP transport. A bespoke driver over Crush's native protocol would be a new non-ACP transport and could not be validated here. |
+| Crush | native server protocol, not ACP | `internal/server`, `internal/proto/server.go`, and a `/control` endpoint implement Crush's own client/server API. Upstream ACP is still an open request (charmbracelet/crush#2091, #990); the only ACP surface is the unofficial `crush-acp` npm adapter. | Blocked for the ACP transport, on the same rule as Muse: no first-party protocol. A bespoke driver over Crush's native protocol would be a new non-ACP transport and could not be validated here. |
 | Continue | none | `cn` (`@continuedev/cli`) is a one-shot/TUI CLI; no ACP or persistent bidirectional protocol. | Blocked. |
 | Devin | none | Vendor CLI exposes no local ACP or structured session protocol. | Blocked. |
 | Grok | none | `superagent-ai/grok-cli` has no ACP or persistent structured protocol. | Blocked. |
