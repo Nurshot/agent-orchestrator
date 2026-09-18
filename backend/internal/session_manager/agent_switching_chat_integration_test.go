@@ -579,3 +579,17 @@ func TestSwitchAgentRealChatServiceSQLiteActivationCAS(t *testing.T) {
 		}
 	})
 }
+
+// Queue-before-controller is not exercised by this fake's tests; the spawns it
+// drives are synchronous.
+func (l integrationChatLauncher) EnsureChatConversation(_ context.Context, _ domain.SessionID) error {
+	return nil
+}
+
+func (l integrationChatLauncher) QueueChatPrompt(_ context.Context, _ domain.SessionID, _ string) (string, error) {
+	return "", nil
+}
+
+func (l integrationChatLauncher) DrainChatQueue(_ context.Context, _ domain.SessionID) error {
+	return nil
+}

@@ -1352,6 +1352,8 @@ function ChatWorkspaceContent({
 					) : null}
 					<ControllerBanner
 						controller={snapshot.controller}
+						provisionState={session?.provisionState}
+						provisionError={session?.provisionError}
 						transitioning={controllerTransitioning}
 						onResume={newWorkDisabled ? undefined : onResumeAgent}
 						resuming={resumingAgent}
@@ -1427,7 +1429,7 @@ function ChatWorkspaceContent({
 									commandError={queueDraftError ?? (queueEdit && !queueEdit.clientMessageId && !queuedMessages.some((entry) => entry.turnId === queueEdit.turnId) ? "chat.draft.queueMissing" : commandError)}
 									settings={composerSettings}
 									busy={busy}
-									willQueue={Boolean(turn)}
+									willQueue={Boolean(turn) || session?.provisionState === "provisioning"}
 									disabled={(snapshot.controller.state === "stopped" || controllerTransitioning || newWorkDisabled) && !queueEdit?.clientMessageId}
 									// Switch/reconnect status is the topbar spinner beside ⋮ — not composer text.
 									disabledPlaceholder={
@@ -1809,6 +1811,8 @@ function ChatHeader({
  */
 function ControllerBanner({
 	controller,
+	provisionState,
+	provisionError,
 	transitioning,
 	onResume,
 	resuming,
@@ -1818,6 +1822,8 @@ function ControllerBanner({
 	shellError,
 }: {
 	controller: { state: ControllerState; error?: string };
+	provisionState?: WorkspaceSession["provisionState"];
+	provisionError?: string;
 	transitioning?: boolean;
 	onResume?: () => void;
 	resuming?: boolean;
@@ -1826,6 +1832,57 @@ function ControllerBanner({
 	openingShell?: boolean;
 	shellError?: string;
 }) {
+	// A session created by an asynchronous spawn is on screen before its agent
+	// is. Neither of these is a controller that stopped: one has not started
+	// yet, the other never got to start, and both read as a crash otherwise.
+	if (provisionState === "provisioning") {
+		return (
+			<div
+				role="status"
+				aria-atomic="true"
+				className="flex shrink-0 items-start gap-2.5 border-b border-border bg-surface px-4 py-2.5"
+			>
+				<Loader2
+					aria-hidden="true"
+					className="mt-0.5 size-3.5 shrink-0 animate-spin text-muted-foreground"
+				/>
+				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
+					<strong className="text-xs font-medium text-muted-foreground">
+						Starting this session…
+					</strong>
+					<span className="text-[11px] leading-snug text-muted-foreground">
+						Setting up the worktree and the agent. Keep typing — your messages are
+						queued and sent in order as soon as it is ready.
+					</span>
+				</div>
+			</div>
+		);
+	}
+	if (provisionState === "failed") {
+		return (
+			<div
+				role="alert"
+				aria-atomic="true"
+				className="flex shrink-0 items-start gap-2.5 border-b border-border bg-surface px-4 py-2.5"
+			>
+				<TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-destructive" />
+				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
+					<strong className="text-xs font-medium text-destructive">
+						This session could not be started
+					</strong>
+					{provisionError ? (
+						<span className="text-[11px] leading-snug text-muted-foreground">
+							{provisionError}
+						</span>
+					) : null}
+					<span className="text-[11px] leading-snug text-muted-foreground">
+						Nothing you typed was lost: your messages are still queued here.
+					</span>
+				</div>
+			</div>
+		);
+	}
+
 	// The transition coordinator intentionally stops one controller before it
 	// starts the other. The top-bar handoff state already explains that interval;
 	// presenting its intermediate snapshot as a crash produces a red false alarm.

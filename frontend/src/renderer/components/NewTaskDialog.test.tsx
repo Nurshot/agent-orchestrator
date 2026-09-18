@@ -96,6 +96,9 @@ beforeEach(() => {
 	});
 	postMock.mockReset().mockImplementation(async (path: string) => {
 		if (path === "/api/v1/agents/readiness/ensure") return { data: agentInventory, error: undefined };
+		// Opening the dialog warms the daemon's spawn path. That POST is not a
+		// task creation and must not be counted or answered as one.
+		if (path === "/api/v1/sessions/prewarm") return { data: { ok: true }, error: undefined };
 		return { data: { ok: true, workerId: "worker-1", orchestratorId: "orch-1" }, error: undefined };
 	});
 });
@@ -165,6 +168,9 @@ describe("NewTaskDialog", () => {
 		let delegateAttempts = 0;
 		postMock.mockImplementation(async (path: string) => {
 			if (path === "/api/v1/agents/readiness/ensure") return { data: agentInventory, error: undefined };
+		// Opening the dialog warms the daemon's spawn path. That POST is not a
+		// task creation and must not be counted or answered as one.
+		if (path === "/api/v1/sessions/prewarm") return { data: { ok: true }, error: undefined };
 			delegateAttempts += 1;
 			if (delegateAttempts === 1) {
 				return {
@@ -315,7 +321,7 @@ describe("NewTaskDialog", () => {
 
 		// Plain Enter submits the task.
 		await user.keyboard("{Enter}");
-		await waitFor(() => expect(postMock).toHaveBeenCalledTimes(1));
+		await waitFor(() => expect(delegateCalls()).toHaveLength(1));
 	});
 
 	it.each([
@@ -328,9 +334,10 @@ describe("NewTaskDialog", () => {
 			message: "task start failed",
 		},
 	])("displays daemon start errors for $code", async ({ code, message }) => {
-		postMock.mockResolvedValueOnce({
-			data: undefined,
-			error: { code, message },
+		postMock.mockImplementation(async (path: string) => {
+			if (path === "/api/v1/agents/readiness/ensure") return { data: agentInventory, error: undefined };
+			if (path === "/api/v1/sessions/prewarm") return { data: { ok: true }, error: undefined };
+			return { data: undefined, error: { code, message } };
 		});
 		renderDialog();
 		const user = userEvent.setup();

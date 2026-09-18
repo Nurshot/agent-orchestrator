@@ -2265,6 +2265,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sessions/prewarm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Warm the slow parts of a spawn before one is requested */
+        post: operations["prewarmSpawn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings": {
         parameters: {
             query?: never;
@@ -2887,6 +2904,12 @@ export interface components {
         ContainerReapConfig: {
             disabled?: boolean;
         };
+        ControllersPrewarmSpawnRequest: {
+            projectId: string;
+        };
+        ControllersPrewarmSpawnResponse: {
+            ok: boolean;
+        };
         ControllersRequestRereviewRequest: {
             /** @description Tracked pull request URL. Required when the session has multiple PRs. */
             pullRequestUrl?: string;
@@ -2945,6 +2968,9 @@ export interface components {
             previewRevision?: number;
             previewUrl?: string;
             projectId?: string;
+            provisionError?: string;
+            /** @enum {string} */
+            provisionState?: "provisioning" | "ready" | "failed";
             prs: components["schemas"]["SessionPRFacts"][];
             reviewerConfig?: components["schemas"]["AgentConfig"];
             /** @enum {string} */
@@ -12803,6 +12829,66 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CleanupSessionsResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    prewarmSpawn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ControllersPrewarmSpawnRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControllersPrewarmSpawnResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
                 };
             };
             /** @description Internal Server Error */

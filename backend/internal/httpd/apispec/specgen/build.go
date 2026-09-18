@@ -2232,6 +2232,18 @@ func sessionOperations() []operation {
 			},
 		},
 		{
+			method: http.MethodPost, path: "/api/v1/sessions/prewarm", id: "prewarmSpawn", tag: "sessions",
+			summary: "Warm the slow parts of a spawn before one is requested",
+			reqBody: controllers.PrewarmSpawnRequest{},
+			resps: []respUnit{
+				{http.StatusAccepted, controllers.PrewarmSpawnResponse{}},
+				{http.StatusBadRequest, envelope.APIError{}},
+				{http.StatusNotFound, envelope.APIError{}},
+				{http.StatusInternalServerError, envelope.APIError{}},
+				{http.StatusNotImplemented, envelope.APIError{}},
+			},
+		},
+		{
 			method: http.MethodPost, path: "/api/v1/sessions/cleanup", id: "cleanupSessions", tag: "sessions",
 			summary:    "Clean up terminated session workspaces",
 			pathParams: []any{controllers.CleanupSessionsQuery{}},

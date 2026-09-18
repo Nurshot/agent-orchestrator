@@ -5031,3 +5031,17 @@ func TestSafeNativeTranscriptPathRejectsSymlinkEscape(t *testing.T) {
 		t.Fatalf("contained transcript = %q, want %q", got, wantInside)
 	}
 }
+
+// Queue-before-controller is not exercised by this fake's tests; the spawns it
+// drives are synchronous.
+func (l *switchAgentChatLauncher) EnsureChatConversation(_ context.Context, _ domain.SessionID) error {
+	return nil
+}
+
+func (l *switchAgentChatLauncher) QueueChatPrompt(_ context.Context, _ domain.SessionID, _ string) (string, error) {
+	return "", nil
+}
+
+func (l *switchAgentChatLauncher) DrainChatQueue(_ context.Context, _ domain.SessionID) error {
+	return nil
+}

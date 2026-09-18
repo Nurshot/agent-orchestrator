@@ -6585,6 +6585,49 @@ paths:
       summary: Clean up terminated session workspaces
       tags:
       - sessions
+  /api/v1/sessions/prewarm:
+    post:
+      operationId: prewarmSpawn
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ControllersPrewarmSpawnRequest'
+        required: true
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ControllersPrewarmSpawnResponse'
+          description: Accepted
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Bad Request
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Not Found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Internal Server Error
+        "501":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Not Implemented
+      summary: Warm the slow parts of a spawn before one is requested
+      tags:
+      - sessions
   /api/v1/settings:
     get:
       operationId: getSettings
@@ -8270,6 +8313,20 @@ components:
         disabled:
           type: boolean
       type: object
+    ControllersPrewarmSpawnRequest:
+      properties:
+        projectId:
+          type: string
+      required:
+      - projectId
+      type: object
+    ControllersPrewarmSpawnResponse:
+      properties:
+        ok:
+          type: boolean
+      required:
+      - ok
+      type: object
     ControllersRequestRereviewRequest:
       properties:
         pullRequestUrl:
@@ -8418,6 +8475,14 @@ components:
         previewUrl:
           type: string
         projectId:
+          type: string
+        provisionError:
+          type: string
+        provisionState:
+          enum:
+          - provisioning
+          - ready
+          - failed
           type: string
         prs:
           items:

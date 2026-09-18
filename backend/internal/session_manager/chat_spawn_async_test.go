@@ -1,0 +1,203 @@
+package sessionmanager
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
+	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
+	browsersvc "github.com/aoagents/agent-orchestrator/backend/internal/service/browser"
+)
+
+// deferredBackground captures the asynchronous half so a test can inspect the
+// state the API answered with before the background work runs.
+func deferredBackground(m *Manager) *[]func() {
+	deferred := &[]func(){}
+	m.runBackground = func(work func()) { *deferred = append(*deferred, work) }
+	return deferred
+}
+
+func asyncChatSpawnConfig(prompt string) ports.SpawnConfig {
+	return ports.SpawnConfig{
+		ProjectID:     chatTestProject,
+		Kind:          domain.KindWorker,
+		Harness:       domain.HarnessCodex,
+		Prompt:        prompt,
+		RequestedMode: domain.SessionModeChat,
+		Async:         true,
+	}
+}
+
+// The point of the asynchronous path: the caller gets an addressable session
+// before the expensive work starts, and the opening prompt is already in the
+// durable queue rather than waiting on a controller that does not exist.
+func TestSpawnAsyncChat_AnswersBeforeWorkspaceAndController(t *testing.T) {
+	launcher := &recordingLauncher{}
+	m, st, rt := newChatManager(launcher)
+	m.browserCapabilities = browsersvc.NewAuthority()
+	deferred := deferredBackground(m)
+	ws := m.workspace.(*fakeWorkspace)
+
+	rec, _, _, err := m.Spawn(context.Background(), asyncChatSpawnConfig("do the thing"))
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	if rec.ProvisionState != domain.SessionProvisionProvisioning {
+		t.Fatalf("provision state = %q, want provisioning", rec.ProvisionState)
+	}
+	if rec.Metadata.WorkspacePath != "" {
+		t.Fatalf("workspace path = %q, want none yet", rec.Metadata.WorkspacePath)
+	}
+	if ws.lastCfg.SessionID != "" {
+		t.Fatal("workspace was created before the caller was answered")
+	}
+	if len(launcher.started) != 0 {
+		t.Fatal("controller started before the caller was answered")
+	}
+	if got := launcher.queued; len(got) != 1 || got[0] != "do the thing" {
+		t.Fatalf("queued = %v, want the opening prompt", got)
+	}
+	if len(launcher.conversationsEnsured) != 1 {
+		t.Fatalf("conversations ensured = %v, want the session's own", launcher.conversationsEnsured)
+	}
+	if rt.created != 0 {
+		t.Fatal("chat spawn touched the terminal runtime")
+	}
+
+	if len(*deferred) != 1 {
+		t.Fatalf("background work = %d, want 1", len(*deferred))
+	}
+	(*deferred)[0]()
+
+	if ws.lastCfg.SessionID != rec.ID {
+		t.Fatalf("workspace session = %q, want %q", ws.lastCfg.SessionID, rec.ID)
+	}
+	if len(launcher.started) != 1 {
+		t.Fatalf("controllers started = %d, want 1", len(launcher.started))
+	}
+	if got := launcher.drained; len(got) != 1 || got[0] != rec.ID {
+		t.Fatalf("drained = %v, want %q", got, rec.ID)
+	}
+	// The queue owns delivery. Sending the prompt again here would run the
+	// user's brief twice.
+	if len(launcher.turns) != 0 {
+		t.Fatalf("prompt was also sent directly: %v", launcher.turns)
+	}
+	if got := st.sessions[rec.ID].ProvisionState; got != domain.SessionProvisionReady {
+		t.Fatalf("provision state after start = %q, want ready", got)
+	}
+}
+
+// A start that fails after the API answered must leave the session — and the
+// messages queued into it — in place, with a reason the user can read.
+func TestSpawnAsyncChat_FailedStartKeepsSessionAndReason(t *testing.T) {
+	launcher := &recordingLauncher{}
+	m, st, _ := newChatManager(launcher)
+	m.browserCapabilities = browsersvc.NewAuthority()
+	deferred := deferredBackground(m)
+	ws := m.workspace.(*fakeWorkspace)
+	ws.createErr = errors.New("branch already checked out")
+
+	rec, _, _, err := m.Spawn(context.Background(), asyncChatSpawnConfig("do the thing"))
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	(*deferred)[0]()
+
+	stored, ok := st.sessions[rec.ID]
+	if !ok {
+		t.Fatal("failed start deleted the session the user is looking at")
+	}
+	if stored.ProvisionState != domain.SessionProvisionFailed {
+		t.Fatalf("provision state = %q, want failed", stored.ProvisionState)
+	}
+	if !strings.Contains(stored.ProvisionError, "branch already checked out") {
+		t.Fatalf("provision error = %q, want the workspace failure", stored.ProvisionError)
+	}
+	if len(launcher.started) != 0 {
+		t.Fatal("controller started despite the workspace failing")
+	}
+}
+
+// An empty brief queues no turn, so the row still matches the seed-state
+// predicate that spawn rollback deletes on. Once the id has been handed to a
+// client, deleting it would turn an open session into a 404.
+func TestSpawnAsyncChat_PublishedSessionIsNeverDeleted(t *testing.T) {
+	launcher := &recordingLauncher{startErr: errors.New("provider refused the session")}
+	m, st, _ := newChatManager(launcher)
+	m.browserCapabilities = browsersvc.NewAuthority()
+	deferred := deferredBackground(m)
+
+	rec, _, _, err := m.Spawn(context.Background(), asyncChatSpawnConfig(""))
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	if len(launcher.queued) != 0 {
+		t.Fatalf("queued = %v, want nothing for an empty brief", launcher.queued)
+	}
+	(*deferred)[0]()
+
+	stored, ok := st.sessions[rec.ID]
+	if !ok {
+		t.Fatal("a failed start deleted the session the client already holds")
+	}
+	if stored.ProvisionState != domain.SessionProvisionFailed {
+		t.Fatalf("provision state = %q, want failed", stored.ProvisionState)
+	}
+}
+
+// A restart leaves nothing behind that could finish a background start, so a
+// row left mid-start must not read as "still starting" forever.
+func TestFailInterruptedProvisioning(t *testing.T) {
+	m, st, _ := newChatManager(&recordingLauncher{})
+	st.sessions["mer-1"] = domain.SessionRecord{
+		ID: "mer-1", ProjectID: chatTestProject, Kind: domain.KindWorker,
+		Mode: domain.SessionModeChat, ProvisionState: domain.SessionProvisionProvisioning,
+	}
+	st.sessions["mer-2"] = domain.SessionRecord{
+		ID: "mer-2", ProjectID: chatTestProject, Kind: domain.KindWorker,
+		Mode: domain.SessionModeChat, ProvisionState: domain.SessionProvisionReady,
+	}
+
+	if err := m.FailInterruptedProvisioning(context.Background()); err != nil {
+		t.Fatalf("fail interrupted: %v", err)
+	}
+	if got := st.sessions["mer-1"].ProvisionState; got != domain.SessionProvisionFailed {
+		t.Fatalf("interrupted session = %q, want failed", got)
+	}
+	if st.sessions["mer-1"].ProvisionError == "" {
+		t.Fatal("interrupted session has no explanation")
+	}
+	if got := st.sessions["mer-2"].ProvisionState; got != domain.SessionProvisionReady {
+		t.Fatalf("healthy session = %q, want untouched", got)
+	}
+}
+
+// The dialog warms the remote refresh on open; the spawn that follows seconds
+// later must reuse it instead of paying for the same fetch again.
+func TestPrewarmSpawn_SpawnReusesTheWarmedFetch(t *testing.T) {
+	launcher := &recordingLauncher{}
+	m, _, _ := newChatManager(launcher)
+	m.browserCapabilities = browsersvc.NewAuthority()
+	m.runBackground = func(work func()) { work() }
+	ws := m.workspace.(*fakeWorkspace)
+	m.store.(*fakeStore).projects[string(chatTestProject)] = domain.ProjectRecord{
+		ID: string(chatTestProject), Path: "/repo/mer", Config: testRoleAgents(),
+	}
+
+	if err := m.PrewarmSpawn(context.Background(), chatTestProject); err != nil {
+		t.Fatalf("prewarm: %v", err)
+	}
+	if len(ws.fetches) != 1 {
+		t.Fatalf("prewarm fetches = %d, want 1", len(ws.fetches))
+	}
+
+	if _, _, _, err := m.Spawn(context.Background(), asyncChatSpawnConfig("do the thing")); err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	if len(ws.fetches) != 1 {
+		t.Fatalf("fetches after spawn = %d, want the warmed one reused", len(ws.fetches))
+	}
+}
