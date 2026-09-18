@@ -101,7 +101,7 @@ describe("macOS differential update policy", () => {
   afterEach(() => { restorePlatform(); vi.restoreAllMocks(); });
   const nightly: UpdateSettings = { enabled: true, channel: "nightly", nightlyAck: true, feature: null, macDifferentialUpdates: true };
 
-  it.each(["win32", "linux"] as const)("applies %s differential policy across updater operations", async platform => {
+  it.each(["win32", "linux"] as const)("preserves %s differential policy across updater operations", async platform => {
     const restore = stubProcess(platform, process.execPath);
     try {
       const { module, autoUpdater } = await importAutoUpdater(nightly);
@@ -113,9 +113,7 @@ describe("macOS differential update policy", () => {
         await module.checkForUpdatesNow(stateDir);
         await module.downloadUpdateNow();
         await module.setMacDifferentialUpdates(stateDir, false);
-        // Linux AppImage updates always take the full download (#5576); the
-        // mac policy never touches the value on either platform.
-        expect(autoUpdater.disableDifferentialDownload).toBe(platform === "linux" ? true : disabled);
+        expect(autoUpdater.disableDifferentialDownload).toBe(disabled);
       }
     } finally { restore(); }
   });
@@ -3067,26 +3065,6 @@ describe("startAutoUpdates", () => {
     // user to restart into a channel they left.
     expect(module.getUpdateStatus().staged).toBeUndefined();
     expect(module.getUpdateStatus().stagedAt).toBeUndefined();
-  });
-});
-
-describe("applyUpdaterPolicy", () => {
-  it("disables differential downloads on Linux so AppImage updates skip the doomed blockmap attempt (#5576)", async () => {
-    const { module, autoUpdater } = await importAutoUpdater();
-    module.applyUpdaterPolicy(
-      { enabled: true, channel: "latest", nightlyAck: false, feature: null },
-      "linux",
-    );
-    expect(autoUpdater.disableDifferentialDownload).toBe(true);
-  });
-
-  it("leaves differential downloads enabled outside Linux", async () => {
-    const { module, autoUpdater } = await importAutoUpdater();
-    module.applyUpdaterPolicy(
-      { enabled: true, channel: "latest", nightlyAck: false, feature: null },
-      "win32",
-    );
-    expect(autoUpdater.disableDifferentialDownload).toBe(false);
   });
 });
 

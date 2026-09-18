@@ -86,16 +86,7 @@ export function applyUpdaterPolicy(
   const eligible = macDifferentialRollout.enabled === true && developerModeHydrated && macDifferentialUpdatesEnabled({ platform, settings });
   differentialEligible = eligible;
   if (platform === "darwin") autoUpdater.disableDifferentialDownload = !eligible;
-  // Linux AppImage updates: electron-updater's AppImageUpdater always attempts a
-  // differential download against the running AppImage, reading the new file's
-  // embedded blockmap from its tail at `size - (blockMapSize + 4)`. AO's feed
-  // never publishes blockMapSize (scripts/feed.mjs, #3288 workstream 3), so that
-  // offset is NaN and every attempt dies with ERR_OUT_OF_RANGE before a single
-  // byte is fetched, then logs "Cannot download differentially" and falls back
-  // (#5576). Skip the doomed attempt on Linux and go straight to the full
-  // download; Windows keeps its working NSIS sidecar differentials.
-  if (platform === "linux") autoUpdater.disableDifferentialDownload = true;
-  console.info("[auto-updater] differential policy", {
+  console.info("[auto-updater] mac differential policy", {
     eligible,
     platform,
     channel: settings.channel,
