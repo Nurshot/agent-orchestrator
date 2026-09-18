@@ -2,7 +2,8 @@ import { useEffect, useRef } from "react";
 import { useMutation, useMutationState, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import { CLOUD_PROJECT_KIND, hasConfiguredOrchestratorAgent, type WorkspaceSession } from "../types/workspace";
+import { CLOUD_PROJECT_KIND, hasConfiguredOrchestratorAgent, sessionAgentExited, type WorkspaceSession } from "../types/workspace";
+import { apiClient, apiErrorMessage } from "../lib/api-client";
 import { cloudSessionsQueryKey, workspaceQueryKey, type WorkspaceScope } from "./useWorkspaceQuery";
 import { spawnCloudOrchestrator } from "../lib/cloud-orchestrator";
 import { isChatPreflightError, spawnOrchestrator, type OrchestratorSpawnSource } from "../lib/spawn-orchestrator";
@@ -63,6 +64,31 @@ export function useProjectOrchestratorAction({
 		mutationFn: async (mode?: "tui") => {
 			if (!projectId) return;
 			setStartupError(projectId, null);
+			// An orchestrator whose agent exited (Ctrl+C, `/exit`, usage limit) still
+			// owns its worktree and native conversation, so clicking Orchestrator
+			// resumes it in place rather than spawning a second one. AO deliberately
+			// does NOT do this on the exit itself: the supervisor discards the exit
+			// code, so a deliberate quit is indistinguishable from a crash or a rate
+			// limit, and auto-relaunching the last of those is a hot loop against a
+			// metered API. A click is the intent signal — one click, one attempt.
+			if (orchestrator && sessionAgentExited(orchestrator) && project?.kind !== CLOUD_PROJECT_KIND) {
+				const { error } = await apiClient.POST("/api/v1/sessions/{sessionId}/resume-agent", {
+					params: { path: { sessionId: orchestrator.id } },
+				});
+				// Already running: someone resumed it between render and click. The
+				// user asked to land on a working orchestrator, and that is this one.
+				if (error && (error as { code?: string }).code !== "AGENT_NOT_EXITED") {
+					throw new Error(apiErrorMessage(error, "Could not resume the orchestrator"));
+				}
+				await queryClient.invalidateQueries({ queryKey: workspaceQueryKey });
+				if (activeRoute.current === routeKey) {
+					void navigate({
+						to: "/projects/$projectId/sessions/$sessionId",
+						params: { projectId, sessionId: orchestrator.id },
+					});
+				}
+				return;
+			}
 			const openedSessionId = project?.kind === CLOUD_PROJECT_KIND
 				? await spawnCloudOrchestrator(queryClient, projectId)
 				: await spawnOrchestrator(projectId, source, false, mode);
@@ -96,7 +122,11 @@ export function useProjectOrchestratorAction({
 			surface: sessionId ? "session_detail" : "project_board", project_id: projectId,
 		});
 		void captureRendererEvent("ao.renderer.orchestrator_open_requested", { project_id: projectId });
-		if (orchestrator) {
+		if (orchestrator && sessionAgentExited(orchestrator) && project?.kind !== CLOUD_PROJECT_KIND) {
+			// Resume-then-navigate, so the pane attaches to a live agent instead of
+			// the dead one it would otherwise land on.
+			mutation.mutate(mode);
+		} else if (orchestrator) {
 			void navigate({ to: "/projects/$projectId/sessions/$sessionId", params: { projectId, sessionId: orchestrator.id } });
 		} else if (project?.kind !== CLOUD_PROJECT_KIND && !hasConfiguredOrchestratorAgent(project)) {
 			if (project) useUiStore.getState().openProjectSettings(projectId);
