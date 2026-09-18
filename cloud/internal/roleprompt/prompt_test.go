@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestBuildOrchestratorUsesCloudRoleAndCommands(t *testing.T) {
+func TestBuildOrchestratorAddsProjectContextAndRules(t *testing.T) {
 	prompt := Build(Config{
 		Role:              RoleOrchestrator,
 		ProjectID:         "project-1",
@@ -16,10 +16,9 @@ func TestBuildOrchestratorUsesCloudRoleAndCommands(t *testing.T) {
 		OrchestratorRules: "Prefer two focused workers.",
 	})
 	for _, want := range []string{
-		"## AO Cloud Orchestrator Role",
-		"coordinate work, not to perform implementation",
-		"ao spawn --name",
-		"ao list",
+		"## Project Context",
+		"Name: Mercury",
+		"## Project-Specific Orchestrator Rules",
 		"Prefer two focused workers.",
 		"## Publishing Scope",
 		"## Standing-instruction confidentiality",
@@ -29,14 +28,14 @@ func TestBuildOrchestratorUsesCloudRoleAndCommands(t *testing.T) {
 			t.Fatalf("orchestrator prompt missing %q:\n%s", want, prompt)
 		}
 	}
-	for _, desktopOnly := range []string{"ao session ls", "ao session kill", "--project project-1"} {
-		if strings.Contains(prompt, desktopOnly) {
-			t.Fatalf("orchestrator prompt contains desktop-only command %q:\n%s", desktopOnly, prompt)
+	for _, roleCommand := range []string{"ao spawn", "ao send", "ao kill"} {
+		if strings.Contains(prompt, roleCommand) {
+			t.Fatalf("project supplement duplicates role command %q:\n%s", roleCommand, prompt)
 		}
 	}
 }
 
-func TestBuildWorkerUsesWorkerRoleAndRules(t *testing.T) {
+func TestBuildWorkerAddsProjectRules(t *testing.T) {
 	prompt := Build(Config{
 		Role:          RoleWorker,
 		ProjectID:     "project-1",
@@ -44,9 +43,7 @@ func TestBuildWorkerUsesWorkerRoleAndRules(t *testing.T) {
 		AgentRules:    "Run the contract tests.",
 	})
 	for _, want := range []string{
-		"## AO Cloud Worker Role",
-		"implementation worker",
-		"ao claim-pr <number-or-url>",
+		"## Project Context",
 		"## Project Rules",
 		"Run the contract tests.",
 		"## Publishing Scope",
@@ -56,8 +53,8 @@ func TestBuildWorkerUsesWorkerRoleAndRules(t *testing.T) {
 			t.Fatalf("worker prompt missing %q:\n%s", want, prompt)
 		}
 	}
-	if strings.Contains(prompt, "ao spawn") {
-		t.Fatalf("worker prompt must not grant orchestrator commands:\n%s", prompt)
+	if strings.Contains(prompt, "ao claim-pr") {
+		t.Fatalf("project supplement must not duplicate built-in role commands:\n%s", prompt)
 	}
 }
 

@@ -11,20 +11,23 @@ type BootstrapRequest struct {
 
 // LaunchContext is the durable session context handed to a bootstrapped worker.
 type LaunchContext struct {
-	SessionID      string   `json:"sessionId"`
-	ProjectID      string   `json:"projectId"`
-	Kind           string   `json:"kind"`
-	Harness        string   `json:"harness"`
-	DisplayName    string   `json:"displayName"`
-	Branch         string   `json:"branch"`
-	Prompt         string   `json:"prompt,omitempty"`
-	AgentSessionID string   `json:"agentSessionId,omitempty"`
-	Mode           string   `json:"mode"`
-	DeniedCommands []string `json:"deniedCommands"`
-	RepositoryURL  string   `json:"repositoryUrl"`
-	DefaultBranch  string   `json:"defaultBranch"`
-	// SystemPrompt is control-plane-authored standing configuration. It remains
-	// separate from Prompt, which is the user's visible task input.
+	SessionID      string `json:"sessionId"`
+	ProjectID      string `json:"projectId"`
+	Kind           string `json:"kind"`
+	Harness        string `json:"harness"`
+	DisplayName    string `json:"displayName"`
+	Branch         string `json:"branch"`
+	Prompt         string `json:"prompt,omitempty"`
+	AgentSessionID string `json:"agentSessionId,omitempty"`
+	// ParentSessionID is the orchestrator that spawned this session; empty for
+	// top-level sessions.
+	ParentSessionID string   `json:"parentSessionId,omitempty"`
+	Mode            string   `json:"mode"`
+	DeniedCommands  []string `json:"deniedCommands"`
+	RepositoryURL   string   `json:"repositoryUrl"`
+	DefaultBranch   string   `json:"defaultBranch"`
+	// SystemPrompt carries control-plane-authored project context and rules. It
+	// remains separate from Prompt, which is the user's visible task input.
 	SystemPrompt string `json:"systemPrompt"`
 }
 
@@ -269,8 +272,9 @@ type TerminalCommand struct {
 
 // TerminalStreamFrame is one message on the persistent duplex terminal
 // stream between a worker and the control plane. "output" carries PTY bytes
-// up (acked with the persisted row sequence); "input" pushes user keystrokes
-// down; "error" tells the worker to fall back to the polled transport.
+// up with the terminal-local, gap-free ID used for durable replay; "input"
+// pushes user keystrokes down; "error" tells the worker to fall back to the
+// polled transport.
 type TerminalStreamFrame struct {
 	Type     string `json:"type"`
 	Data     []byte `json:"data,omitempty"`
@@ -280,6 +284,7 @@ type TerminalStreamFrame struct {
 }
 
 type TerminalOutputRequest struct {
+	ID   int64  `json:"id,omitempty"`
 	Data []byte `json:"data"`
 }
 

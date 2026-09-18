@@ -60,15 +60,24 @@ func TestBuildInteractiveInjectsSystemPromptForEveryCloudHarness(t *testing.T) {
 	}
 }
 
-func TestBuildInteractiveRejectsMissingCloudSystemPrompt(t *testing.T) {
-	_, err := (HarnessBuilder{DataDir: t.TempDir()}).BuildInteractive(worker.LaunchContext{
+func TestBuildInteractiveFallsBackToBuiltInRolePrompt(t *testing.T) {
+	dataDir := t.TempDir()
+	command, err := (HarnessBuilder{
+		DataDir: dataDir,
+		Binaries: map[string]string{
+			"claude-code": "/usr/bin/claude",
+		},
+	}).BuildInteractive(worker.LaunchContext{
 		SessionID: "session-1", Kind: "worker", Harness: "claude-code", Mode: "trusted",
 	}, worker.CredentialResponse{
 		Provider: "claude-code", CredentialType: "api_key", Secret: "secret",
 	}, t.TempDir())
-	if err == nil || !strings.Contains(err.Error(), "system prompt is required") {
-		t.Fatalf("error = %v, want missing system prompt error", err)
+	if err != nil {
+		t.Fatal(err)
 	}
+	systemPromptPath := filepath.Join(dataDir, "prompts", sessionKey("session-1"), "system.md")
+	assertArgPair(t, command.Args, "--append-system-prompt-file", systemPromptPath)
+	assertFileContains(t, systemPromptPath, "## AO Worker Role")
 }
 
 func TestBuildInteractiveReappliesSystemPromptOnRestore(t *testing.T) {
