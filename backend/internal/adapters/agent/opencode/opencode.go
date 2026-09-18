@@ -425,16 +425,17 @@ func opencodeConfigEnvPrefix(inlinePrompt, promptFile, sessionID string) ([]stri
 	return []string{"env", opencodeConfigEnvVar + "=" + configPath}, agentName, nil
 }
 
-// PrepareACPConfigContent merges AO's standing instructions and any explicit
-// bypass-permissions choice into OpenCode's inline runtime overlay. The user's
-// OPENCODE_CONFIG path remains untouched, preserving its normal global, custom,
-// project, provider, and credential configuration.
-func PrepareACPConfigContent(
-	existing, systemPrompt, sessionID string,
-	permissions ports.PermissionMode,
-) (string, error) {
-	allowAll := ports.NormalizePermissionMode(permissions) == ports.PermissionModeBypassPermissions
-	if strings.TrimSpace(systemPrompt) == "" && !allowAll {
+// PrepareACPConfigContent merges AO's standing instructions into OpenCode's
+// inline runtime overlay. The user's OPENCODE_CONFIG path remains untouched,
+// preserving its normal global, custom, project, provider, and credential
+// configuration.
+//
+// Permissions are deliberately absent: a launch-time rule cannot be taken back
+// while the process runs, which would leave AO advertising approval modes it
+// could no longer apply. Chat resolves them per request instead — see
+// opencodeacp's permission policy.
+func PrepareACPConfigContent(existing, systemPrompt, sessionID string) (string, error) {
+	if strings.TrimSpace(systemPrompt) == "" {
 		return existing, nil
 	}
 	config := map[string]any{}
@@ -458,11 +459,6 @@ func PrepareACPConfigContent(
 		agents[agentName] = opencodeAgentSettings{Mode: "primary", Prompt: systemPrompt}
 		config["agent"] = agents
 		config["default_agent"] = agentName
-	}
-	if allowAll {
-		// This is the native config equivalent of OpenCode's TUI auto-approval
-		// flag. Other AO permission modes preserve the user's granular rules.
-		config["permission"] = "allow"
 	}
 	data, err := json.Marshal(config)
 	if err != nil {

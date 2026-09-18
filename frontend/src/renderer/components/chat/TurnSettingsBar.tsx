@@ -832,6 +832,15 @@ function choiceIsEnabled(choice: ChatConfigOption["choices"][number] | undefined
 	return Boolean(choice && /(?:^|[\s_-])(on|enabled|true)(?:[\s_-]|$)/i.test(`${choice.name} ${choice.value}`));
 }
 
+/**
+ * Whether a provider catalog replaces AO's own approval control. A `mode` option
+ * that offers only execution modes (OpenCode's build/plan) is not one: taking it
+ * for an approval catalog leaves the session with no permission control at all.
+ */
+export function hasProviderPermissionMode(options: ChatConfigOption[]): boolean {
+	return Boolean(partitionConfigOptions(options).mode);
+}
+
 function partitionConfigOptions(options: ChatConfigOption[]): {
 	model: ChatConfigOption[];
 	effort: ChatConfigOption[];

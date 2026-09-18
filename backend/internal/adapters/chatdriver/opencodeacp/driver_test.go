@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	acpsdk "github.com/coder/acp-go-sdk"
+
 	acpdriver "github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/acp"
 	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
 )
@@ -47,8 +49,8 @@ func TestConfigureUsesNativeACPAndMergesSystemPromptConfig(t *testing.T) {
 	if _, ok := config.Agent["mine"]; !ok || config.Provider["local"] == nil {
 		t.Fatalf("user inline config was not preserved: %#v", config)
 	}
-	if config.Permission != "allow" {
-		t.Fatalf("permission = %q, want allow", config.Permission)
+	if config.Permission != "" {
+		t.Fatalf("permission = %q; launch-time rules cannot be taken back mid-session", config.Permission)
 	}
 }
 
@@ -139,5 +141,104 @@ func TestSessionOptionsForwardsEffortAfterModel(t *testing.T) {
 	got = sessionOptions(ports.ChatTurnSettings{Effort: "xhigh"})
 	if len(got) != 1 || got[0].ID != "effort" || got[0].Value != "xhigh" {
 		t.Fatalf("effort-only settings = %#v", got)
+	}
+}
+
+func TestPermissionPolicyTiersFollowToolKind(t *testing.T) {
+	options := []acpsdk.PermissionOption{
+		{OptionId: "reject", Kind: acpsdk.PermissionOptionKindRejectOnce},
+		{OptionId: "once", Kind: acpsdk.PermissionOptionKindAllowOnce},
+		{OptionId: "always", Kind: acpsdk.PermissionOptionKindAllowAlways},
+	}
+	// OpenCode reports bash as execute, webfetch as fetch, and anything it does
+	// not classify (MCP tools, skills) as other.
+	edit, execute, fetch, other := acpsdk.ToolKindEdit, acpsdk.ToolKindExecute, acpsdk.ToolKindFetch, acpsdk.ToolKindOther
+	tests := []struct {
+		name   string
+		mode   ports.PermissionMode
+		kind   *acpsdk.ToolKind
+		wantID acpsdk.PermissionOptionId
+	}{
+		{name: "default asks about edits", mode: ports.PermissionModeDefault, kind: &edit},
+		{name: "accept edits allows an edit", mode: ports.PermissionModeAcceptEdits, kind: &edit, wantID: "once"},
+		{name: "accept edits asks about shell", mode: ports.PermissionModeAcceptEdits, kind: &execute},
+		{name: "accept edits asks about fetch", mode: ports.PermissionModeAcceptEdits, kind: &fetch},
+		{name: "auto allows an edit", mode: ports.PermissionModeAuto, kind: &edit, wantID: "once"},
+		{name: "auto allows a fetch", mode: ports.PermissionModeAuto, kind: &fetch, wantID: "once"},
+		{name: "auto asks about shell", mode: ports.PermissionModeAuto, kind: &execute},
+		{name: "auto asks about unclassified tools", mode: ports.PermissionModeAuto, kind: &other},
+		{name: "auto asks when the kind is missing", mode: ports.PermissionModeAuto},
+		{name: "bypass allows shell persistently", mode: ports.PermissionModeBypassPermissions, kind: &execute, wantID: "always"},
+		{name: "bypass allows an unknown kind", mode: ports.PermissionModeBypassPermissions, wantID: "always"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			id, handled := permissionPolicy(test.mode, acpsdk.RequestPermissionRequest{
+				ToolCall: acpsdk.ToolCallUpdate{Kind: test.kind}, Options: options,
+			})
+			if id != test.wantID || handled != (test.wantID != "") {
+				t.Fatalf("selection = (%q, %v), want (%q, %v)", id, handled, test.wantID, test.wantID != "")
+			}
+		})
+	}
+
+	if id, _ := permissionPolicy(ports.PermissionModeBypassPermissions,
+		acpsdk.RequestPermissionRequest{Options: options[:2]}); id != "once" {
+		t.Fatalf("bypass without allow-always = %q, want \"once\"", id)
+	}
+	if _, handled := permissionPolicy(ports.PermissionModeBypassPermissions,
+		acpsdk.RequestPermissionRequest{Options: options[:1]}); handled {
+		t.Fatal("bypass answered a request offering no allow option")
+	}
+}
+
+func TestEveryPermissionModeSwitchesWhileTheSessionRuns(t *testing.T) {
+	modes := []ports.PermissionMode{
+		ports.PermissionModeDefault, ports.PermissionModeAcceptEdits,
+		ports.PermissionModeAuto, ports.PermissionModeBypassPermissions,
+	}
+	for _, initial := range modes {
+		for _, next := range modes {
+			// Both directions: OpenCode is never launched with a permission rule,
+			// so nothing has to be taken back and no restart is required.
+			if err := validateTurnSettings(initial, ports.ChatTurnSettings{Approval: next}); err != nil {
+				t.Fatalf("%q -> %q: %v", initial, next, err)
+			}
+		}
+	}
+}
+
+func TestConfigureLeavesPermissionsToTheUsersOwnOpenCodeConfig(t *testing.T) {
+	for _, mode := range []ports.PermissionMode{
+		ports.PermissionModeDefault, ports.PermissionModeAcceptEdits,
+		ports.PermissionModeAuto, ports.PermissionModeBypassPermissions,
+	} {
+		t.Run(string(mode), func(t *testing.T) {
+			_, env, err := configure(context.Background(), acpdriver.LaunchConfig{Permissions: mode})
+			if err != nil {
+				t.Fatalf("configure: %v", err)
+			}
+			if env != nil {
+				t.Fatalf("env = %#v; no system prompt and no permission rule means no overlay", env)
+			}
+		})
+	}
+
+	_, env, err := configure(context.Background(), acpdriver.LaunchConfig{
+		SessionID: "worker-2", SystemPrompt: "Follow AO worker rules.",
+		Permissions: ports.PermissionModeBypassPermissions,
+		Env:         map[string]string{"OPENCODE_CONFIG_CONTENT": `{"permission":{"bash":"deny"}}`},
+	})
+	if err != nil {
+		t.Fatalf("configure: %v", err)
+	}
+	var config struct {
+		Permission map[string]any `json:"permission"`
+	}
+	if err := json.Unmarshal([]byte(env["OPENCODE_CONFIG_CONTENT"]), &config); err != nil {
+		t.Fatalf("decode config: %v", err)
+	}
+	if config.Permission["bash"] != "deny" {
+		t.Fatalf("permission = %#v, want the user's own rules untouched", config.Permission)
 	}
 }
