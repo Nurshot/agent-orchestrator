@@ -52,13 +52,19 @@ func configure(_ context.Context, cfg acpdriver.LaunchConfig) ([]string, map[str
 	return args, map[string]string{"KILO_CONFIG_CONTENT": content}, nil
 }
 
-// sessionOptions maps AO's durable model choice onto Kilo Code's advertised
-// "model" config option.
+// sessionOptions maps AO's durable model and effort choices onto Kilo Code's
+// advertised config options. Verified against Kilo CLI 7.7.5, whose session/new
+// advertises selects with ids "model", "effort", and "mode"; "mode" is Kilo's
+// agent mode (code/architect/...), not an approval mode, so AO leaves it alone.
 func sessionOptions(settings ports.ChatTurnSettings) []acpdriver.SessionOption {
+	options := make([]acpdriver.SessionOption, 0, 2)
 	if model := strings.TrimSpace(settings.Model); model != "" {
-		return []acpdriver.SessionOption{{ID: "model", Value: model}}
+		options = append(options, acpdriver.SessionOption{ID: "model", Value: model})
 	}
-	return nil
+	if effort := strings.TrimSpace(settings.Effort); effort != "" {
+		options = append(options, acpdriver.SessionOption{ID: "effort", Value: effort})
+	}
+	return options
 }
 
 // validateTurnSettings rejects approval changes a Kilo Code ACP session cannot

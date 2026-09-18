@@ -87,6 +87,23 @@ func TestSessionOptionsUseModelConfigOption(t *testing.T) {
 	}
 }
 
+// Kilo CLI 7.7.5 advertises an "effort" select alongside "model", so AO's
+// durable effort choice must reach it instead of being dropped.
+func TestSessionOptionsUseEffortConfigOption(t *testing.T) {
+	got := sessionOptions(ports.ChatTurnSettings{Model: "m1", Effort: "thinking"})
+	want := []acpdriver.SessionOption{
+		{ID: "model", Value: "m1"},
+		{ID: "effort", Value: "thinking"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("options = %#v, want %#v", got, want)
+	}
+	if got := sessionOptions(ports.ChatTurnSettings{Effort: "thinking"}); !reflect.DeepEqual(
+		got, []acpdriver.SessionOption{{ID: "effort", Value: "thinking"}}) {
+		t.Fatalf("effort only = %#v", got)
+	}
+}
+
 func TestValidateTurnSettingsRejectsApprovalChanges(t *testing.T) {
 	if err := validateTurnSettings(ports.PermissionModeDefault, ports.ChatTurnSettings{}); err != nil {
 		t.Fatalf("empty approval should be accepted: %v", err)

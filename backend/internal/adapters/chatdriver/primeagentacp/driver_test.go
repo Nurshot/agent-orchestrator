@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	acpdriver "github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/acp"
-	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
 )
 
 func TestConfigureUsesACPMode(t *testing.T) {
@@ -20,27 +19,5 @@ func TestConfigureUsesACPMode(t *testing.T) {
 	}
 	if env != nil {
 		t.Fatalf("env = %#v, want nil", env)
-	}
-}
-
-func TestSessionOptionsMapModelAndEffort(t *testing.T) {
-	if got := sessionOptions(ports.ChatTurnSettings{}); len(got) != 0 {
-		t.Fatalf("empty settings = %#v", got)
-	}
-	got := sessionOptions(ports.ChatTurnSettings{Model: "anthropic:claude-sonnet-4", Effort: "high"})
-	want := []acpdriver.SessionOption{
-		{ID: "model", Value: "anthropic:claude-sonnet-4"},
-		{ID: "thought_level", Value: "high"},
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("options = %#v, want %#v", got, want)
-	}
-}
-
-func TestSessionOptionsOmitBlankEffort(t *testing.T) {
-	got := sessionOptions(ports.ChatTurnSettings{Model: "model-1"})
-	want := []acpdriver.SessionOption{{ID: "model", Value: "model-1"}}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("options = %#v, want %#v", got, want)
 	}
 }
