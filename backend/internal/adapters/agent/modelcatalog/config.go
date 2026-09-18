@@ -126,45 +126,115 @@ func modelConfigPaths(agentID, workingDir string, env map[string]string) []strin
 			paths = append(paths, filepath.Join(home, ".autohand", "config.json"))
 		}
 	case "opencode":
-		if p := strings.TrimSpace(env["OPENCODE_CONFIG"]); p != "" {
+		configRoot := xdgConfigRoot(home, env)
+		if configRoot != "" {
+			paths = appendConfigFiles(paths, filepath.Join(configRoot, "opencode"),
+				"config.json", "opencode.json", "opencode.jsonc")
+		}
+		if p := resolvedConfigPath("OPENCODE_CONFIG", workingDir, env); p != "" {
 			paths = append(paths, p)
 		}
-		if workingDir != "" {
-			paths = append(paths,
-				filepath.Join(workingDir, "opencode.json"),
-				filepath.Join(workingDir, "opencode.jsonc"))
+		for _, dir := range projectConfigDirs(workingDir) {
+			paths = appendConfigFiles(paths, dir, "opencode.json", "opencode.jsonc")
+			paths = appendConfigFiles(paths, filepath.Join(dir, ".opencode"), "opencode.json", "opencode.jsonc")
 		}
-		if home != "" {
-			paths = append(paths,
-				filepath.Join(home, ".config", "opencode", "opencode.json"),
-				filepath.Join(home, ".config", "opencode", "opencode.jsonc"))
+		if p := resolvedEnvValue(env, "OPENCODE_CONFIG_DIR"); p != "" {
+			paths = appendConfigFiles(paths, p, "opencode.json", "opencode.jsonc")
 		}
 	case "kilocode":
 		// Kilo Code CLI 1.0 is an opencode fork. Its documented config surface
 		// (kilocode.ai/docs/cli): KILO_CONFIG env override; project-level
 		// kilo.json[c] (legacy opencode.json[c]) or config inside ./.kilo/;
 		// global ~/.config/kilo/kilo.json[c] (legacy opencode.json[c]).
-		if p := strings.TrimSpace(env["KILO_CONFIG"]); p != "" {
+		configRoot := xdgConfigRoot(home, env)
+		if configRoot != "" {
+			paths = appendConfigFiles(paths, filepath.Join(configRoot, "kilo"),
+				"config.json", "kilo.json", "kilo.jsonc", "opencode.json", "opencode.jsonc")
+		}
+		if p := resolvedConfigPath("KILO_CONFIG", workingDir, env); p != "" {
 			paths = append(paths, p)
 		}
-		if workingDir != "" {
-			paths = append(paths,
-				filepath.Join(workingDir, "kilo.json"),
-				filepath.Join(workingDir, "kilo.jsonc"),
-				filepath.Join(workingDir, "opencode.json"),
-				filepath.Join(workingDir, "opencode.jsonc"),
-				filepath.Join(workingDir, ".kilo", "kilo.json"),
-				filepath.Join(workingDir, ".kilo", "kilo.jsonc"))
+		for _, dir := range projectConfigDirs(workingDir) {
+			paths = appendConfigFiles(paths, dir, "kilo.json", "kilo.jsonc", "opencode.json", "opencode.jsonc")
+			for _, configDir := range []string{".kilo", ".kilocode"} {
+				paths = appendConfigFiles(paths, filepath.Join(dir, configDir),
+					"kilo.jsonc", "kilo.json", "opencode.jsonc", "opencode.json")
+			}
 		}
-		if home != "" {
-			paths = append(paths,
-				filepath.Join(home, ".config", "kilo", "kilo.json"),
-				filepath.Join(home, ".config", "kilo", "kilo.jsonc"),
-				filepath.Join(home, ".config", "kilo", "opencode.json"),
-				filepath.Join(home, ".config", "kilo", "opencode.jsonc"))
+		if p := resolvedEnvValue(env, "KILO_CONFIG_DIR"); p != "" {
+			paths = appendConfigFiles(paths, p, "kilo.jsonc", "kilo.json", "opencode.jsonc", "opencode.json")
 		}
 	}
+	return uniqueConfigPaths(paths)
+}
+
+func resolvedEnvValue(env map[string]string, key string) string {
+	if value, ok := env[key]; ok {
+		return strings.TrimSpace(value)
+	}
+	return strings.TrimSpace(os.Getenv(key))
+}
+
+func resolvedConfigPath(key, workingDir string, env map[string]string) string {
+	path := resolvedEnvValue(env, key)
+	if path != "" && !filepath.IsAbs(path) && workingDir != "" {
+		return filepath.Join(workingDir, path)
+	}
+	return path
+}
+
+func xdgConfigRoot(home string, env map[string]string) string {
+	if root := resolvedEnvValue(env, "XDG_CONFIG_HOME"); root != "" {
+		return root
+	}
+	if home == "" {
+		return ""
+	}
+	return filepath.Join(home, ".config")
+}
+
+func projectConfigDirs(workingDir string) []string {
+	if strings.TrimSpace(workingDir) == "" {
+		return nil
+	}
+	start := filepath.Clean(workingDir)
+	dirs := []string{start}
+	for dir := start; ; {
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			break
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return []string{start}
+		}
+		dirs = append(dirs, parent)
+		dir = parent
+	}
+	for left, right := 0, len(dirs)-1; left < right; left, right = left+1, right-1 {
+		dirs[left], dirs[right] = dirs[right], dirs[left]
+	}
+	return dirs
+}
+
+func appendConfigFiles(paths []string, dir string, names ...string) []string {
+	for _, name := range names {
+		paths = append(paths, filepath.Join(dir, name))
+	}
 	return paths
+}
+
+func uniqueConfigPaths(paths []string) []string {
+	seen := make(map[string]struct{}, len(paths))
+	unique := make([]string, 0, len(paths))
+	for _, path := range paths {
+		clean := filepath.Clean(path)
+		if _, ok := seen[clean]; ok {
+			continue
+		}
+		seen[clean] = struct{}{}
+		unique = append(unique, clean)
+	}
+	return unique
 }
 
 func qwenConfigHome(home string, env map[string]string) string {

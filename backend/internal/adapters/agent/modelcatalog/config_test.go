@@ -342,6 +342,120 @@ func TestKiloCodeDiscoveryFallsBackToCLIWithoutConfig(t *testing.T) {
 	}
 }
 
+func TestOpenCodeDiscoveryUsesInheritedConfigOverride(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	config := filepath.Join(t.TempDir(), "custom-opencode.json")
+	if err := os.WriteFile(config, []byte(`{
+		"provider": {"anthropic": {"models": {"claude-sonnet-4-6": {}}}}
+	}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("OPENCODE_CONFIG", config)
+
+	got, err := Discover(context.Background(), "opencode", "", t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Models) != 1 || got.Models[0].ID != "anthropic/claude-sonnet-4-6" {
+		t.Fatalf("catalog = %#v", got)
+	}
+}
+
+func TestOpenCodeDiscoveryUsesXDGAncestorAndLegacyConfigs(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	xdg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	globalDir := filepath.Join(xdg, "opencode")
+	if err := os.MkdirAll(globalDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(globalDir, "config.json"), []byte(`{
+		"provider": {"global": {"models": {"global-model": {}}}}
+	}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	project := t.TempDir()
+	if err := os.Mkdir(filepath.Join(project, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "opencode.json"), []byte(`{
+		"provider": {"project": {"models": {"project-model": {}}}}
+	}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	nested := filepath.Join(project, "nested", "package")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := Discover(context.Background(), "opencode", "", nested, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{"global/global-model": true, "project/project-model": true}
+	for _, model := range got.Models {
+		delete(want, model.ID)
+	}
+	if len(want) != 0 {
+		t.Fatalf("catalog = %#v, missing models = %#v", got, want)
+	}
+}
+
+func TestKiloCodeDiscoveryUsesAncestorKilocodeDirectory(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	project := t.TempDir()
+	if err := os.Mkdir(filepath.Join(project, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	configDir := filepath.Join(project, ".kilocode")
+	if err := os.Mkdir(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "kilo.json"), []byte(`{
+		"provider": {"kilocode": {"models": {"kimi-for-coding": {}}}}
+	}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	nested := filepath.Join(project, "nested")
+	if err := os.Mkdir(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := Discover(context.Background(), "kilocode", "", nested, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Models) != 1 || got.Models[0].ID != "kilocode/kimi-for-coding" {
+		t.Fatalf("catalog = %#v", got)
+	}
+}
+
+func TestProjectConfigEnvironmentOverridesInheritedConfigPath(t *testing.T) {
+	t.Setenv("OPENCODE_CONFIG", "/inherited/opencode.json")
+	paths := modelConfigPaths("opencode", "/work/project", map[string]string{
+		"OPENCODE_CONFIG": "project-opencode.json",
+	})
+	want := filepath.Join("/work/project", "project-opencode.json")
+	if !containsPath(paths, want) || containsPath(paths, "/inherited/opencode.json") {
+		t.Fatalf("paths = %#v, want project override %q without inherited path", paths, want)
+	}
+}
+
+func containsPath(paths []string, want string) bool {
+	for _, path := range paths {
+		if path == want {
+			return true
+		}
+	}
+	return false
+}
+
 func TestConfigDiscoveryFingerprintTracksOpenCodeConfigEdits(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
