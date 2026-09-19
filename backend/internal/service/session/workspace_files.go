@@ -1347,10 +1347,7 @@ func scratchWorkspaceFiles(root string) ([]WorkspaceFileSummary, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	managed, err := scratchAOManagedPaths(rootResolved)
-	if err != nil {
-		return nil, false, err
-	}
+	managedByDir := make(map[string]map[string]struct{})
 	var files []WorkspaceFileSummary
 	truncated := false
 	err = filepath.WalkDir(rootResolved, func(fullPath string, entry fs.DirEntry, walkErr error) error {
@@ -1371,10 +1368,19 @@ func scratchWorkspaceFiles(root string) ([]WorkspaceFileSummary, bool, error) {
 			}
 			return nil
 		}
-		if _, hidden := managed[rel]; hidden {
+		if entry.IsDir() {
 			return nil
 		}
-		if entry.IsDir() {
+		dirPath := filepath.Dir(fullPath)
+		managed, ok := managedByDir[dirPath]
+		if !ok {
+			managed = scratchAOManagedNamesIn(dirPath)
+			managedByDir[dirPath] = managed
+		}
+		if _, hidden := managed[entry.Name()]; hidden {
+			return nil
+		}
+		if scratchAOManagedCopilotProfile(path.Dir(rel), entry.Name(), fullPath) {
 			return nil
 		}
 		info, include, err := scratchWorkspaceFileInfo(rootResolved, fullPath, entry)
@@ -1409,91 +1415,73 @@ func scratchWorkspaceFiles(root string) ([]WorkspaceFileSummary, bool, error) {
 	return files, truncated, nil
 }
 
-// scratchAOManagedPaths returns the workspace-relative files claimed by
-// AO-managed .gitignore files. Each adapter writes one beside its control
-// files and anchors every entry to that directory; user-owned .gitignore files
-// lack the sentinel and remain ordinary visible scratch files.
-func scratchAOManagedPaths(rootResolved string) (map[string]struct{}, error) {
+// scratchAOManagedNamesIn returns the basenames claimed by an AO-managed
+// .gitignore in dir. Adapter-owned patterns are anchored to that directory and
+// name files only. Missing, malformed, or unreadable markers safely reveal the
+// files instead of failing an otherwise readable workspace-tree request.
+func scratchAOManagedNamesIn(dir string) map[string]struct{} {
 	managed := make(map[string]struct{})
-	err := filepath.WalkDir(rootResolved, func(fullPath string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
+	marker := filepath.Join(dir, ".gitignore")
+	info, err := os.Lstat(marker)
+	if err != nil || !info.Mode().IsRegular() {
+		return managed
+	}
+	content, binary, _, err := readWorkspaceTextFile(marker, 64*1024)
+	if err != nil || binary || !strings.Contains(content, aoManagedGitignoreSentinel) {
+		return managed
+	}
+	for _, rawLine := range strings.Split(content, "\n") {
+		line := strings.TrimSpace(rawLine)
+		if !strings.HasPrefix(line, "/") || strings.HasPrefix(line, "//") {
+			continue
 		}
-		if entry.IsDir() {
-			if entry.Name() == ".git" && fullPath != rootResolved {
-				return filepath.SkipDir
-			}
-			return nil
+		name := path.Clean(strings.TrimPrefix(line, "/"))
+		if name == "." || name == ".." || strings.Contains(name, "/") {
+			continue
 		}
-		if entry.Name() != ".gitignore" {
-			rel, err := filepath.Rel(rootResolved, fullPath)
-			if err != nil {
-				return err
-			}
-			rel = filepath.ToSlash(rel)
-			name := path.Base(rel)
-			if path.Dir(rel) != ".github/agents" || !strings.HasPrefix(name, "ao-") || !strings.HasSuffix(name, ".agent.md") {
-				return nil
-			}
-			_, include, err := scratchWorkspaceFileInfo(rootResolved, fullPath, entry)
-			if err != nil || !include {
-				return err
-			}
-			content, binary, _, err := readWorkspaceTextFile(fullPath, 64*1024)
-			if err != nil {
-				return err
-			}
-			if !binary && strings.Contains(content, aoManagedCopilotProfileSentinel) {
-				managed[rel] = struct{}{}
-			}
-			return nil
-		}
-		_, include, err := scratchWorkspaceFileInfo(rootResolved, fullPath, entry)
-		if err != nil || !include {
-			return err
-		}
-		content, binary, _, err := readWorkspaceTextFile(fullPath, 64*1024)
-		if err != nil {
-			return err
-		}
-		if binary || !strings.Contains(content, aoManagedGitignoreSentinel) {
-			return nil
-		}
-		dirRel, err := filepath.Rel(rootResolved, filepath.Dir(fullPath))
-		if err != nil {
-			return err
-		}
-		prefix := ""
-		if dirRel != "." {
-			prefix = filepath.ToSlash(dirRel)
-		}
-		for _, rawLine := range strings.Split(content, "\n") {
-			line := strings.TrimSpace(rawLine)
-			if !strings.HasPrefix(line, "/") || strings.HasPrefix(line, "//") {
-				continue
-			}
-			name := path.Clean(strings.TrimPrefix(line, "/"))
-			if name == "." || name == ".." || strings.HasPrefix(name, "../") {
-				continue
-			}
-			managed[joinWorkspaceRelative(prefix, name)] = struct{}{}
-		}
-		return nil
-	})
-	return managed, err
+		managed[name] = struct{}{}
+	}
+	return managed
+}
+
+func scratchAOManagedCopilotProfile(dir, name, fullPath string) bool {
+	if dir != ".github/agents" || !strings.HasPrefix(name, "ao-") || !strings.HasSuffix(name, ".agent.md") {
+		return false
+	}
+	info, err := os.Lstat(fullPath)
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	content, binary, _, err := readWorkspaceTextFile(fullPath, 64*1024)
+	return err == nil && !binary && strings.Contains(content, aoManagedCopilotProfileSentinel)
 }
 
 // scratchDirectoryOnlyAOManaged reports whether a directory contains control
 // files but no user-visible file. This keeps an otherwise empty .kimi,
 // .claude, or similar adapter directory from surviving as a misleading folder
 // in the Files tree after its contents have been filtered.
-func scratchDirectoryOnlyAOManaged(rootResolved, rel string, managed map[string]struct{}) bool {
+func scratchDirectoryOnlyAOManaged(rootResolved, rel string) bool {
+	// AO workspace metadata lives under hidden roots. Avoid recursively probing
+	// ordinary scratch directories just to prove that they are user-visible.
+	rootName := strings.SplitN(rel, "/", 2)[0]
+	if !strings.HasPrefix(rootName, ".") {
+		return false
+	}
 	hasManaged := false
 	hasVisible := false
+	visited := 0
+	managedByDir := make(map[string]map[string]struct{})
 	target := filepath.Join(rootResolved, filepath.FromSlash(rel))
 	err := filepath.WalkDir(target, func(fullPath string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
+		}
+		if fullPath != target {
+			visited++
+			if visited > maxWorkspaceFiles {
+				hasVisible = true
+				return filepath.SkipAll
+			}
 		}
 		if entry.IsDir() {
 			if entry.Name() == ".git" && fullPath != target {
@@ -1506,7 +1494,17 @@ func scratchDirectoryOnlyAOManaged(rootResolved, rel string, managed map[string]
 			return err
 		}
 		workspaceRel := filepath.ToSlash(pathRel)
-		if _, hidden := managed[workspaceRel]; hidden {
+		dirPath := filepath.Dir(fullPath)
+		managed, ok := managedByDir[dirPath]
+		if !ok {
+			managed = scratchAOManagedNamesIn(dirPath)
+			managedByDir[dirPath] = managed
+		}
+		if _, hidden := managed[entry.Name()]; hidden {
+			hasManaged = true
+			return nil
+		}
+		if scratchAOManagedCopilotProfile(path.Dir(workspaceRel), entry.Name(), fullPath) {
 			hasManaged = true
 			return nil
 		}

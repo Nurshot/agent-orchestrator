@@ -336,10 +336,6 @@ func scratchWorkspaceTreeChildren(root, dir string) ([]WorkspaceTreeEntry, bool,
 	if err != nil {
 		return nil, false, err
 	}
-	managed, err := scratchAOManagedPaths(rootResolved)
-	if err != nil {
-		return nil, false, err
-	}
 	target := rootResolved
 	if dir != "" {
 		target = filepath.Join(rootResolved, filepath.FromSlash(dir))
@@ -359,6 +355,7 @@ func scratchWorkspaceTreeChildren(root, dir string) ([]WorkspaceTreeEntry, bool,
 		}
 		return nil, false, err
 	}
+	managed := scratchAOManagedNamesIn(targetResolved)
 	entries := make([]WorkspaceTreeEntry, 0, len(dirEntries))
 	truncated := false
 	for _, entry := range dirEntries {
@@ -395,13 +392,16 @@ func scratchWorkspaceTreeChildren(root, dir string) ([]WorkspaceTreeEntry, bool,
 			continue
 		}
 		if entry.IsDir() {
-			if scratchDirectoryOnlyAOManaged(rootResolved, rel, managed) {
+			if scratchDirectoryOnlyAOManaged(rootResolved, rel) {
 				continue
 			}
 			entries = append(entries, WorkspaceTreeEntry{Name: name, Path: rel, Type: WorkspaceTreeDir, HasChanges: true})
 			continue
 		}
-		if _, hidden := managed[rel]; hidden {
+		if _, hidden := managed[name]; hidden {
+			continue
+		}
+		if scratchAOManagedCopilotProfile(dir, name, fullPath) {
 			continue
 		}
 		info, err := entry.Info()

@@ -258,6 +258,35 @@ func TestListWorkspaceTreeKeepsAgentDirectoryContainingUserWork(t *testing.T) {
 	}
 }
 
+func TestListWorkspaceTreeReadableDirectoryIgnoresUnreadableSiblingMarker(t *testing.T) {
+	root := t.TempDir()
+	writeWorkspaceFile(t, root, "visible/notes.txt", "visible work\n")
+	writeWorkspaceFile(t, root, "locked/.gitignore", aoManagedGitignoreSentinel+"\n/.gitignore\n/AGENTS.md\n")
+	marker := filepath.Join(root, "locked", ".gitignore")
+	if err := os.Chmod(marker, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(marker, 0o600) })
+	if _, err := os.ReadFile(marker); err == nil {
+		t.Skip("filesystem does not enforce unreadable file permissions for this user")
+	}
+
+	st := newFakeStore()
+	st.sessions["standalone-1"] = domain.SessionRecord{
+		ID:       "standalone-1",
+		Kind:     domain.KindWorker,
+		Metadata: domain.SessionMetadata{WorkspacePath: root},
+	}
+
+	tree, err := (&Service{store: st}).ListWorkspaceTree(context.Background(), "standalone-1", "visible")
+	if err != nil {
+		t.Fatalf("list readable directory with unreadable sibling marker: %v", err)
+	}
+	if len(tree.Entries) != 1 || tree.Entries[0].Path != "visible/notes.txt" {
+		t.Fatalf("visible entries = %#v, want notes.txt", tree.Entries)
+	}
+}
+
 func TestListWorkspaceTreeGlobalCapNotPerDirectory(t *testing.T) {
 	repo := newWorkspaceRepo(t)
 	for i := 0; i < maxWorkspaceFiles+50; i++ {
