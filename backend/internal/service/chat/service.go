@@ -685,7 +685,13 @@ func (s *Service) Start(ctx context.Context, cfg StartConfig) (*Controller, erro
 	// behind a controller that no longer existed. Nothing would ever have corrected
 	// it. Settling here covers every way a controller can come up, and is a no-op
 	// for a session that has none of it.
-	if !liveReconnect && cfg.ProviderHandoff == nil {
+	//
+	// A session whose first controller this is has no previous controller and so
+	// no orphaned work — only the intake an asynchronous spawn queued ahead of
+	// it. Settling that would fail the user's opening prompt the moment the agent
+	// it was waiting for finally arrived.
+	if !liveReconnect && cfg.ProviderHandoff == nil &&
+		!queuedAheadOfFirstController(ctx, s.sessions, cfg.SessionID) {
 		s.settleOrphanedWork(ctx, cfg.SessionID, conversation.ID)
 	}
 	// A fresh generation per launch, so events from the controller this one

@@ -180,4 +180,18 @@ func TestFirstControllerAfterQueuedPromptIsNotFencedAsResume(t *testing.T) {
 	if boundaryReserved {
 		t.Fatal("queued turns were fenced off as provider history")
 	}
+
+	// The turn has to still be there to be drained. Start settles work a dead
+	// controller left behind, and a queue written before the first controller
+	// existed looks exactly like that unless it is excluded.
+	snapshot, err := svc.Snapshot(ctx, provisioningSession)
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	if len(snapshot.Turns) != 1 {
+		t.Fatalf("turns = %d, want the queued opening prompt", len(snapshot.Turns))
+	}
+	if state := snapshot.Turns[0].State; state == domain.TurnStateFailed {
+		t.Fatalf("the opening prompt was settled as orphaned work: %q", snapshot.Turns[0].ErrorMessage)
+	}
 }
