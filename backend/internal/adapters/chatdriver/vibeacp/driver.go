@@ -41,6 +41,15 @@ func (a acpAdapter) ResolveBinary(ctx context.Context) (string, error) {
 // Vibe resolves approvals through ACP permission requests, so AO's stronger
 // modes are answered per request rather than by a launch flag; a mid-session
 // approval change takes effect on the next tool call.
+//
+// accept-edits is deliberately not resolved here. Verified against Vibe
+// 2.25.5: its request_permission sends a ToolCallUpdate carrying only a
+// tool_call_id and no tool kind (vibe/acp/agent.py), so AO cannot tell a file
+// edit from a shell command. accept-edits therefore prompts like default,
+// rather than auto-approving a call that might not be an edit. auto and bypass
+// are unaffected: Vibe always offers allow_once, allow_always,
+// allow_always_permanent, and reject_once, and AO takes the first
+// allow_always-kinded option -- the session-scoped one, not the permanent one.
 func New(plugin vibePlugin, log *slog.Logger) ports.ChatDriver {
 	return nativeacp.New(acpAdapter{plugin}, nativeacp.Config{
 		Harness:   domain.HarnessVibe,

@@ -21,13 +21,17 @@ agent plugin. AO never downloads, packages, or substitutes the provider CLI.
 | Kilo Code | `kilocode acp` | `session/set_config_option` (`model`, `effort`) | `KILO_CONFIG_CONTENT` permission map | `KILO_CONFIG_CONTENT` generated primary agent |
 | Kiro | `kiro-cli acp --agent ao` | `session/set_model` | ACP requests; `accept-edits`/`auto`/`bypass` auto-resolve | workspace-local `ao` custom agent |
 | Prime Agent | `prime-agent --mode acp` | not selectable: no config options, no `session/set_model` | unsupported: bypass-only admission | not injectable |
-| Vibe | `vibe-acp` | session-advertised model options | ACP requests; `accept-edits`/`auto`/`bypass` auto-resolve | not injectable |
+| Vibe | `vibe-acp` | session-advertised model options | ACP requests; `auto`/`bypass` auto-resolve, `accept-edits` prompts | not injectable |
 
 Codex remains on its native app-server. Claude Code, Cursor, OpenCode, Droid,
 Kimi, Kimchi, Pi, OMP, and Qwen keep the bindings they already shipped.
 
 ### Deliberate limitations
 
+- **Vibe** sends no tool kind on a permission request, so AO cannot tell an
+  edit from a shell command and `accept-edits` prompts exactly like `default`
+  rather than auto-approving a call it cannot classify. `auto` and `bypass` are
+  unaffected.
 - **Cline, Goose, and Vibe** expose no launch-time standing-instruction surface
   in ACP mode, so AO's role prompt is not forwarded. Cline ignores `--system`
   once `--acp` is set; `goose acp` accepts only `--with-builtin` and
@@ -46,8 +50,9 @@ Kimi, Kimchi, Pi, OMP, and Qwen keep the bindings they already shipped.
 
 ### Verification status
 
-Each binding below was exercised against the provider's real ACP server on
-macOS (arm64) on 2026-09-19. "Handshake" means `initialize` plus `session/new`
+Every binding except Kiro was exercised against the provider's real ACP server
+on macOS (arm64) on 2026-09-19; Kiro's CLI is not installable here and its row
+says so. "Handshake" means `initialize` plus `session/new`
 over stdio; several providers refuse `session/new` until their own `login` has
 run, which confirms the launch shape without confirming session behavior.
 
@@ -59,8 +64,8 @@ run, which confirms the launch shape without confirming session behavior.
 | Kilo Code | 7.7.5 | `kilo acp --help` plus a full `session/new`: the session advertises selects `model`, `effort`, and `mode`, and `KILO_CONFIG_CONTENT` is present in the shipped binary. AO maps `model` and `effort`; `mode` is Kilo's agent mode, not an approval mode. `default_agent` was probed directly and is honored only for a primary agent -- see below. |
 | Prime Agent | 0.7.2 | `prime-agent --mode acp` handshake: `loadSession: false`, `session/new` advertises no config options, and `session/set_config_option` and `session/set_model` both answer `-32601`. AO therefore sends no session selectors. |
 | Kiro | not installed | `kiro-cli acp` is documented with `--agent <name>` only; no launch-time trust or model flag is published for the `acp` subcommand, so permissions stay on ACP requests. |
-| Goose | not installed | Derived from `goose acp` and the `GOOSE_MODE` surface the TUI adapter already uses. |
-| Vibe | not installed | Derived from the published `vibe-acp` entrypoint. |
+| Goose | 1.51.0 | `goose acp` handshake: `loadSession: true`. `--help` lists exactly `--with-builtin` and `--enable-scheduler`, confirming no model or system-prompt flag; `GOOSE_MODE` and `smart_approve` are present in the shipped binary. `session/new` requires `GOOSE_PROVIDER`. |
+| Vibe | 2.25.5 | `vibe-acp` handshake: `loadSession: true`. `--help` lists only `--setup`/harness flags. Its `request_permission` (`vibe/acp/agent.py`) always offers `allow_once`, `allow_always`, `allow_always_permanent`, `reject_once`, but sends no tool kind -- hence the `accept-edits` limitation above. `session/new` requires a Mistral API key. |
 
 Kilo's `default_agent` needs `mode: "primary"` on the generated agent. Probing
 `session/new` with three configs shows why, since the failure is silent:

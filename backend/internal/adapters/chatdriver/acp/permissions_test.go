@@ -50,6 +50,7 @@ func TestStandardPermissionPolicyResolvesPerBindingModes(t *testing.T) {
 		{name: "accept edits allows an edit once", mode: ports.PermissionModeAcceptEdits, kind: &edit,
 			wantID: "allow_once", wantHandled: true},
 		{name: "accept edits parks a command", mode: ports.PermissionModeAcceptEdits, kind: &execute},
+		// Vibe 2.25.5 sends no kind, so this is its whole accept-edits behavior.
 		{name: "accept edits parks an unkinded call", mode: ports.PermissionModeAcceptEdits, kind: nil},
 		{name: "launch-settled auto parks", mode: ports.PermissionModeAuto, kind: &execute},
 		{name: "bypass-only binding parks auto",
