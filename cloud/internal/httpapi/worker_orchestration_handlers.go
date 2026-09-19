@@ -122,28 +122,25 @@ func (s *Server) createWorkerChild(w http.ResponseWriter, r *http.Request) {
 	if request.Mode == "" {
 		request.Mode = "trusted"
 	}
-	// An orchestrator that spawns a worker without naming an agent must get the
-	// worker agent the project was configured with (config.worker.agent) rather
-	// than a hardcoded default. The ao CLI sends an empty harness when the caller
-	// does not specify one; resolve it here, before the credential check and the
-	// provisioning plan, so the whole spawn uses the project's chosen agent. An
-	// explicit harness from the orchestrator still wins. Fall back to claude-code
-	// only when the project configured no worker agent.
-	if request.Harness == "" {
-		workerAgentStore, ok := s.store.(orchestratorWorkerAgentStore)
-		if !ok {
-			writeError(w, r, http.StatusNotImplemented, "not_implemented", "Worker agent inheritance is unavailable.")
-			return
-		}
+	// The project's configured worker agent (config.worker.agent) is authoritative
+	// for orchestrator-spawned workers: the harness must match what was chosen at
+	// project creation regardless of what the orchestrator asks for. Some agents
+	// (e.g. Codex) spawn children naming their own harness, which would otherwise
+	// override the project's choice. Resolve and force it here, before the
+	// credential check and the provisioning plan. Only when the project set no
+	// worker agent do we honor the requested harness, falling back to claude-code.
+	if workerAgentStore, ok := s.store.(orchestratorWorkerAgentStore); ok {
 		configured, err := workerAgentStore.OrchestratorProjectWorkerAgent(r.Context(), claims.OrgID, claims.SessionID)
 		if err != nil {
 			s.writeStoreError(w, r, err)
 			return
 		}
-		request.Harness = strings.TrimSpace(configured)
-		if request.Harness == "" {
-			request.Harness = "claude-code"
+		if configured = strings.TrimSpace(configured); configured != "" {
+			request.Harness = configured
 		}
+	}
+	if request.Harness == "" {
+		request.Harness = "claude-code"
 	}
 	if request.Prompt == "" {
 		writeError(w, r, http.StatusUnprocessableEntity, "validation_error", "Child prompt is required.")

@@ -168,21 +168,24 @@ func TestCreateWorkerChildFallsBackToClaudeWhenNoWorkerAgent(t *testing.T) {
 	}
 }
 
-// An explicit --agent from the orchestrator still wins over the project default.
-func TestCreateWorkerChildRespectsExplicitHarness(t *testing.T) {
+// The project's configured worker agent is authoritative: it overrides an
+// explicit harness the orchestrator names (e.g. a Codex orchestrator that spawns
+// codex children), so the worker matches what was set at project creation.
+func TestCreateWorkerChildForcesProjectWorkerAgentOverExplicit(t *testing.T) {
 	t.Parallel()
-	store := &stubChildStore{credentialAvailable: true, parentProvider: sandbox.ProviderNodeOps, parentWorkerAgent: "codex"}
+	store := &stubChildStore{credentialAvailable: true, parentProvider: sandbox.ProviderNodeOps, parentWorkerAgent: "claude-code"}
 	srv := newChildServer(store, bothProviderProvisioning(sandbox.ProviderNodeOps), sandbox.ProviderNodeOps)
 
 	rec := httptest.NewRecorder()
-	body := `{"harness":"cursor","displayName":"add-logger","prompt":"do the work","mode":"trusted"}`
+	// Orchestrator explicitly asks for codex, but the project configured claude-code.
+	body := `{"harness":"codex","displayName":"add-logger","prompt":"do the work","mode":"trusted"}`
 	srv.createWorkerChild(rec, childRequestBody(t, []string{"worker:orchestrate"}, body))
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want 201; body = %s", rec.Code, rec.Body.String())
 	}
-	if store.captured.Harness != "cursor" {
-		t.Fatalf("child harness = %q, want cursor", store.captured.Harness)
+	if store.captured.Harness != "claude-code" {
+		t.Fatalf("child harness = %q, want claude-code (project config must win)", store.captured.Harness)
 	}
 }
 
