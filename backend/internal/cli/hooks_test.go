@@ -759,6 +759,30 @@ func TestHooks_NonSwitchingHarnessDoesNotReportConversationFacts(t *testing.T) {
 	}
 }
 
+func TestHookSemanticAcceptanceFacts(t *testing.T) {
+	wrapped := domain.WrapReportDelivery("report-batch:abc123", "worker finished")
+	for _, harness := range []domain.AgentHarness{domain.HarnessOpenCode, domain.HarnessGrok} {
+		t.Run(string(harness), func(t *testing.T) {
+			got := hookSemanticAcceptanceFacts(
+				"user-prompt-submit",
+				[]byte(`{"prompt":`+mustJSONString(t, wrapped)+`}`),
+			)
+			if got.CoordinationID != "report-batch:abc123" ||
+				got.CheckpointOrigin != domain.ConversationCheckpointOriginCoordination {
+				t.Fatalf("semantic acceptance = %#v", got)
+			}
+			if got.LatestUserPrompt != "" {
+				t.Fatalf("accepted report leaked into user prompt: %#v", got)
+			}
+		})
+	}
+
+	ordinary := hookSemanticAcceptanceFacts("user-prompt-submit", []byte(`{"prompt":"private prompt"}`))
+	if ordinary != (hookConversationSnapshot{}) {
+		t.Fatalf("ordinary prompt became a semantic checkpoint: %#v", ordinary)
+	}
+}
+
 func TestHookConversationFactsExcludesAOCoordinationUserTurns(t *testing.T) {
 	for _, prompt := range []string{
 		"<ao-handoff-request>\nprepare context",
