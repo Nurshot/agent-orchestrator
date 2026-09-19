@@ -385,7 +385,21 @@ function showScreenshotNotice(): void {
 }
 
 function emitState(): void {
+	// Every draft mutation funnels through here, so the trailing add control
+	// never drifts from what Enter would do with the same draft.
+	syncComposerAddButton();
 	ipcRenderer.send("browser:annotation:state", session);
+}
+
+/**
+ * The add control is Enter's twin: it saves the draft, and stays inert while the
+ * draft is empty so a stray click cannot dismiss the composer.
+ */
+function syncComposerAddButton(): void {
+	const button = shadow?.querySelector<HTMLButtonElement>('[data-action="add"]');
+	if (!button) return;
+	const draft = session.draft;
+	button.disabled = !draft || (!draft.body.trim() && draft.adjustments.length === 0);
 }
 
 function renderAll(): void {
@@ -471,10 +485,12 @@ function renderComposer(): void {
 			<div class="composer-input-row">
 				${ADJUST_MODE_ENABLED ? `<button type="button" data-action="adjust" class="adjust-button" aria-label="Adjust element" title="Adjust element">${adjustIcon()}</button>` : ""}
 				<textarea class="composer-note" rows="1" aria-label="Comment" placeholder="Add a comment..."></textarea>
+				<button type="button" data-action="add" class="add-button primary" aria-label="Add annotation" title="Add annotation">${icon("plus")}</button>
 			</div>
 		</form>`;
 	const form = mount.querySelector<HTMLFormElement>("form")!;
 	const textarea = form.querySelector<HTMLTextAreaElement>(".composer-note")!;
+	const addButton = form.querySelector<HTMLButtonElement>('[data-action="add"]');
 	textarea.value = draft.body;
 	if (!composerAnchorRect && target) composerAnchorRect = copyRect(target.getBoundingClientRect());
 	const resize = () => composerAnchorRect && resizeAndPositionComposer(form, textarea, composerAnchorRect);
@@ -501,6 +517,8 @@ function renderComposer(): void {
 	form.querySelector<HTMLElement>('[data-action="adjust"]')?.addEventListener("click", () => {
 		void toggleAdjustmentMode(form, draft, target, resize);
 	});
+	addButton?.addEventListener("click", () => saveDraft());
+	syncComposerAddButton();
 	resize();
 	// A re-opened saved adjustment arrives already expanded; the composer itself
 	// appeared instantly, so there is nothing to open *from*.
@@ -614,7 +632,7 @@ async function toggleAdjustmentMode(
 	}
 }
 
-function icon(name: "camera" | "eye" | "trash" | "close" | "arrow" | "check" | "sliders" | "sliders-horizontal" | "palette" | "sparkles" | "settings" | "reset" | "link"): string {
+function icon(name: "camera" | "eye" | "trash" | "close" | "arrow" | "check" | "sliders" | "sliders-horizontal" | "palette" | "sparkles" | "settings" | "reset" | "link" | "plus"): string {
 	const paths = {
 		camera: '<path d="M14.5 5 13 3h-4L7.5 5H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z"/><circle cx="11" cy="11" r="3.5"/>',
 		eye: '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/>',
@@ -629,6 +647,7 @@ function icon(name: "camera" | "eye" | "trash" | "close" | "arrow" | "check" | "
 		settings: '<path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>',
 		reset: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8m0-5v5h5"/>',
 		link: '<path d="M10 13a5 5 0 0 0 7.54.54l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15M14 11a5 5 0 0 0-7.54-.54l-2 2a5 5 0 0 0 7.07 7.07l1.14-1.14"/>',
+		plus: '<path d="M12 5v14M5 12h14"/>',
 	};
 	return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name]}</svg>`;
 }
@@ -1505,6 +1524,13 @@ function overlayStyles(): string {
 		}
 		.adjust-button:hover,.adjust-button--active{background:var(--muted);color:var(--fg)}
 		.adjust-button svg{width:16px;height:16px}
+		/* Trailing twin of the adjust control: same 28px box, primary because it
+		   commits the draft the way Enter does. */
+		.add-button{
+			width:var(--control);height:var(--control);flex:0 0 var(--control);align-self:flex-start;
+			border:0;padding:0;
+		}
+		.add-button svg{width:16px;height:16px}
 		.composer-note{
 			display:block;box-sizing:border-box;min-width:0;flex:1;resize:none;
 			border:0;background:transparent;color:var(--fg);caret-color:var(--fg);

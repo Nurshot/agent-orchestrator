@@ -450,7 +450,7 @@ describe("annotation adjustment preload", () => {
 		}));
 	});
 
-	it("uses a concentric comment composer aligned on one row without cancel or send buttons", () => {
+	it("uses a concentric comment composer aligned on one row without a separate actions row", () => {
 		const button = setElementBounds(document.createElement("button"), { left: 20, top: 30, width: 140, height: 36 });
 		button.id = "comment-row";
 		button.textContent = "Continue";
@@ -475,6 +475,59 @@ describe("annotation adjustment preload", () => {
 		expect(row?.querySelector(".adjust-button")).not.toBeNull();
 		expect(row?.querySelector(".composer-note")).not.toBeNull();
 		expect(row?.querySelector(".adjust-button svg")?.innerHTML).toContain("M12 22a1 1 0 0 1 0-20 10 9");
+		const add = row?.querySelector<HTMLButtonElement>('[data-action="add"]');
+		expect(add).not.toBeNull();
+		expect(row?.lastElementChild).toBe(add);
+		expect(add?.disabled).toBe(true);
+		expect(add?.querySelector("svg")?.innerHTML).toContain("M12 5v14M5 12h14");
+		expect(styles).toMatch(/\.add-button\{[^}]*align-self:flex-start/);
+	});
+
+	it("adds an annotation from the trailing add control instead of Enter", () => {
+		const button = setElementBounds(document.createElement("button"), { left: 20, top: 30, width: 140, height: 36 });
+		button.id = "add-control";
+		button.textContent = "Continue";
+		document.body.appendChild(button);
+
+		clickPage(button);
+		const root = overlayRoot();
+		const textarea = root.querySelector<HTMLTextAreaElement>(".composer-note")!;
+		const add = root.querySelector<HTMLButtonElement>('[data-action="add"]')!;
+
+		textarea.value = "Raise this above the fold";
+		textarea.dispatchEvent(new Event("input", { bubbles: true }));
+		expect(add.disabled).toBe(false);
+
+		add.click();
+
+		const session = latestSession();
+		expect(session.annotations).toHaveLength(1);
+		expect(session.annotations[0]?.body).toBe("Raise this above the fold");
+		expect(session.draft).toBeUndefined();
+		expect(overlayRoot().querySelector(".composer")).toBeNull();
+	});
+
+	it("keeps the add control live for an adjustment with no note", () => {
+		const button = setElementBounds(document.createElement("button"), { left: 20, top: 30, width: 140, height: 36 });
+		button.id = "adjust-add-control";
+		button.textContent = "Continue";
+		document.body.appendChild(button);
+
+		const root = openAdjust(button);
+		const add = root.querySelector<HTMLButtonElement>('[data-action="add"]')!;
+		expect(add.disabled).toBe(true);
+
+		const background = root.querySelector<HTMLInputElement>('[data-property="backgroundColor"]')!;
+		background.value = "#e34b63";
+		background.dispatchEvent(new Event("input", { bubbles: true }));
+		expect(add.disabled).toBe(false);
+
+		add.click();
+
+		const session = latestSession();
+		expect(session.annotations).toHaveLength(1);
+		expect(session.annotations[0]?.kind).toBe("adjustment");
+		expect(session.draft).toBeUndefined();
 	});
 
 	it("discards an open comment when clicking outside the composer", () => {
