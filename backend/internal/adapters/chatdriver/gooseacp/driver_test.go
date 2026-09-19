@@ -49,15 +49,3 @@ func TestConfigureMapsPermissionModesToGooseMode(t *testing.T) {
 		}
 	}
 }
-
-func TestValidateTurnSettingsRejectsApprovalChanges(t *testing.T) {
-	if err := validateTurnSettings(ports.PermissionModeDefault, ports.ChatTurnSettings{}); err != nil {
-		t.Fatalf("empty approval should be accepted: %v", err)
-	}
-	if err := validateTurnSettings(ports.PermissionModeAuto, ports.ChatTurnSettings{Approval: ports.PermissionModeAuto}); err != nil {
-		t.Fatalf("same approval should be accepted: %v", err)
-	}
-	if err := validateTurnSettings(ports.PermissionModeDefault, ports.ChatTurnSettings{Approval: ports.PermissionModeAuto}); err == nil {
-		t.Fatal("changed approval should be rejected")
-	}
-}

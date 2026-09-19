@@ -13,11 +13,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
-	"runtime"
-
-	acpsdk "github.com/coder/acp-go-sdk"
+	"maps"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/agent/binaryutil"
 	acpdriver "github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/acp"
@@ -66,14 +62,15 @@ func New(plugin autohandPlugin, log *slog.Logger) ports.ChatDriver {
 			if err != nil {
 				return acpdriver.Launch{}, fmt.Errorf("%w: autohand-acp is not installed: %w", ports.ErrChatDriverUnavailable, err)
 			}
-			env := make(map[string]string, len(cfg.Env)+1)
-			for key, value := range cfg.Env {
-				env[key] = value
+			env := maps.Clone(cfg.Env)
+			if env == nil {
+				env = map[string]string{}
 			}
 			env[permissionModeEnvVar] = "external"
 			return acpdriver.Launch{Command: binary, Env: env}, nil
 		},
-		PermissionPolicy: permissionPolicy,
+		PermissionPolicy: acpdriver.StandardPermissionPolicy(
+			ports.PermissionModeAuto, ports.PermissionModeBypassPermissions),
 	}, log)
 }
 
@@ -85,25 +82,10 @@ func resolveAdapterBinary(ctx context.Context, plugin autohandPlugin) (string, e
 	if err != nil {
 		return "", err
 	}
-	if sibling := siblingAdapter(autohandBinary); sibling != "" {
+	if sibling := binaryutil.SiblingBinary(autohandBinary, autohandACPSpec); sibling != "" {
 		return sibling, nil
 	}
 	return binaryutil.ResolveBinary(ctx, autohandACPSpec)
-}
-
-func siblingAdapter(autohandBinary string) string {
-	dir := filepath.Dir(autohandBinary)
-	candidates := []string{"autohand-acp"}
-	if runtime.GOOS == "windows" {
-		candidates = []string{"autohand-acp.cmd", "autohand-acp.exe", "autohand-acp"}
-	}
-	for _, name := range candidates {
-		path := filepath.Join(dir, name)
-		if info, err := os.Stat(path); err == nil && !info.IsDir() {
-			return path
-		}
-	}
-	return ""
 }
 
 var autohandACPSpec = binaryutil.BinarySpec{
@@ -113,44 +95,4 @@ var autohandACPSpec = binaryutil.BinarySpec{
 	UnixPaths:     []string{"/usr/local/bin/autohand-acp", "/opt/homebrew/bin/autohand-acp"},
 	UnixHomePaths: binaryutil.NodeManagedUnixHomePaths("autohand-acp"),
 	NodeManaged:   true,
-}
-
-// permissionPolicy resolves Autohand's exact offered choices for AO's stronger
-// modes before the generic client parks a request for a human. accept-edits
-// allows file-changing tools once; auto and bypass allow every tool. Default
-// keeps the ordinary approval flow.
-func permissionPolicy(
-	mode ports.PermissionMode,
-	params acpsdk.RequestPermissionRequest,
-) (acpsdk.PermissionOptionId, bool) {
-	switch ports.NormalizePermissionMode(mode) {
-	case ports.PermissionModeAcceptEdits:
-		kind := acpsdk.ToolKind("")
-		if params.ToolCall.Kind != nil {
-			kind = *params.ToolCall.Kind
-		}
-		if kind != acpsdk.ToolKindEdit && kind != acpsdk.ToolKindDelete && kind != acpsdk.ToolKindMove {
-			return "", false
-		}
-		return permissionOption(params.Options, acpsdk.PermissionOptionKindAllowOnce)
-	case ports.PermissionModeAuto, ports.PermissionModeBypassPermissions:
-		if id, ok := permissionOption(params.Options, acpsdk.PermissionOptionKindAllowAlways); ok {
-			return id, true
-		}
-		return permissionOption(params.Options, acpsdk.PermissionOptionKindAllowOnce)
-	default:
-		return "", false
-	}
-}
-
-func permissionOption(
-	options []acpsdk.PermissionOption,
-	kind acpsdk.PermissionOptionKind,
-) (acpsdk.PermissionOptionId, bool) {
-	for _, option := range options {
-		if option.Kind == kind {
-			return option.OptionId, true
-		}
-	}
-	return "", false
 }

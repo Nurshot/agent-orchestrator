@@ -8,11 +8,8 @@ package clineacp
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"strings"
-
-	acpsdk "github.com/coder/acp-go-sdk"
 
 	acpdriver "github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/acp"
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/nativeacp"
@@ -29,9 +26,9 @@ func New(plugin nativeacp.Plugin, log *slog.Logger) ports.ChatDriver {
 	return nativeacp.New(plugin, nativeacp.Config{
 		Harness:              domain.HarnessCline,
 		Configure:            configure,
-		PermissionPolicy:     permissionPolicy,
+		PermissionPolicy:     acpdriver.StandardPermissionPolicy(),
 		SessionOptions:       sessionOptions,
-		ValidateTurnSettings: validateTurnSettings,
+		ValidateTurnSettings: acpdriver.ApprovalFixedAtLaunch("Cline ACP auto-approval"),
 	}, log)
 }
 
@@ -57,39 +54,6 @@ func configure(_ context.Context, cfg acpdriver.LaunchConfig) ([]string, map[str
 	return args, nil, nil
 }
 
-// permissionPolicy resolves the provider's exact offered choices for AO's
-// accept-edits mode before the generic client parks a request for a human.
-// Cline exposes no edit-only auto-approve flag, so the mapping is per request;
-// default and auto keep the ordinary approval flow.
-func permissionPolicy(
-	mode ports.PermissionMode,
-	params acpsdk.RequestPermissionRequest,
-) (acpsdk.PermissionOptionId, bool) {
-	if ports.NormalizePermissionMode(mode) != ports.PermissionModeAcceptEdits {
-		return "", false
-	}
-	kind := acpsdk.ToolKind("")
-	if params.ToolCall.Kind != nil {
-		kind = *params.ToolCall.Kind
-	}
-	if kind != acpsdk.ToolKindEdit && kind != acpsdk.ToolKindDelete && kind != acpsdk.ToolKindMove {
-		return "", false
-	}
-	return permissionOption(params.Options, acpsdk.PermissionOptionKindAllowOnce)
-}
-
-func permissionOption(
-	options []acpsdk.PermissionOption,
-	kind acpsdk.PermissionOptionKind,
-) (acpsdk.PermissionOptionId, bool) {
-	for _, option := range options {
-		if option.Kind == kind {
-			return option.OptionId, true
-		}
-	}
-	return "", false
-}
-
 // sessionOptions maps AO's durable model choice onto Cline's advertised "model"
 // config option. The generic transport routes it through
 // session/set_config_option.
@@ -98,21 +62,4 @@ func sessionOptions(settings ports.ChatTurnSettings) []acpdriver.SessionOption {
 		return []acpdriver.SessionOption{{ID: "model", Value: model}}
 	}
 	return nil
-}
-
-// validateTurnSettings rejects approval changes a Cline ACP session cannot make.
-// Auto-approval is fixed by the launch flags and Cline's boolean
-// session/set_config_option encoding is not applied by AO's string-valued
-// option surface, so a change requires restarting Chat.
-func validateTurnSettings(initial ports.PermissionMode, settings ports.ChatTurnSettings) error {
-	if settings.Approval == "" {
-		return nil
-	}
-	if ports.NormalizePermissionMode(settings.Approval) == ports.NormalizePermissionMode(initial) {
-		return nil
-	}
-	return fmt.Errorf(
-		"%w: Cline ACP auto-approval is fixed at process launch (%s); restart Chat to run it in %s",
-		acpdriver.ErrACPSetterUnsupported,
-		ports.NormalizePermissionMode(initial), ports.NormalizePermissionMode(settings.Approval))
 }

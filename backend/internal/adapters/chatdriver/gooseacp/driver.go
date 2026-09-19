@@ -8,7 +8,6 @@ package gooseacp
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	acpdriver "github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/acp"
@@ -30,7 +29,7 @@ func New(plugin nativeacp.Plugin, log *slog.Logger) ports.ChatDriver {
 	return nativeacp.New(plugin, nativeacp.Config{
 		Harness:              domain.HarnessGoose,
 		Configure:            configure,
-		ValidateTurnSettings: validateTurnSettings,
+		ValidateTurnSettings: acpdriver.ApprovalFixedAtLaunch("Goose ACP approval mode"),
 	}, log)
 }
 
@@ -60,20 +59,4 @@ func gooseMode(mode ports.PermissionMode) string {
 	default:
 		return ""
 	}
-}
-
-// validateTurnSettings rejects approval changes a Goose ACP session cannot make.
-// GOOSE_MODE is read once at process start, so a change requires restarting
-// Chat.
-func validateTurnSettings(initial ports.PermissionMode, settings ports.ChatTurnSettings) error {
-	if settings.Approval == "" {
-		return nil
-	}
-	if ports.NormalizePermissionMode(settings.Approval) == ports.NormalizePermissionMode(initial) {
-		return nil
-	}
-	return fmt.Errorf(
-		"%w: Goose ACP approval mode is fixed at process launch (%s); restart Chat to run it in %s",
-		acpdriver.ErrACPSetterUnsupported,
-		ports.NormalizePermissionMode(initial), ports.NormalizePermissionMode(settings.Approval))
 }

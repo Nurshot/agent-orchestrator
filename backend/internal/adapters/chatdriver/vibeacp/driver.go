@@ -11,9 +11,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
-	"runtime"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/agent/binaryutil"
 	acpdriver "github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/acp"
@@ -57,13 +54,9 @@ func New(plugin vibePlugin, log *slog.Logger) ports.ChatDriver {
 			if err != nil {
 				return acpdriver.Launch{}, fmt.Errorf("%w: %w", ports.ErrChatDriverUnavailable, err)
 			}
-			env := make(map[string]string, len(cfg.Env))
-			for key, value := range cfg.Env {
-				env[key] = value
-			}
-			return acpdriver.Launch{Command: binary, Env: env}, nil
+			return acpdriver.Launch{Command: binary, Env: cfg.Env}, nil
 		},
-		ValidateTurnSettings: validateTurnSettings,
+		ValidateTurnSettings: acpdriver.ApprovalFixedAtLaunch("Vibe ACP approval mode"),
 	}, log)
 }
 
@@ -75,25 +68,10 @@ func resolveVibeACPBinary(ctx context.Context, plugin vibePlugin) (string, error
 	if err != nil {
 		return "", err
 	}
-	if sibling := siblingVibeACP(vibeBinary); sibling != "" {
+	if sibling := binaryutil.SiblingBinary(vibeBinary, vibeACPSpec); sibling != "" {
 		return sibling, nil
 	}
 	return binaryutil.ResolveBinary(ctx, vibeACPSpec)
-}
-
-func siblingVibeACP(vibeBinary string) string {
-	dir := filepath.Dir(vibeBinary)
-	candidates := []string{"vibe-acp"}
-	if runtime.GOOS == "windows" {
-		candidates = []string{"vibe-acp.exe", "vibe-acp.cmd", "vibe-acp"}
-	}
-	for _, name := range candidates {
-		path := filepath.Join(dir, name)
-		if info, err := os.Stat(path); err == nil && !info.IsDir() {
-			return path
-		}
-	}
-	return ""
 }
 
 var vibeACPSpec = binaryutil.BinarySpec{
@@ -102,20 +80,4 @@ var vibeACPSpec = binaryutil.BinarySpec{
 	WinNames:      []string{"vibe-acp.exe", "vibe-acp.cmd", "vibe-acp"},
 	UnixPaths:     []string{"/usr/local/bin/vibe-acp", "/opt/homebrew/bin/vibe-acp"},
 	UnixHomePaths: [][]string{{".local", "bin", "vibe-acp"}},
-}
-
-// validateTurnSettings rejects approval changes a Vibe ACP session cannot make.
-// `vibe-acp` accepts no approval flag and exposes no string-valued approval
-// config option, so a change requires restarting Chat.
-func validateTurnSettings(initial ports.PermissionMode, settings ports.ChatTurnSettings) error {
-	if settings.Approval == "" {
-		return nil
-	}
-	if ports.NormalizePermissionMode(settings.Approval) == ports.NormalizePermissionMode(initial) {
-		return nil
-	}
-	return fmt.Errorf(
-		"%w: Vibe ACP approval mode is fixed at process launch (%s); restart Chat to run it in %s",
-		acpdriver.ErrACPSetterUnsupported,
-		ports.NormalizePermissionMode(initial), ports.NormalizePermissionMode(settings.Approval))
 }

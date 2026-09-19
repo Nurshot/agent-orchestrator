@@ -10,7 +10,6 @@ package kilocodeacp
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"strings"
 
@@ -29,7 +28,7 @@ func New(plugin nativeacp.Plugin, log *slog.Logger) ports.ChatDriver {
 		Harness:              domain.HarnessKilocode,
 		Configure:            configure,
 		SessionOptions:       sessionOptions,
-		ValidateTurnSettings: validateTurnSettings,
+		ValidateTurnSettings: acpdriver.ApprovalFixedAtLaunch("Kilo Code ACP permission mode"),
 	}, log)
 }
 
@@ -65,20 +64,4 @@ func sessionOptions(settings ports.ChatTurnSettings) []acpdriver.SessionOption {
 		options = append(options, acpdriver.SessionOption{ID: "effort", Value: effort})
 	}
 	return options
-}
-
-// validateTurnSettings rejects approval changes a Kilo Code ACP session cannot
-// make. The permission map is fixed by the launch-time KILO_CONFIG_CONTENT, so a
-// change requires restarting Chat.
-func validateTurnSettings(initial ports.PermissionMode, settings ports.ChatTurnSettings) error {
-	if settings.Approval == "" {
-		return nil
-	}
-	if ports.NormalizePermissionMode(settings.Approval) == ports.NormalizePermissionMode(initial) {
-		return nil
-	}
-	return fmt.Errorf(
-		"%w: Kilo Code ACP permission mode is fixed at process launch (%s); restart Chat to run it in %s",
-		acpdriver.ErrACPSetterUnsupported,
-		ports.NormalizePermissionMode(initial), ports.NormalizePermissionMode(settings.Approval))
 }

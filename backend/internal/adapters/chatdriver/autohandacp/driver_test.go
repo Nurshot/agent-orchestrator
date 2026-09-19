@@ -7,30 +7,27 @@ import (
 	"runtime"
 	"testing"
 
-	acpsdk "github.com/coder/acp-go-sdk"
-
 	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
 )
 
-func TestSiblingAdapterResolvesExecutableBesideAutohand(t *testing.T) {
+// The adapter beside the resolved `autohand` wins over any `autohand-acp` on
+// PATH, so a second Autohand installation cannot be spliced into the session.
+func TestResolveAdapterBinaryPrefersTheAdapterBesideAutohand(t *testing.T) {
 	dir := t.TempDir()
 	autohand := filepath.Join(dir, binaryName("autohand"))
 	adapter := filepath.Join(dir, binaryName("autohand-acp"))
 	writeExecutable(t, autohand)
 	writeExecutable(t, adapter)
+	pathDir := t.TempDir()
+	writeExecutable(t, filepath.Join(pathDir, binaryName("autohand-acp")))
+	t.Setenv("PATH", pathDir)
 
-	if got := siblingAdapter(autohand); got != adapter {
-		t.Fatalf("siblingAdapter = %q, want %q", got, adapter)
+	got, err := resolveAdapterBinary(context.Background(), fixedPlugin(autohand))
+	if err != nil {
+		t.Fatalf("resolveAdapterBinary: %v", err)
 	}
-}
-
-func TestSiblingAdapterReturnsEmptyWhenAbsent(t *testing.T) {
-	dir := t.TempDir()
-	autohand := filepath.Join(dir, binaryName("autohand"))
-	writeExecutable(t, autohand)
-
-	if got := siblingAdapter(autohand); got != "" {
-		t.Fatalf("siblingAdapter = %q, want empty", got)
+	if got != adapter {
+		t.Fatalf("resolved = %q, want the sibling %q", got, adapter)
 	}
 }
 
@@ -49,39 +46,6 @@ func TestResolveAdapterBinaryFallsBackToPATH(t *testing.T) {
 	}
 	if got != adapter {
 		t.Fatalf("resolved = %q, want %q", got, adapter)
-	}
-}
-
-func TestPermissionPolicyResolvesAdvertisedModes(t *testing.T) {
-	edit := acpsdk.ToolKindEdit
-	execute := acpsdk.ToolKindExecute
-	options := []acpsdk.PermissionOption{
-		{OptionId: "allow-once", Kind: acpsdk.PermissionOptionKindAllowOnce},
-		{OptionId: "allow-always", Kind: acpsdk.PermissionOptionKindAllowAlways},
-		{OptionId: "reject-once", Kind: acpsdk.PermissionOptionKindRejectOnce},
-	}
-	tests := []struct {
-		name    string
-		mode    ports.PermissionMode
-		kind    *acpsdk.ToolKind
-		wantID  acpsdk.PermissionOptionId
-		handled bool
-	}{
-		{name: "default parks", mode: ports.PermissionModeDefault, kind: &edit},
-		{name: "accept edits allows edit once", mode: ports.PermissionModeAcceptEdits, kind: &edit, wantID: "allow-once", handled: true},
-		{name: "accept edits parks execute", mode: ports.PermissionModeAcceptEdits, kind: &execute},
-		{name: "auto prefers persistent allow", mode: ports.PermissionModeAuto, kind: &execute, wantID: "allow-always", handled: true},
-		{name: "bypass prefers persistent allow", mode: ports.PermissionModeBypassPermissions, kind: &execute, wantID: "allow-always", handled: true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gotID, gotHandled := permissionPolicy(tt.mode, acpsdk.RequestPermissionRequest{
-				ToolCall: acpsdk.ToolCallUpdate{Kind: tt.kind}, Options: options,
-			})
-			if gotID != tt.wantID || gotHandled != tt.handled {
-				t.Fatalf("selection = (%q, %v), want (%q, %v)", gotID, gotHandled, tt.wantID, tt.handled)
-			}
-		})
 	}
 }
 
