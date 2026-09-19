@@ -750,7 +750,7 @@ func TestListWorkspaceFilesTreatsStandaloneWorkerAsNonGitWorkspace(t *testing.T)
 
 func TestListWorkspaceFilesHidesAOManagedStandaloneFiles(t *testing.T) {
 	workspace := t.TempDir()
-	writeWorkspaceFile(t, workspace, ".kimi/.gitignore", "# managed by agent-orchestrator: AO hook files stay out of git status\n/.gitignore\n/AGENTS.md\n")
+	writeWorkspaceFile(t, workspace, ".kimi/.gitignore", aoManagedGitignoreSentinel+"\n/.gitignore\n/AGENTS.md\n")
 	writeWorkspaceFile(t, workspace, ".kimi/AGENTS.md", "AO instructions\n")
 	writeWorkspaceFile(t, workspace, ".kimi/draft.md", "agent-created work\n")
 	writeWorkspaceFile(t, workspace, "notes.txt", "user work\n")
@@ -778,7 +778,7 @@ func TestListWorkspaceFilesHidesAOManagedStandaloneFiles(t *testing.T) {
 
 func TestListWorkspaceFilesHidesAOManagedStandaloneDirectoryContents(t *testing.T) {
 	workspace := t.TempDir()
-	writeWorkspaceFile(t, workspace, ".ao/.gitignore", "# managed by agent-orchestrator: AO hook files stay out of git status\n/.gitignore\n/hooks\n")
+	writeWorkspaceFile(t, workspace, ".ao/.gitignore", aoManagedGitignoreSentinel+"\n/.gitignore\n/hooks\n")
 	writeWorkspaceFile(t, workspace, ".ao/hooks/run.sh", "#!/bin/sh\n")
 	writeWorkspaceFile(t, workspace, "notes.txt", "user work\n")
 	st := newFakeStore()
@@ -799,7 +799,7 @@ func TestListWorkspaceFilesHidesAOManagedStandaloneDirectoryContents(t *testing.
 
 func TestListWorkspaceFilesHidesAOManagedCopilotProfile(t *testing.T) {
 	workspace := t.TempDir()
-	writeWorkspaceFile(t, workspace, ".github/agents/ao-standalone-4.agent.md", "---\nname: ao-standalone-4\ntarget: github-copilot\n---\n\n<!-- managed by agent-orchestrator: copilot agent profile -->\n\nAO instructions\n")
+	writeWorkspaceFile(t, workspace, ".github/agents/ao-standalone-4.agent.md", "---\nname: ao-standalone-4\ntarget: github-copilot\n---\n\n"+aoManagedCopilotProfileSentinel+"\n\nAO instructions\n")
 	writeWorkspaceFile(t, workspace, "result.md", "agent-created work\n")
 	st := newFakeStore()
 	st.sessions["standalone-4"] = domain.SessionRecord{

@@ -188,7 +188,7 @@ func TestListWorkspaceTreeScratchUsesFilesystem(t *testing.T) {
 
 func TestListWorkspaceTreeHidesDirectoriesContainingOnlyAOManagedFiles(t *testing.T) {
 	root := t.TempDir()
-	writeWorkspaceFile(t, root, ".kimi/.gitignore", "# managed by agent-orchestrator: AO hook files stay out of git status\n/.gitignore\n/AGENTS.md\n")
+	writeWorkspaceFile(t, root, ".kimi/.gitignore", aoManagedGitignoreSentinel+"\n/.gitignore\n/AGENTS.md\n")
 	writeWorkspaceFile(t, root, ".kimi/AGENTS.md", "AO instructions\n")
 
 	st := newFakeStore()
@@ -209,7 +209,7 @@ func TestListWorkspaceTreeHidesDirectoriesContainingOnlyAOManagedFiles(t *testin
 
 func TestListWorkspaceTreeHidesAOManagedCopilotProfileDirectory(t *testing.T) {
 	root := t.TempDir()
-	writeWorkspaceFile(t, root, ".github/agents/ao-standalone-4.agent.md", "---\nname: ao-standalone-4\ntarget: github-copilot\n---\n\n<!-- managed by agent-orchestrator: copilot agent profile -->\n\nAO instructions\n")
+	writeWorkspaceFile(t, root, ".github/agents/ao-standalone-4.agent.md", "---\nname: ao-standalone-4\ntarget: github-copilot\n---\n\n"+aoManagedCopilotProfileSentinel+"\n\nAO instructions\n")
 
 	st := newFakeStore()
 	st.sessions["standalone-4"] = domain.SessionRecord{
@@ -229,7 +229,7 @@ func TestListWorkspaceTreeHidesAOManagedCopilotProfileDirectory(t *testing.T) {
 
 func TestListWorkspaceTreeKeepsAgentDirectoryContainingUserWork(t *testing.T) {
 	root := t.TempDir()
-	writeWorkspaceFile(t, root, ".kimi/.gitignore", "# managed by agent-orchestrator: AO hook files stay out of git status\n/.gitignore\n/AGENTS.md\n")
+	writeWorkspaceFile(t, root, ".kimi/.gitignore", aoManagedGitignoreSentinel+"\n/.gitignore\n/AGENTS.md\n")
 	writeWorkspaceFile(t, root, ".kimi/AGENTS.md", "AO instructions\n")
 	writeWorkspaceFile(t, root, ".kimi/draft.md", "agent-created work\n")
 
