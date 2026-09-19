@@ -516,7 +516,9 @@ func (c *commandContext) runHook(ctx context.Context, agent, event string) error
 	switch domain.AgentHarness(agent) {
 	case domain.HarnessClaudeCode, domain.HarnessCodex, domain.HarnessContinue:
 		conversation = hookConversationFacts(domain.AgentHarness(agent), event, payload)
-	case domain.HarnessOpenCode, domain.HarnessGrok:
+	case domain.HarnessOpenCode, domain.HarnessGrok, domain.HarnessKilocode,
+		domain.HarnessOMP, domain.HarnessPi,
+		domain.HarnessAmp, domain.HarnessPrimeAgent:
 		conversation = hookSemanticAcceptanceFacts(event, payload)
 	}
 	path := "sessions/" + url.PathEscape(sessionID) + "/activity"

@@ -761,7 +761,15 @@ func TestHooks_NonSwitchingHarnessDoesNotReportConversationFacts(t *testing.T) {
 
 func TestHookSemanticAcceptanceFacts(t *testing.T) {
 	wrapped := domain.WrapReportDelivery("report-batch:abc123", "worker finished")
-	for _, harness := range []domain.AgentHarness{domain.HarnessOpenCode, domain.HarnessGrok} {
+	for _, harness := range []domain.AgentHarness{
+		domain.HarnessOpenCode,
+		domain.HarnessGrok,
+		domain.HarnessKilocode,
+		domain.HarnessOMP,
+		domain.HarnessPi,
+		domain.HarnessAmp,
+		domain.HarnessPrimeAgent,
+	} {
 		t.Run(string(harness), func(t *testing.T) {
 			got := hookSemanticAcceptanceFacts(
 				"user-prompt-submit",
