@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"strings"
 
+	acpsdk "github.com/coder/acp-go-sdk"
+
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/agent/opencode"
 	acpdriver "github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/acp"
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/nativeacp"
@@ -16,13 +18,14 @@ import (
 )
 
 // New launches `opencode acp` from the exact binary resolved by the existing
-// OpenCode agent plugin. AO adds only a per-session inline overlay carrying its
-// standing instructions and the permission tiers OpenCode itself enforces.
+// OpenCode agent plugin. AO adds only a per-session inline overlay for its
+// standing instructions and an explicit bypass-permissions choice.
 func New(plugin nativeacp.Plugin, log *slog.Logger) ports.ChatDriver {
 	return nativeacp.New(plugin, nativeacp.Config{
 		Harness:              domain.HarnessOpenCode,
 		Configure:            configure,
 		SessionOptions:       sessionOptions,
+		PermissionPolicy:     permissionPolicy,
 		ValidateTurnSettings: validateTurnSettings,
 	}, log)
 }
@@ -66,4 +69,36 @@ func validateTurnSettings(_ ports.PermissionMode, settings ports.ChatTurnSetting
 		return fmt.Errorf("%w: OpenCode model %q must use provider/model format (for example, anthropic/claude-sonnet); select a full model ID from `opencode models`, or clear the model override to use Agent default", ports.ErrChatConfigOptionInvalid, settings.Model)
 	}
 	return nil
+}
+
+// permissionPolicy is AO's side of accept-edits and auto, and mirrors how
+// OpenCode implements --auto: reply to each permission request rather than
+// granting anything up front. A tool the user or repository denied never
+// raises a request, so provider policy stays authoritative and AO never has to
+// reconstruct it. Bypass needs no entry — its agent allows everything, so
+// nothing is asked.
+func permissionPolicy(
+	mode ports.PermissionMode,
+	params acpsdk.RequestPermissionRequest,
+) (acpsdk.PermissionOptionId, bool) {
+	switch ports.NormalizePermissionMode(mode) {
+	case ports.PermissionModeAuto:
+	case ports.PermissionModeAcceptEdits:
+		var kind acpsdk.ToolKind
+		if params.ToolCall.Kind != nil {
+			kind = *params.ToolCall.Kind
+		}
+		if kind != acpsdk.ToolKindEdit && kind != acpsdk.ToolKindDelete && kind != acpsdk.ToolKindMove {
+			return "", false
+		}
+	default:
+		return "", false
+	}
+	// Once, not always: --auto answers each request and persists nothing.
+	for _, option := range params.Options {
+		if option.Kind == acpsdk.PermissionOptionKindAllowOnce {
+			return option.OptionId, true
+		}
+	}
+	return "", false
 }
