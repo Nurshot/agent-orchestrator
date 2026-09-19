@@ -2093,9 +2093,8 @@ func (c *Controller) Interrupt(ctx context.Context) error {
 		if len(providerTurnIDs) == 0 {
 			// Nothing is in flight, but a turn that failed holds its queue rather
 			// than cascading it into the same outage (#5188), and no completion is
-			// coming to release it. Those rows keep the surface reading as busy, so
-			// Stop must be able to clear them: refusing leaves the user with a queue
-			// they cannot cancel and a Working bar they cannot dismiss.
+			// coming to release it. Stop is what clears it; refusing would leave a
+			// queue the user cannot cancel.
 			if _, queuedErr := c.store.NextQueuedTurn(ctx, c.conversation.ID); queuedErr != nil {
 				c.sendMu.Unlock()
 				if errors.Is(queuedErr, domain.ErrNoQueuedTurn) {

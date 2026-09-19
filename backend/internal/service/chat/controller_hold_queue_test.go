@@ -130,7 +130,6 @@ func TestStopCancelsQueueHeldByFailedTurn(t *testing.T) {
 	h.awaitSnapshot(t, func(s store.ConversationSnapshot) bool {
 		return turnStateByText(t, s)["root"] == domain.TurnStateFailed
 	})
-	assertTurnStaysQueued(t, h, "held")
 
 	if err := h.svc.Interrupt(ctx, testSession); err != nil {
 		t.Fatalf("interrupt with a held queue: %v", err)

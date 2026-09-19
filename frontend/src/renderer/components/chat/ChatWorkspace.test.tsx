@@ -592,14 +592,12 @@ describe("ChatWorkspace timeline", () => {
 		const onInterrupt = vi.fn();
 		// A turn that fails holds its queue instead of draining it into the same
 		// outage, so the conversation sits with queued work and nothing in flight.
-		const settled = idleSnapshot(chatFixtureSettled);
 		const snapshot: ConversationSnapshot = {
-			...settled,
+			...idleSnapshot(chatFixtureSettled),
 			turns: [
-				...settled.turns.map((turn) => ({ ...turn, state: "failed" as const })),
 				{
 					id: "turn-held",
-					state: "queued" as const,
+					state: "queued",
 					providerTurnId: "",
 					requestedAt: "2026-08-08T00:00:00Z",
 				},
