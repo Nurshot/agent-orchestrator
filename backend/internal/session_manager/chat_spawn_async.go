@@ -106,13 +106,6 @@ func (m *Manager) completeAsyncChatSpawn(ctx context.Context, in asyncChatSpawn)
 		m.failAsyncChatSpawn(ctx, id, wrapSpawnStage(id, ErrWorkspaceProvision, err))
 		return
 	}
-	// Publish the worktree now rather than at the controller commit. Until the
-	// row carries it, every workspace-scoped read answers
-	// SESSION_WORKSPACE_NOT_FOUND, and the provider start that follows is long
-	// enough for the desktop's bounded readiness poll to give up on a session
-	// that is perfectly fine. It also means an interrupted start leaves a row
-	// that knows which worktree to clean up.
-	m.publishProvisionedWorkspace(ctx, id, ws)
 	if len(in.cfg.Attachments) > 0 {
 		// The prompt already references these by name (spawnAttachmentRefs); this
 		// is where the bytes land, before the agent can read them.
@@ -125,6 +118,21 @@ func (m *Manager) completeAsyncChatSpawn(ctx context.Context, in asyncChatSpawn)
 			m.logger.Warn("spawn: exclude attachments dir", "sessionID", id, "error", err)
 		}
 	}
+	// Anything the user attached while this was starting was written canonically
+	// only, because there was no worktree to put it in. Replay it now, before the
+	// controller can read the turn that references those paths.
+	if err := m.restoreAttachments(ctx, id, ws); err != nil {
+		m.logger.Warn("spawn: materialize attachments staged while provisioning",
+			"sessionID", id, "error", err)
+	}
+
+	// Publish the worktree now rather than at the controller commit. Until the
+	// row carries it, every workspace-scoped read answers
+	// SESSION_WORKSPACE_NOT_FOUND, and the provider start that follows is long
+	// enough for the desktop's bounded readiness poll to give up on a session
+	// that is perfectly fine. It also means an interrupted start leaves a row
+	// that knows which worktree to clean up.
+	m.publishProvisionedWorkspace(ctx, id, ws)
 
 	record, err := m.getRecord(ctx, id)
 	if err != nil {

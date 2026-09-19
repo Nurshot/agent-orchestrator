@@ -3,6 +3,8 @@ package sessionmanager
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -252,5 +254,59 @@ func TestReconcileLive_KeepsAnInterruptedAsyncSpawn(t *testing.T) {
 	}
 	if stored.ProvisionState != domain.SessionProvisionFailed {
 		t.Fatalf("provision state = %q, want the failure preserved", stored.ProvisionState)
+	}
+}
+
+// A session is on screen and typeable before its worktree exists, so a file
+// attached to a message typed in that window has nowhere to be written. It goes
+// to canonical storage and must be in the worktree before the agent can read
+// the turn that names it.
+func TestStageAttachments_DuringProvisioningLandsInTheWorktree(t *testing.T) {
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st := newFakeStore()
+	st.projects[string(chatTestProject)] = domain.ProjectRecord{
+		ID: string(chatTestProject), Config: testRoleAgents(),
+	}
+	launcher := &recordingLauncher{}
+	m := New(Deps{
+		Runtime:   &fakeRuntime{},
+		Agents:    fakeAgents{},
+		Workspace: &fakeWorkspace{path: workspaceDir},
+		Store:     st,
+		Messenger: &fakeMessenger{},
+		Chat:      launcher,
+		Lifecycle: &fakeLCM{store: st},
+		DataDir:   dataDir,
+		LookPath:  func(string) (string, error) { return "/bin/true", nil },
+	})
+	m.browserCapabilities = browsersvc.NewAuthority()
+	deferred := deferredBackground(m)
+
+	rec, _, _, err := m.Spawn(context.Background(), asyncChatSpawnConfig("look at this"))
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+
+	// The worktree does not exist yet — this is the window the old code refused.
+	refs, err := m.StageAttachments(context.Background(), rec.ID, []ports.SpawnAttachment{
+		{Ext: ".png", Data: []byte("not really a png")},
+	})
+	if err != nil {
+		t.Fatalf("stage while provisioning: %v", err)
+	}
+	if len(refs) != 1 || !strings.HasPrefix(refs[0], attachmentsDir+"/") {
+		t.Fatalf("refs = %v, want one worktree-relative path", refs)
+	}
+
+	(*deferred)[0]()
+
+	landed := filepath.Join(workspaceDir, filepath.FromSlash(refs[0]))
+	body, err := os.ReadFile(landed)
+	if err != nil {
+		t.Fatalf("attachment never reached the worktree at %s: %v", refs[0], err)
+	}
+	if string(body) != "not really a png" {
+		t.Fatalf("attachment content = %q", body)
 	}
 }
