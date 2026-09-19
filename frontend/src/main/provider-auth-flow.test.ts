@@ -1,8 +1,13 @@
-import { chmod, mkdtemp, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { firstExecutable } from "./provider-auth-flow";
+import {
+	extractClaudeOAuthToken,
+	findCodexAuthFile,
+	firstExecutable,
+	readClaudeOAuthTokenFromDir,
+} from "./provider-auth-flow";
 
 // firstExecutable is the core of the GUI-launched-app PATH fix: it must locate an
 // agent CLI in an install directory that a Finder-launched app's minimal inherited
@@ -50,5 +55,74 @@ describe("firstExecutable", () => {
 			await chmod(bin, 0o755);
 		}
 		expect(await firstExecutable("codex", ["", first, first, second])).toBe(path.join(first, "codex"));
+	});
+});
+
+// The claude token is extracted by shape, not from a fixed file, so it survives
+// claude moving its credential store between versions.
+describe("extractClaudeOAuthToken", () => {
+	it("pulls an sk-ant-oat token out of setup-token stdout", () => {
+		const stdout = "Authenticated!\nYour token:\nsk-ant-oat01-AbC_dEf-123456789 \nDone.\n";
+		expect(extractClaudeOAuthToken(stdout)).toBe("sk-ant-oat01-AbC_dEf-123456789");
+	});
+
+	it("returns null when no token is present", () => {
+		expect(extractClaudeOAuthToken("Opening browser to sign in...\nno token here")).toBeNull();
+	});
+});
+
+describe("readClaudeOAuthTokenFromDir", () => {
+	const dirs: string[] = [];
+	afterEach(() => {
+		dirs.length = 0;
+	});
+	async function tempDir(): Promise<string> {
+		const dir = await mkdtemp(path.join(os.tmpdir(), "ao-claudetok-"));
+		dirs.push(dir);
+		return dir;
+	}
+
+	it("finds a token written into a file in the isolated config dir", async () => {
+		const dir = await tempDir();
+		await writeFile(path.join(dir, ".credentials.json"), '{"token":"sk-ant-oat01-file_TOKEN_abc123"}');
+		expect(await readClaudeOAuthTokenFromDir(dir)).toBe("sk-ant-oat01-file_TOKEN_abc123");
+	});
+
+	it("returns null when no file holds a token", async () => {
+		const dir = await tempDir();
+		await writeFile(path.join(dir, ".claude.json"), '{"machineID":"x","userID":"y"}');
+		expect(await readClaudeOAuthTokenFromDir(dir)).toBeNull();
+	});
+});
+
+describe("findCodexAuthFile", () => {
+	const dirs: string[] = [];
+	afterEach(() => {
+		dirs.length = 0;
+	});
+	async function tempDir(): Promise<string> {
+		const dir = await mkdtemp(path.join(os.tmpdir(), "ao-codexauth-"));
+		dirs.push(dir);
+		return dir;
+	}
+
+	it("finds auth.json directly under CODEX_HOME", async () => {
+		const home = await tempDir();
+		const auth = path.join(home, "auth.json");
+		await writeFile(auth, "{}");
+		expect(await findCodexAuthFile(home)).toBe(auth);
+	});
+
+	it("finds a nested auth.json one level down", async () => {
+		const home = await tempDir();
+		await mkdir(path.join(home, "store"), { recursive: true });
+		const auth = path.join(home, "store", "auth.json");
+		await writeFile(auth, "{}");
+		expect(await findCodexAuthFile(home)).toBe(auth);
+	});
+
+	it("returns null when no auth.json exists", async () => {
+		const home = await tempDir();
+		expect(await findCodexAuthFile(home)).toBeNull();
 	});
 });

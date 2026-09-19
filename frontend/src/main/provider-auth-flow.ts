@@ -1,10 +1,75 @@
 import { spawn } from "node:child_process";
 import { constants as fsConstants } from "node:fs";
-import { access, chmod, mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
+import { access, chmod, lstat, mkdtemp, mkdir, readdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 const MAX_AUTH_DOCUMENT_BYTES = 64 << 10;
+
+// A Claude Code setup token. `claude setup-token` emits one of these for use in
+// headless/cloud contexts; matching on the token shape (rather than a specific
+// storage file) keeps extraction stable across claude versions, which have moved
+// the credential between settings.json, .credentials.json, and the OS keychain.
+const CLAUDE_OAUTH_TOKEN_PATTERN = /sk-ant-oat[0-9A-Za-z_-]{10,}/;
+
+export function extractClaudeOAuthToken(text: string): string | null {
+	const match = text.match(CLAUDE_OAUTH_TOKEN_PATTERN);
+	return match ? match[0] : null;
+}
+
+// Fallback for claude builds that write the setup token to a file instead of (or
+// in addition to) stdout. Scans only the per-login isolated config dir, never the
+// user's real ~/.claude, for a token in any file it created.
+export async function readClaudeOAuthTokenFromDir(dir: string): Promise<string | null> {
+	let entries: string[];
+	try {
+		entries = await readdir(dir);
+	} catch {
+		return null;
+	}
+	for (const entry of entries) {
+		const full = path.join(dir, entry);
+		try {
+			const stat = await lstat(full);
+			if (!stat.isFile() || stat.size === 0 || stat.size > MAX_AUTH_DOCUMENT_BYTES) continue;
+			const token = extractClaudeOAuthToken(await readFile(full, "utf8"));
+			if (token) return token;
+		} catch {
+			// unreadable entry; keep scanning
+		}
+	}
+	return null;
+}
+
+// Codex writes auth.json to CODEX_HOME (forced via cli_auth_credentials_store).
+// Locate it defensively: the direct path first, then a shallow scan, so a codex
+// version that nests the store does not reintroduce a "no such file" failure.
+export async function findCodexAuthFile(codexHome: string): Promise<string | null> {
+	const direct = path.join(codexHome, "auth.json");
+	try {
+		await access(direct, fsConstants.R_OK);
+		return direct;
+	} catch {
+		// fall through to a shallow scan
+	}
+	let entries: string[];
+	try {
+		entries = await readdir(codexHome);
+	} catch {
+		return null;
+	}
+	for (const entry of entries) {
+		if (entry === "auth.json") return path.join(codexHome, entry);
+		const nested = path.join(codexHome, entry, "auth.json");
+		try {
+			await access(nested, fsConstants.R_OK);
+			return nested;
+		} catch {
+			// not here; keep scanning
+		}
+	}
+	return null;
+}
 
 // A macOS app launched from Finder/Dock inherits a minimal PATH
 // (/usr/bin:/bin:/usr/sbin:/sbin), not the user's shell PATH, so an agent CLI
@@ -166,7 +231,11 @@ const codexAuthFlow: ProviderAuthFlow = {
 					code === 0 ? resolve() : reject(new Error("Codex sign-in did not complete."));
 				});
 			});
-			const authFile = await readFile(path.join(codexHome, "auth.json"));
+			const authPath = await findCodexAuthFile(codexHome);
+			if (!authPath) {
+				throw new Error('Codex sign-in did not create a credential. Connect with the "API key" credential type instead.');
+			}
+			const authFile = await readFile(authPath);
 			if (authFile.byteLength === 0 || authFile.byteLength > MAX_AUTH_DOCUMENT_BYTES) {
 				throw new Error("Codex did not create a valid authentication credential.");
 			}
@@ -197,13 +266,25 @@ const claudeAuthFlow: ProviderAuthFlow = {
 					'Claude Code is not installed or could not be found. Install Claude Code, or connect with the "API key" credential type instead.',
 				);
 			}
+			// Use `claude setup-token`, the purpose-built command for exporting a
+			// long-lived token, instead of `auth login` + scraping a version-specific
+			// credential file. Modern claude stores the login credential in the OS
+			// keychain, so no file is written and the old settings.json read fails.
+			// setup-token opens the browser for OAuth and, on completion, emits the
+			// token; capture stdout/stderr so we can read it.
+			let captured = "";
 			await new Promise<void>((resolve, reject) => {
-				const child = spawn(binary.path, ["auth", "login"], {
+				const child = spawn(binary.path, ["setup-token"], {
 					env: { ...process.env, PATH: binary.pathEnv, CLAUDE_CONFIG_DIR: pending },
-					stdio: "ignore",
+					stdio: ["ignore", "pipe", "pipe"],
 					shell: process.platform === "win32",
 				});
-				
+				const capture = (chunk: Buffer) => {
+					if (captured.length <= MAX_AUTH_DOCUMENT_BYTES) captured += chunk.toString();
+				};
+				child.stdout?.on("data", capture);
+				child.stderr?.on("data", capture);
+
 				let timeout: NodeJS.Timeout;
 				const cleanup = () => {
 					clearTimeout(timeout);
@@ -234,19 +315,12 @@ const claudeAuthFlow: ProviderAuthFlow = {
 					code === 0 ? resolve() : reject(new Error("Claude sign-in did not complete."));
 				});
 			});
-			
-			const authFile = await readFile(path.join(pending, "settings.json"));
-			if (authFile.byteLength === 0 || authFile.byteLength > MAX_AUTH_DOCUMENT_BYTES) {
-				throw new Error("Claude did not create a valid authentication credential.");
-			}
-			const secretData = authFile.toString("utf8");
-			let secret = "";
-			try {
-				const document = JSON.parse(secretData) as Record<string, string>;
-				secret = document.primaryToken || document.oauthToken || document.token || "";
-				if (!secret || typeof secret !== "string") throw new Error();
-			} catch {
-				throw new Error("Claude did not create a valid authentication credential or token was missing.");
+
+			// The token normally arrives on stdout; fall back to any file setup-token
+			// wrote into the isolated config dir so a storage change cannot break this.
+			const secret = extractClaudeOAuthToken(captured) ?? (await readClaudeOAuthTokenFromDir(pending));
+			if (!secret) {
+				throw new Error('Claude sign-in did not return a token. Connect with the "API key" credential type instead.');
 			}
 			return { provider: "claude-code", credentialType: "oauth_token", secret };
 		} finally {
