@@ -123,6 +123,20 @@ func TestAttentionPersistsWhenWorkerAdvancesWithoutResolutionEvidence(t *testing
 	}
 }
 
+func TestAttentionClearsWhenWorkerTerminates(t *testing.T) {
+	base := time.Date(2026, 9, 14, 8, 0, 0, 0, time.UTC)
+	store := &fakeStore{sessions: []domain.SessionRecord{{ID: "orchestrator", ProjectID: "demo", Kind: domain.KindOrchestrator, Harness: domain.HarnessCodex}, {ID: "demo-1", ProjectID: "demo", Kind: domain.KindWorker, Activity: domain.Activity{State: domain.ActivityWaitingInput}, UpdatedAt: base}}}
+	svc := New(store, &fakeGenerator{result: "A decision is pending."})
+	if got, _ := svc.Get(context.Background(), "demo", true); len(got.NeedsAttention) != 1 {
+		t.Fatalf("attention = %d, want 1", len(got.NeedsAttention))
+	}
+	store.sessions[1].IsTerminated = true
+	store.sessions[1].UpdatedAt = base.Add(time.Minute)
+	if got, _ := svc.Get(context.Background(), "demo", true); len(got.NeedsAttention) != 0 {
+		t.Fatalf("attention = %d, want cleared for terminated worker", len(got.NeedsAttention))
+	}
+}
+
 func TestRefreshConsumesReadOnlyReportFactsAsNarrativeContext(t *testing.T) {
 	base := time.Date(2026, 9, 14, 8, 0, 0, 0, time.UTC)
 	store := &fakeStore{sessions: []domain.SessionRecord{{ID: "orchestrator", ProjectID: "demo", Kind: domain.KindOrchestrator, Harness: domain.HarnessCodex}, {ID: "worker", ProjectID: "demo", Kind: domain.KindWorker, DisplayName: "Worker", Activity: domain.Activity{State: domain.ActivityActive}, UpdatedAt: base}}}

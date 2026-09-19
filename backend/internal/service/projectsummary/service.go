@@ -123,7 +123,7 @@ func (s *Service) Get(ctx context.Context, projectID domain.ProjectID, refresh b
 		return current, nil
 	}
 	if ok {
-		next.NeedsAttention = preserveAttention(current.NeedsAttention, next.NeedsAttention)
+		next.NeedsAttention = preserveAttention(current.NeedsAttention, next.NeedsAttention, workers)
 	}
 	harness := projectRecord.Config.Orchestrator.Harness
 	model := projectRecord.Config.Orchestrator.AgentConfig.Model
@@ -169,13 +169,17 @@ func failedGeneration(current domain.ProjectSummary, exists bool, message string
 	return current
 }
 
-func preserveAttention(previous, observed []domain.ProjectAttentionItem) []domain.ProjectAttentionItem {
+func preserveAttention(previous, observed []domain.ProjectAttentionItem, workers []domain.SessionRecord) []domain.ProjectAttentionItem {
 	bySession := make(map[domain.SessionID]domain.ProjectAttentionItem, len(previous)+len(observed))
 	for _, item := range previous {
-		bySession[item.SessionID] = item
+		if workerIsLive(workers, item.SessionID) {
+			bySession[item.SessionID] = item
+		}
 	}
 	for _, item := range observed {
-		bySession[item.SessionID] = item
+		if workerIsLive(workers, item.SessionID) {
+			bySession[item.SessionID] = item
+		}
 	}
 	result := make([]domain.ProjectAttentionItem, 0, len(bySession))
 	for _, item := range bySession {
@@ -183,6 +187,15 @@ func preserveAttention(previous, observed []domain.ProjectAttentionItem) []domai
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].SessionID < result[j].SessionID })
 	return result
+}
+
+func workerIsLive(workers []domain.SessionRecord, id domain.SessionID) bool {
+	for _, worker := range workers {
+		if worker.ID == id {
+			return !worker.IsTerminated
+		}
+	}
+	return false
 }
 
 func project(projectID domain.ProjectID, workers []domain.SessionRecord, reports []ReportFact, at time.Time) domain.ProjectSummary {
@@ -207,7 +220,7 @@ func project(projectID domain.ProjectID, workers []domain.SessionRecord, reports
 	}
 	for _, report := range reports {
 		_, _ = fmt.Fprintf(h, "%s|%s|%s|%s|%s|%d;", report.ID, report.SessionID, report.State, report.Note, report.Message, report.RepeatCount)
-		if report.State == "needs_input" {
+		if report.State == "needs_input" && workerIsLive(workers, report.SessionID) {
 			question := strings.TrimSpace(report.Note)
 			if question == "" {
 				question = strings.TrimSpace(report.Message)
