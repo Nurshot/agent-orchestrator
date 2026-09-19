@@ -1586,7 +1586,7 @@ function overlayStyles(): string {
 		.element-header strong{font-weight:600}
 		.adjustment-group{
 			display:flex;flex-direction:column;gap:var(--gap);
-			border-bottom:1px solid var(--border);padding:var(--pad) 10px;
+			border-bottom:1px solid var(--border);padding:var(--pad) 0;
 		}
 		/* One grid for every row: two field boxes and a trailing action cell, so
 		   fields, values and link buttons all land on the same edges. */
@@ -1601,7 +1601,7 @@ function overlayStyles(): string {
 		.field{
 			display:grid;grid-template-columns:40px minmax(0,1fr) auto;
 			align-items:center;gap:4px;box-sizing:border-box;
-			min-width:0;height:var(--control);padding-inline:0;
+			min-width:0;height:var(--control);padding-inline:10px;
 			border-radius:var(--radius);background:color-mix(in oklch,var(--muted) 70%,transparent);
 			transition:background-color 120ms ease,box-shadow 120ms ease;
 		}
@@ -1673,11 +1673,13 @@ function overlayStyles(): string {
 		.link-button--active{border-color:#4d8dff;background:color-mix(in oklch,#4d8dff 22%,var(--bg));color:#78a8ff}
 		.link-button--active:hover{border-color:#4d8dff;background:color-mix(in oklch,#4d8dff 22%,var(--bg));color:#78a8ff}
 		/* Collapsible section: the same pattern for Padding, Margin and Layout. */
-		.panel-section{border-bottom:1px solid var(--border);padding:0 10px}
+		/* The section container carries no x-padding either: only its heading is
+		   inset, so the rows inside it line up with the rows above. */
+		.panel-section{border-bottom:1px solid var(--border);padding:0}
 		.panel-section summary{
 			display:flex;align-items:center;justify-content:space-between;gap:var(--gap);
 			cursor:pointer;color:var(--muted-fg);font-size:12px;font-weight:500;
-			padding:var(--pad) 0;list-style:none;user-select:none;
+			padding:var(--pad) 10px;list-style:none;user-select:none;
 			transition:color 120ms ease;
 		}
 		.panel-section summary:hover{color:var(--fg)}
