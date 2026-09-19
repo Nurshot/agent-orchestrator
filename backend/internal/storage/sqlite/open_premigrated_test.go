@@ -78,19 +78,6 @@ func openMigratedTestDBIn(t *testing.T, dataDir string) *sql.DB {
 	return db
 }
 
-// openRawDB opens a bare SQLite connection in dataDir without running migrations.
-func openRawDB(dataDir string) (*sql.DB, error) {
-	if err := os.MkdirAll(dataDir, 0o750); err != nil {
-		return nil, err
-	}
-	db, err := sql.Open("sqlite", "file:"+filepath.Join(dataDir, "ao.db")+pragmas)
-	if err != nil {
-		return nil, err
-	}
-	db.SetMaxOpenConns(1)
-	return db, nil
-}
-
 // createEmptyDatabase creates a minimal SQLite database file with no tables.
 func createEmptyDatabase(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
