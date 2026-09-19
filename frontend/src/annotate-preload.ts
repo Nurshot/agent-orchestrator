@@ -1661,17 +1661,19 @@ function overlayStyles(): string {
 		.field-reset--on:focus-visible{opacity:1;transform:translateY(-50%) scale(1)}
 		.field-reset--on:active{opacity:1;transform:translateY(-50%) scale(0.96)}
 		.field-reset--on:hover{background:var(--muted)}
+		/* The lock is the same ghost control as the composer's icon buttons: no
+		   border, muted glyph, muted fill on hover or while locked, and the same
+		   press scale and transition. */
 		.link-button{
 			width:var(--control);height:var(--control);
-			border:1px solid var(--border);border-radius:var(--radius);
-			background:var(--bg);color:var(--muted-fg);padding:0;
-			transition:background-color 120ms ease,border-color 120ms ease,color 120ms ease,transform 120ms ease;
+			border:0;border-radius:var(--radius);
+			background:transparent;color:var(--muted-fg);padding:0;
+			transform-origin:center;
+			transition:background-color 120ms ease,color 120ms ease,opacity 120ms ease,transform 120ms ease;
 		}
-		.link-button:not(:disabled):active{transform:scale(0.96)}
-		.link-button:hover{background:var(--bg);color:var(--fg)}
-		.link-button svg{width:13px;height:13px}
-		.link-button--active{border-color:#4d8dff;background:color-mix(in oklch,#4d8dff 22%,var(--bg));color:#78a8ff}
-		.link-button--active:hover{border-color:#4d8dff;background:color-mix(in oklch,#4d8dff 22%,var(--bg));color:#78a8ff}
+		.link-button:not(:disabled):hover,.link-button--active{background:var(--muted);color:var(--fg)}
+		.link-button:not(:disabled):active{transform:scale(0.98)}
+		.link-button svg{width:16px;height:16px}
 		/* Collapsible section: the same pattern for Padding, Margin and Layout. */
 		/* The section container carries no x-padding either: only its heading is
 		   inset, so the rows inside it line up with the rows above. */

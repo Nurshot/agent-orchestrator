@@ -148,7 +148,9 @@ describe("annotation adjustment preload", () => {
 		expect(styles).toMatch(/\.field input,\.field select,\.property-textarea\{[^}]*Geist Variable/);
 		expect(styles).toMatch(/\.field input\[data-unit\]\{[^}]*Geist Mono Variable/);
 		expect(styles).toContain("button:focus-visible{outline:none;box-shadow:inset");
-		expect(styles).toContain(".link-button--active:hover{");
+		// The lock wears the same chrome as the composer's icon buttons.
+		expect(styles).toMatch(/\.link-button:not\(:disabled\):hover,\.link-button--active\{background:var\(--muted\);color:var\(--fg\)\}/);
+		expect(styles).toMatch(/\.link-button:not\(:disabled\):active\{transform:scale\(0\.98\)\}/);
 		// One grid for every row: two field boxes and a trailing action cell, so
 		// fields, values and link buttons all land on the same edges.
 		expect(styles).toMatch(/\.panel-row\{[^}]*grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\) var\(--control\)/);
