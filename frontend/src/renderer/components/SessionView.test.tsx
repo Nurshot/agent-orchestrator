@@ -3011,6 +3011,21 @@ describe("SessionView", () => {
 		expect(screen.getByRole("button", { name: "Open project summary" })).toBeInTheDocument();
 	});
 
+	it("switches from Browser to Project Summary and toggles Summary closed", async () => {
+		act(() => useUiStore.getState().setInspectorOpen("sess-orch", true));
+		render(<SessionView sessionId="sess-orch" />);
+		expect(screen.getByTestId("panel-inspector")).toBeInTheDocument();
+
+		fireEvent.click(screen.getByRole("button", { name: "Open project summary" }));
+		expect(screen.queryByTestId("panel-inspector")).not.toBeInTheDocument();
+		expect(screen.getByTestId("project-summary-panel")).toBeInTheDocument();
+		expect(inspectorOpen("sess-orch")).toBe(false);
+
+		fireEvent.click(screen.getByRole("button", { name: "Close project summary" }));
+		expect(screen.queryByTestId("project-summary-panel")).not.toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Open project summary" })).toHaveAttribute("aria-pressed", "false");
+	});
+
 	it("overlays the project summary attention count on its icon", async () => {
 		reviewGetMock.mockImplementation(async (path: string) => {
 			if (path === "/api/v1/projects/{id}/summary") {

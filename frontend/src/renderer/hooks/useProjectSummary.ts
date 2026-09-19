@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef } from "react";
 import type { components } from "../../api/schema";
 import { apiClient } from "../lib/api-client";
 import { usesPreviewWorkspaceData } from "../lib/preview-mode";
+import { useWorkspaceQuery } from "./useWorkspaceQuery";
 
 type ProjectSummary = components["schemas"]["ProjectSummaryResponse"]["summary"];
 
@@ -21,6 +23,15 @@ export const projectSummaryQueryKey = (projectId: string) => ["project-summary",
 
 export function useProjectSummary(projectId: string, enabled: boolean) {
 	const queryClient = useQueryClient();
+	const workspaces = useWorkspaceQuery();
+	const sourceRevision = useMemo(() => {
+		const project = workspaces.data?.find((workspace) => workspace.id === projectId);
+		return project?.sessions
+			.filter((session) => session.kind === "worker")
+			.map((session) => `${session.id}:${session.updatedAt}:${session.activity?.state ?? ""}:${session.isTerminated ?? false}`)
+			.sort()
+			.join("|") ?? "";
+	}, [projectId, workspaces.data]);
 	const query = useQuery({
 		queryKey: projectSummaryQueryKey(projectId),
 		enabled,
@@ -31,6 +42,12 @@ export function useProjectSummary(projectId: string, enabled: boolean) {
 			return data.summary;
 		},
 	});
+	const previousSourceRevision = useRef(sourceRevision);
+	useEffect(() => {
+		if (!enabled || previousSourceRevision.current === sourceRevision) return;
+		previousSourceRevision.current = sourceRevision;
+		void query.refetch();
+	}, [enabled, query.refetch, sourceRevision]);
 	const refresh = useMutation({
 		mutationFn: async () => {
 			if (usesPreviewWorkspaceData) return previewSummary(projectId);

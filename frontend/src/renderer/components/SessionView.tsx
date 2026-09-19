@@ -1813,8 +1813,21 @@ export function SessionView({ sessionId }: SessionViewProps) {
 
 	const handleToggleInspector = useCallback(() => {
 		if (browserOnly) setBrowserContentRevealed(sessionId, true);
+		if (projectSummaryOpen) {
+			setProjectSummaryOpen(false);
+			setInspectorOpenForSession(sessionId, true);
+			return;
+		}
 		toggleInspector(sessionId);
-	}, [browserOnly, sessionId, toggleInspector, setBrowserContentRevealed]);
+	}, [browserOnly, projectSummaryOpen, sessionId, setBrowserContentRevealed, setInspectorOpenForSession, toggleInspector]);
+
+	const handleToggleProjectSummary = useCallback(() => {
+		setProjectSummaryOpen((open) => {
+			if (open) return false;
+			setInspectorOpenForSession(sessionId, false);
+			return true;
+		});
+	}, [sessionId, setInspectorOpenForSession]);
 
 	useEffect(() => {
 		if (!hasInspector) return;
@@ -2046,7 +2059,7 @@ export function SessionView({ sessionId }: SessionViewProps) {
 						</div>
 					</div>
 				</div>
-				{hasInspector ? (
+				{hasInspector && !projectSummaryOpen ? (
 					<SessionInspectorRail
 						showCollapsedHandle={!browserOnly}
 						isOpen={isInspectorOpen}
@@ -2127,7 +2140,7 @@ export function SessionView({ sessionId }: SessionViewProps) {
 						</TooltipContent>
 					</Tooltip>
 					{isOrchestrator ? (
-						<TopbarButton aria-label={projectSummaryOpen ? t("projectSummary.close") : t("projectSummary.open")} aria-pressed={projectSummaryOpen} className="relative" onClick={() => setProjectSummaryOpen((open) => !open)} variant="icon">
+						<TopbarButton aria-label={projectSummaryOpen ? t("projectSummary.close") : t("projectSummary.open")} aria-pressed={projectSummaryOpen} className="relative" onClick={handleToggleProjectSummary} variant="icon">
 							<PanelRight className="size-icon-md" aria-hidden="true" />
 							{projectSummaryAttention > 0 ? <span className="pointer-events-none absolute right-px top-px grid h-3 min-w-3 place-items-center rounded-full bg-warning px-0.5 font-mono text-[7px] font-semibold leading-none text-warning-foreground shadow-sm ring-1 ring-background" data-testid="project-summary-attention-badge">{projectSummaryAttention > 99 ? "99+" : projectSummaryAttention}</span> : null}
 						</TopbarButton>
@@ -2137,7 +2150,7 @@ export function SessionView({ sessionId }: SessionViewProps) {
 				</div>
 			) : isOrchestrator ? (
 				<div className="session-pinned-actions" data-testid="orchestrator-pinned-actions" style={noDragStyle}>
-					<TopbarButton aria-label={projectSummaryOpen ? t("projectSummary.close") : t("projectSummary.open")} aria-pressed={projectSummaryOpen} className="relative" onClick={() => setProjectSummaryOpen((open) => !open)} variant="icon">
+					<TopbarButton aria-label={projectSummaryOpen ? t("projectSummary.close") : t("projectSummary.open")} aria-pressed={projectSummaryOpen} className="relative" onClick={handleToggleProjectSummary} variant="icon">
 						<PanelRight className="size-icon-md" aria-hidden="true" />
 						{projectSummaryAttention > 0 ? <span className="pointer-events-none absolute right-px top-px grid h-3 min-w-3 place-items-center rounded-full bg-warning px-0.5 font-mono text-[7px] font-semibold leading-none text-warning-foreground shadow-sm ring-1 ring-background" data-testid="project-summary-attention-badge">{projectSummaryAttention > 99 ? "99+" : projectSummaryAttention}</span> : null}
 					</TopbarButton>
