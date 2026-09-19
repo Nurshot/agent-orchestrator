@@ -587,6 +587,37 @@ describe("ChatWorkspace timeline", () => {
 		expect(onInterrupt).toHaveBeenCalledOnce();
 	});
 
+	it("does not call a queue held behind a failed turn working, and still offers stop", async () => {
+		const user = userEvent.setup();
+		const onInterrupt = vi.fn();
+		// A turn that fails holds its queue instead of draining it into the same
+		// outage, so the conversation sits with queued work and nothing in flight.
+		const settled = idleSnapshot(chatFixtureSettled);
+		const snapshot: ConversationSnapshot = {
+			...settled,
+			turns: [
+				...settled.turns.map((turn) => ({ ...turn, state: "failed" as const })),
+				{
+					id: "turn-held",
+					state: "queued" as const,
+					providerTurnId: "",
+					requestedAt: "2026-08-08T00:00:00Z",
+				},
+			],
+		};
+
+		render(<ChatWorkspace snapshot={snapshot} onInterrupt={onInterrupt} />);
+
+		expect(screen.queryByTestId("live-turn-status")).not.toBeInTheDocument();
+		expect(screen.queryByText(/^Working for /)).not.toBeInTheDocument();
+		expect(
+			screen.queryByText("Agent is working — this sends when it finishes"),
+		).not.toBeInTheDocument();
+
+		await user.click(screen.getByRole("button", { name: "Stop turn" }));
+		expect(onInterrupt).toHaveBeenCalledOnce();
+	});
+
 	it("replaces the generic working label with Claude's live retry count and backoff", () => {
 		const snapshot = structuredClone(chatFixture);
 		snapshot.items = snapshot.items.filter(
