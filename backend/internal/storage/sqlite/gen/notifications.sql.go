@@ -105,6 +105,87 @@ func (q *Queries) CreateNotification(ctx context.Context, arg CreateNotification
 	return i, err
 }
 
+const deleteDismissedPRNotificationsByType = `-- name: DeleteDismissedPRNotificationsByType :execrows
+DELETE FROM notifications
+WHERE pr_url = ?1
+  AND type = ?2
+  AND resolved_at IS NULL
+  AND dismissed_at IS NOT NULL
+`
+
+type DeleteDismissedPRNotificationsByTypeParams struct {
+	PRURL string
+	Type  domain.NotificationType
+}
+
+func (q *Queries) DeleteDismissedPRNotificationsByType(ctx context.Context, arg DeleteDismissedPRNotificationsByTypeParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteDismissedPRNotificationsByType, arg.PRURL, arg.Type)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteDismissedSessionNotificationsByType = `-- name: DeleteDismissedSessionNotificationsByType :execrows
+DELETE FROM notifications
+WHERE session_id = ?1
+  AND type = ?2
+  AND resolved_at IS NULL
+  AND dismissed_at IS NOT NULL
+`
+
+type DeleteDismissedSessionNotificationsByTypeParams struct {
+	SessionID domain.SessionID
+	Type      domain.NotificationType
+}
+
+// Dismissed rows are dedupe tombstones, not visible history. Once the issue
+// resolves they have no remaining purpose and must not emit resolved events.
+func (q *Queries) DeleteDismissedSessionNotificationsByType(ctx context.Context, arg DeleteDismissedSessionNotificationsByTypeParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteDismissedSessionNotificationsByType, arg.SessionID, arg.Type)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteResolvedDismissedNotifications = `-- name: DeleteResolvedDismissedNotifications :execrows
+DELETE FROM notifications
+WHERE dismissed_at IS NOT NULL
+  AND resolved_at IS NOT NULL
+`
+
+// Resolved notifications no longer carry a live dedupe fact. Remove them in
+// the same transaction that dismisses visible history so only open tombstones
+// remain.
+func (q *Queries) DeleteResolvedDismissedNotifications(ctx context.Context) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteResolvedDismissedNotifications)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteStaleDismissedNeedsInputNotifications = `-- name: DeleteStaleDismissedNeedsInputNotifications :execrows
+DELETE FROM notifications
+WHERE type = 'needs_input'
+  AND resolved_at IS NULL
+  AND dismissed_at IS NOT NULL
+  AND session_id IN (
+    SELECT id FROM sessions
+    WHERE is_terminated = TRUE
+       OR activity_state NOT IN ('waiting_input', 'blocked')
+  )
+`
+
+func (q *Queries) DeleteStaleDismissedNeedsInputNotifications(ctx context.Context) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteStaleDismissedNeedsInputNotifications)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const getOpenNotificationByDedupe = `-- name: GetOpenNotificationByDedupe :one
 SELECT id, session_id, project_id, pr_url, type, title, body, status, created_at, resolved_at, dismissed_at
 FROM notifications
@@ -403,6 +484,7 @@ SET resolved_at = ?1
 WHERE pr_url = ?2
   AND type = ?3
   AND resolved_at IS NULL
+  AND dismissed_at IS NULL
 RETURNING id, session_id, project_id, pr_url, type, title, body, status, created_at, resolved_at, dismissed_at
 `
 
@@ -453,6 +535,7 @@ SET resolved_at = ?1
 WHERE session_id = ?2
   AND type = ?3
   AND resolved_at IS NULL
+  AND dismissed_at IS NULL
 RETURNING id, session_id, project_id, pr_url, type, title, body, status, created_at, resolved_at, dismissed_at
 `
 
@@ -502,6 +585,7 @@ UPDATE notifications
 SET resolved_at = ?1
 WHERE type = 'needs_input'
   AND resolved_at IS NULL
+  AND dismissed_at IS NULL
   AND session_id IN (
     SELECT id FROM sessions
     WHERE is_terminated = TRUE

@@ -79,7 +79,17 @@ SET resolved_at = sqlc.arg(resolved_at)
 WHERE session_id = sqlc.arg(session_id)
   AND type = sqlc.arg(type)
   AND resolved_at IS NULL
+  AND dismissed_at IS NULL
 RETURNING *;
+
+-- Dismissed rows are dedupe tombstones, not visible history. Once the issue
+-- resolves they have no remaining purpose and must not emit resolved events.
+-- name: DeleteDismissedSessionNotificationsByType :execrows
+DELETE FROM notifications
+WHERE session_id = sqlc.arg(session_id)
+  AND type = sqlc.arg(type)
+  AND resolved_at IS NULL
+  AND dismissed_at IS NOT NULL;
 
 -- name: ResolvePRNotificationsByType :many
 UPDATE notifications
@@ -87,7 +97,15 @@ SET resolved_at = sqlc.arg(resolved_at)
 WHERE pr_url = sqlc.arg(pr_url)
   AND type = sqlc.arg(type)
   AND resolved_at IS NULL
+  AND dismissed_at IS NULL
 RETURNING *;
+
+-- name: DeleteDismissedPRNotificationsByType :execrows
+DELETE FROM notifications
+WHERE pr_url = sqlc.arg(pr_url)
+  AND type = sqlc.arg(type)
+  AND resolved_at IS NULL
+  AND dismissed_at IS NOT NULL;
 
 -- Readiness is more than open/closed: draft, CI, review decision, unresolved
 -- human comments, and mergeability all block a merge. Rather than restate that
@@ -107,12 +125,24 @@ UPDATE notifications
 SET resolved_at = sqlc.arg(resolved_at)
 WHERE type = 'needs_input'
   AND resolved_at IS NULL
+  AND dismissed_at IS NULL
   AND session_id IN (
     SELECT id FROM sessions
     WHERE is_terminated = TRUE
        OR activity_state NOT IN ('waiting_input', 'blocked')
   )
 RETURNING *;
+
+-- name: DeleteStaleDismissedNeedsInputNotifications :execrows
+DELETE FROM notifications
+WHERE type = 'needs_input'
+  AND resolved_at IS NULL
+  AND dismissed_at IS NOT NULL
+  AND session_id IN (
+    SELECT id FROM sessions
+    WHERE is_terminated = TRUE
+       OR activity_state NOT IN ('waiting_input', 'blocked')
+  );
 
 -- name: GetOpenNotificationByDedupe :one
 SELECT *
@@ -128,3 +158,11 @@ UPDATE notifications
 SET dismissed_at = CURRENT_TIMESTAMP,
     status = 'read'
 WHERE dismissed_at IS NULL;
+
+-- Resolved notifications no longer carry a live dedupe fact. Remove them in
+-- the same transaction that dismisses visible history so only open tombstones
+-- remain.
+-- name: DeleteResolvedDismissedNotifications :execrows
+DELETE FROM notifications
+WHERE dismissed_at IS NOT NULL
+  AND resolved_at IS NOT NULL;

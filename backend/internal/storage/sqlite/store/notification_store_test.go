@@ -281,8 +281,8 @@ func TestNotificationStore_ClearAllRetainsDedupeUntilResolution(t *testing.T) {
 
 	resolvedAt := now.Add(2 * time.Minute)
 	resolved, err := s.ResolvePRNotifications(ctx, prURL, domain.NotificationReadyToMerge, resolvedAt)
-	if err != nil || len(resolved) != 1 || resolved[0].ID != rec.ID {
-		t.Fatalf("ResolvePRNotifications=%+v err=%v", resolved, err)
+	if err != nil || len(resolved) != 0 {
+		t.Fatalf("ResolvePRNotifications=%+v err=%v, want no visible resolved event", resolved, err)
 	}
 	fresh := rec
 	fresh.ID = "ntf_fresh"
