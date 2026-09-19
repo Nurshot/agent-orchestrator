@@ -739,7 +739,7 @@ function ShellLayout() {
 	);
 
 	const restartOrchestrator = useCallback(
-		async (projectId: string, mode?: "chat" | "tui") => {
+		async (projectId: string, mode?: "chat" | "tui", approvalMode?: "bypass-permissions") => {
 			await restartProjectOrchestrator({
 				projectId,
 				queryClient,
@@ -747,6 +747,7 @@ function ShellLayout() {
 				setProjectRestarting,
 				setOrchestratorReplacementError,
 				mode,
+				approvalMode,
 				onError: (error) => {
 					captureOrchestratorReplacementFailure(error, projectId);
 				},
@@ -1189,6 +1190,9 @@ function ShellLayout() {
 					}}
 					onRetry={(projectId) => void restartOrchestrator(projectId)}
 					onRetryAsTui={(projectId) => void restartOrchestrator(projectId, "tui")}
+					onRetryWithoutApprovals={(projectId) =>
+						void restartOrchestrator(projectId, undefined, "bypass-permissions")
+					}
 					projectId={replacementErrorProjectId}
 					workspaces={workspaces}
 				/>
