@@ -239,6 +239,20 @@ UPDATE sessions SET reviewer_harness = ?, reviewer_agent_config = ?, updated_at 
 -- name: SetSessionAutoReview :execrows
 UPDATE sessions SET auto_review_enabled = ?, updated_at = ? WHERE id = ?;
 
+-- name: SetSessionProvisionedWorkspace :execrows
+-- Publish the worktree the moment it exists, rather than waiting for the
+-- controller commit at the end of an asynchronous start. Until this lands the
+-- row claims no workspace, so every workspace-scoped read answers
+-- SESSION_WORKSPACE_NOT_FOUND for the whole start, long enough for the
+-- desktop's bounded readiness poll to give up on a session that is fine.
+-- Restricted to a provisioning row so a late call cannot overwrite a live one.
+UPDATE sessions SET
+    branch = sqlc.arg(branch),
+    workspace_path = sqlc.arg(workspace_path),
+    workspace_repo_path = sqlc.arg(workspace_repo_path),
+    updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id) AND provision_state = 'provisioning';
+
 -- name: SetSessionProvisionState :execrows
 -- Publish start-up progress for an asynchronous Chat spawn. Deliberately narrow:
 -- it must not replay any other fact of a row the background start is racing with

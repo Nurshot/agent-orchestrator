@@ -106,6 +106,13 @@ func (m *Manager) completeAsyncChatSpawn(ctx context.Context, in asyncChatSpawn)
 		m.failAsyncChatSpawn(ctx, id, wrapSpawnStage(id, ErrWorkspaceProvision, err))
 		return
 	}
+	// Publish the worktree now rather than at the controller commit. Until the
+	// row carries it, every workspace-scoped read answers
+	// SESSION_WORKSPACE_NOT_FOUND, and the provider start that follows is long
+	// enough for the desktop's bounded readiness poll to give up on a session
+	// that is perfectly fine. It also means an interrupted start leaves a row
+	// that knows which worktree to clean up.
+	m.publishProvisionedWorkspace(ctx, id, ws)
 	if len(in.cfg.Attachments) > 0 {
 		// The prompt already references these by name (spawnAttachmentRefs); this
 		// is where the bytes land, before the agent can read them.
@@ -251,4 +258,24 @@ func (m *Manager) clearSpawnPublished(id domain.SessionID) {
 	m.publishedSpawnMu.Lock()
 	defer m.publishedSpawnMu.Unlock()
 	delete(m.publishedSpawns, id)
+}
+
+// publishProvisionedWorkspace records the worktree on a still-provisioning row.
+// Best effort: the controller commit writes the same facts again, so a failure
+// here costs visibility during the start, never correctness after it.
+func (m *Manager) publishProvisionedWorkspace(ctx context.Context, id domain.SessionID, ws ports.WorkspaceInfo) {
+	writer, ok := m.store.(provisionedWorkspaceStore)
+	if !ok {
+		return
+	}
+	if _, err := writer.SetSessionProvisionedWorkspace(
+		ctx, id, ws.Branch, ws.Path, ws.RepoPath, m.clock()); err != nil {
+		m.logger.Warn("spawn: publish provisioned workspace", "sessionID", id, "error", err)
+	}
+}
+
+// provisionedWorkspaceStore is the narrow optional write boundary for a
+// worktree that exists before its controller does.
+type provisionedWorkspaceStore interface {
+	SetSessionProvisionedWorkspace(ctx context.Context, id domain.SessionID, branch, workspacePath, workspaceRepoPath string, now time.Time) (bool, error)
 }

@@ -2848,18 +2848,18 @@ func (m *Manager) reconcileLive(ctx context.Context, rec domain.SessionRecord) e
 	if err != nil {
 		return err
 	}
+	// An asynchronous Chat spawn is mid-flight or was interrupted: it may have no
+	// workspace yet, or a worktree published ahead of its controller. Neither is
+	// a session this pass can act on. They are also not phantoms — the API handed
+	// the id to a client, the session is on screen, any failure explains itself,
+	// and the user's queued messages live in it. FailInterruptedProvisioning
+	// settles them; reaping or relaunching here would be the disappearing session
+	// that state exists to prevent.
+	if rec.ProvisionState.WithDefault() != domain.SessionProvisionReady {
+		return nil
+	}
 	projectKind := projectKindForSession(project, rec.ProjectID)
 	if rec.Metadata.WorkspacePath == "" || (rec.Metadata.Branch == "" && projectKind != domain.ProjectKindScratch) {
-		// An asynchronous Chat spawn has the same shape — no workspace, no
-		// runtime — while it is still building, and keeps it if that start was
-		// interrupted. Those rows are not phantoms: the API handed the id to a
-		// client, the session is on screen, the failure explains itself, and the
-		// user's queued messages live in it. FailInterruptedProvisioning settles
-		// them; deleting them here would be the disappearing session that state
-		// exists to prevent.
-		if rec.ProvisionState.WithDefault() != domain.SessionProvisionReady {
-			return nil
-		}
 		// The previous daemon died before Spawn committed a workspace (e.g. the
 		// app was closed while "Preparing the worker terminal" was still
 		// creating the worktree). Nothing observable was ever built, so — same

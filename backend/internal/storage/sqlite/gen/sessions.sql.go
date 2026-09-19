@@ -1028,6 +1028,43 @@ func (q *Queries) SetSessionProvisionState(ctx context.Context, arg SetSessionPr
 	return result.RowsAffected()
 }
 
+const setSessionProvisionedWorkspace = `-- name: SetSessionProvisionedWorkspace :execrows
+UPDATE sessions SET
+    branch = ?1,
+    workspace_path = ?2,
+    workspace_repo_path = ?3,
+    updated_at = ?4
+WHERE id = ?5 AND provision_state = 'provisioning'
+`
+
+type SetSessionProvisionedWorkspaceParams struct {
+	Branch            string
+	WorkspacePath     string
+	WorkspaceRepoPath string
+	UpdatedAt         time.Time
+	ID                domain.SessionID
+}
+
+// Publish the worktree the moment it exists, rather than waiting for the
+// controller commit at the end of an asynchronous start. Until this lands the
+// row claims no workspace, so every workspace-scoped read answers
+// SESSION_WORKSPACE_NOT_FOUND for the whole start, long enough for the
+// desktop's bounded readiness poll to give up on a session that is fine.
+// Restricted to a provisioning row so a late call cannot overwrite a live one.
+func (q *Queries) SetSessionProvisionedWorkspace(ctx context.Context, arg SetSessionProvisionedWorkspaceParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setSessionProvisionedWorkspace,
+		arg.Branch,
+		arg.WorkspacePath,
+		arg.WorkspaceRepoPath,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const setSessionReviewerConfig = `-- name: SetSessionReviewerConfig :execrows
 UPDATE sessions SET reviewer_harness = ?, reviewer_agent_config = ?, updated_at = ? WHERE id = ?
 `

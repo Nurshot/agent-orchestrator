@@ -148,6 +148,33 @@ func TestSpawnAsyncChat_PublishedSessionIsNeverDeleted(t *testing.T) {
 	}
 }
 
+// Every workspace-scoped read answers SESSION_WORKSPACE_NOT_FOUND while the row
+// claims no worktree. Waiting for the controller commit to publish it leaves the
+// session lying about itself for the whole provider start, which is long enough
+// for the desktop's bounded readiness poll to give up on a healthy session.
+func TestSpawnAsyncChat_PublishesTheWorktreeBeforeTheController(t *testing.T) {
+	launcher := &recordingLauncher{startErr: errors.New("provider is slow today")}
+	m, st, _ := newChatManager(launcher)
+	m.browserCapabilities = browsersvc.NewAuthority()
+	deferred := deferredBackground(m)
+
+	rec, _, _, err := m.Spawn(context.Background(), asyncChatSpawnConfig("do the thing"))
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	(*deferred)[0]()
+
+	// The controller never started, so only the early publish can have written
+	// this — exactly the window the desktop was polling through.
+	stored := st.sessions[rec.ID]
+	if stored.Metadata.WorkspacePath == "" {
+		t.Fatal("the worktree exists but the row still reports no workspace")
+	}
+	if stored.Metadata.Branch == "" {
+		t.Fatal("the row reports a workspace with no branch")
+	}
+}
+
 // A restart leaves nothing behind that could finish a background start, so a
 // row left mid-start must not read as "still starting" forever.
 func TestFailInterruptedProvisioning(t *testing.T) {
