@@ -78,13 +78,17 @@ export async function spawnCloudOrchestrator(queryClient: QueryClient, projectId
 	// (#4960: Codex -> Claude Code -> Cursor). Previously the configured choice
 	// was ignored, so a project set to Claude Code still launched Codex whenever
 	// a Codex credential happened to be connected.
-	const [orgCredentials, personalCredentials, projects] = await Promise.all([
+	const [orgCredentials, personalCredentials] = await Promise.all([
 		client.listProviderConnections(orgId),
 		client.listUserProviderConnections(),
-		client.listProjects(orgId, { limit: 100 }),
 	]);
 	const connections = [...orgCredentials.providerConnections, ...personalCredentials.providerConnections];
-	const project = projects.items.find((candidate) => candidate.id === projectId);
+	// The project's configured orchestrator agent is an optional preference. Load
+	// it separately and tolerate a failure: it must not block a spawn that the
+	// connected-credential priority could still satisfy. A fetch error (or the
+	// project not being on the first page) just means "no configured agent".
+	const projects = await client.listProjects(orgId, { limit: 100 }).catch(() => null);
+	const project = projects?.items.find((candidate) => candidate.id === projectId);
 	const harness = resolveConfiguredOrchestratorHarness(project, connections) ?? selectCloudOrchestratorHarness(connections);
 	if (!harness) throw new Error("Connect a Cloud coding agent before spawning an orchestrator.");
 	try {

@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { type ChildProcess, spawn, type SpawnOptions } from "node:child_process";
 import { constants as fsConstants } from "node:fs";
 import { access, chmod, lstat, mkdtemp, mkdir, readdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
@@ -165,6 +165,16 @@ async function resolveProviderBinary(name: string): Promise<{ path: string; path
 	return { path: resolved, pathEnv };
 }
 
+// Spawn a resolved absolute agent-CLI path. Windows needs a shell to execute a
+// .cmd, but `shell:true` does not quote the program, so an absolute path with a
+// space (C:\Program Files\..., or a username with a space) would be split at the
+// space and fail to start. Quote it ourselves there. On POSIX the absolute path
+// is spawned directly with no shell, so no quoting is needed.
+function spawnAgentBinary(binaryPath: string, args: readonly string[], options: SpawnOptions): ChildProcess {
+	const useShell = process.platform === "win32";
+	return spawn(useShell ? `"${binaryPath}"` : binaryPath, [...args], { ...options, shell: useShell });
+}
+
 export interface ProviderAuthCredential {
 	provider: string;
 	credentialType: string;
@@ -195,10 +205,9 @@ const codexAuthFlow: ProviderAuthFlow = {
 				);
 			}
 			await new Promise<void>((resolve, reject) => {
-				const child = spawn(binary.path, ["-c", 'cli_auth_credentials_store="file"', "login"], {
+				const child = spawnAgentBinary(binary.path, ["-c", 'cli_auth_credentials_store="file"', "login"], {
 					env: { ...process.env, PATH: binary.pathEnv, CODEX_HOME: codexHome },
 					stdio: "ignore",
-					shell: process.platform === "win32",
 				});
 				
 				let timeout: NodeJS.Timeout;
@@ -274,10 +283,9 @@ const claudeAuthFlow: ProviderAuthFlow = {
 			// token; capture stdout/stderr so we can read it.
 			let captured = "";
 			await new Promise<void>((resolve, reject) => {
-				const child = spawn(binary.path, ["setup-token"], {
+				const child = spawnAgentBinary(binary.path, ["setup-token"], {
 					env: { ...process.env, PATH: binary.pathEnv, CLAUDE_CONFIG_DIR: pending },
 					stdio: ["ignore", "pipe", "pipe"],
-					shell: process.platform === "win32",
 				});
 				const capture = (chunk: Buffer) => {
 					if (captured.length <= MAX_AUTH_DOCUMENT_BYTES) captured += chunk.toString();

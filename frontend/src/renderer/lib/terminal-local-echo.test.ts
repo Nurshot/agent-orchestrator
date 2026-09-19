@@ -74,6 +74,20 @@ describe("TerminalLocalEchoController", () => {
 		expect(controller.handleKeystroke("\r")).toEqual({ sendUpstream: "ls", submitUpstream: "\r" });
 	});
 
+	it("detects a DECSET 2004 marker split across two server chunks", () => {
+		const { controller } = createController();
+		// The 8-byte enable marker arrives split across two frames; the carry must
+		// still detect it so the Enter wrap is applied.
+		controller.observeServerOutput("prompt\x1b[?20");
+		controller.observeServerOutput("04h> ");
+		controller.handleKeystroke("l");
+		controller.handleKeystroke("s");
+		expect(controller.handleKeystroke("\r")).toEqual({
+			sendUpstream: "\x1b[200~ls\x1b[201~",
+			submitUpstream: "\r",
+		});
+	});
+
 	it("keeps unmatched predictions pending across partially matching server chunks", () => {
 		const { controller } = createController();
 		controller.handleKeystroke("a");

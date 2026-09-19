@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -15,7 +15,8 @@ import {
 describe("firstExecutable", () => {
 	const dirs: string[] = [];
 
-	afterEach(() => {
+	afterEach(async () => {
+		await Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true })));
 		dirs.length = 0;
 	});
 
@@ -73,7 +74,8 @@ describe("extractClaudeOAuthToken", () => {
 
 describe("readClaudeOAuthTokenFromDir", () => {
 	const dirs: string[] = [];
-	afterEach(() => {
+	afterEach(async () => {
+		await Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true })));
 		dirs.length = 0;
 	});
 	async function tempDir(): Promise<string> {
@@ -97,7 +99,8 @@ describe("readClaudeOAuthTokenFromDir", () => {
 
 describe("findCodexAuthFile", () => {
 	const dirs: string[] = [];
-	afterEach(() => {
+	afterEach(async () => {
+		await Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true })));
 		dirs.length = 0;
 	});
 	async function tempDir(): Promise<string> {

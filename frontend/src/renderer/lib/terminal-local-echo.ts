@@ -166,6 +166,8 @@ export class TerminalLocalEchoController {
 	 * paste; a plain shell would otherwise receive the literal marker bytes.
 	 */
 	private bracketedPasteActive = false;
+	/** Tail of the previous server chunk, so a DECSET 2004 marker split across two chunks is still seen. */
+	private pasteMarkerCarry = "";
 
 	constructor(options: TerminalLocalEchoOptions) {
 		this.now = options.now ?? Date.now;
@@ -182,8 +184,13 @@ export class TerminalLocalEchoController {
 	 * chunk before reconciliation; when both markers appear the later one wins.
 	 */
 	observeServerOutput(text: string): void {
-		const enabled = text.lastIndexOf("\x1b[?2004h");
-		const disabled = text.lastIndexOf("\x1b[?2004l");
+		// Prepend a small carry from the previous chunk so a DECSET 2004 marker
+		// split across two WebSocket frames is still detected (the marker is 8
+		// bytes; carrying the last 7 covers any split point).
+		const scan = this.pasteMarkerCarry + text;
+		this.pasteMarkerCarry = scan.slice(-7);
+		const enabled = scan.lastIndexOf("\x1b[?2004h");
+		const disabled = scan.lastIndexOf("\x1b[?2004l");
 		if (enabled === -1 && disabled === -1) return;
 		this.bracketedPasteActive = enabled > disabled;
 	}
