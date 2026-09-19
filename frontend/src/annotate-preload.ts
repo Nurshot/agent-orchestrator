@@ -485,7 +485,7 @@ function renderComposer(): void {
 			<div class="composer-input-row">
 				${ADJUST_MODE_ENABLED ? `<button type="button" data-action="adjust" class="adjust-button" aria-label="Adjust element" title="Adjust element">${adjustIcon()}</button>` : ""}
 				<textarea class="composer-note" rows="1" aria-label="Comment" placeholder="Add a comment..."></textarea>
-				<button type="button" data-action="add" class="add-button primary" aria-label="Add annotation" title="Add annotation">${icon("plus")}</button>
+				<button type="button" data-action="add" class="add-button" aria-label="Add annotation" title="Add annotation">${icon("arrow")}</button>
 			</div>
 		</form>`;
 	const form = mount.querySelector<HTMLFormElement>("form")!;
@@ -1511,7 +1511,9 @@ function overlayStyles(): string {
 			box-shadow:0 8px 28px rgba(0,0,0,.32);pointer-events:auto;font-size:12px;overflow:hidden;
 			container-type:inline-size;
 		}
-		.composer--comment{padding:var(--pad) 14px var(--pad) 10px}
+		/* Equal insets: the trailing control sits as close to the edge as the
+		   palette control does at the leading edge. */
+		.composer--comment{padding:var(--pad) 10px}
 		.composer-input-row{display:flex;min-width:0;align-items:flex-start;gap:var(--gap)}
 		.adjust-button{
 			transform-origin:center;
@@ -1524,12 +1526,17 @@ function overlayStyles(): string {
 		}
 		.adjust-button:hover,.adjust-button--active{background:var(--muted);color:var(--fg)}
 		.adjust-button svg{width:16px;height:16px}
-		/* Trailing twin of the adjust control: same 28px box, primary because it
-		   commits the draft the way Enter does. */
+		/* Trailing twin of the palette control: the same 28px ghost box and hover,
+		   because the two are the composer's only two controls. */
 		.add-button{
 			width:var(--control);height:var(--control);flex:0 0 var(--control);align-self:flex-start;
-			border:0;padding:0;
+			border:0;border-radius:var(--radius);background:transparent;color:var(--muted-fg);padding:0;
+			transform-origin:center;
+			transition:background-color 120ms ease,color 120ms ease,opacity 120ms ease,transform 120ms ease;
 		}
+		.add-button:not(:disabled):hover{background:var(--muted);color:var(--fg)}
+		.add-button:not(:disabled):active{transform:scale(0.98)}
+		.add-button:disabled{background:transparent}
 		.add-button svg{width:16px;height:16px}
 		.composer-note{
 			display:block;box-sizing:border-box;min-width:0;flex:1;resize:none;
@@ -1549,7 +1556,7 @@ function overlayStyles(): string {
 		/* Same box as the comment composer: the card keeps its padding on both
 		   sides, so switching modes never resizes it out from under the row. */
 		.composer--adjustment{display:flex;flex-direction:column;padding:var(--pad) 0}
-		.composer--adjustment .composer-input-row{flex:0 0 auto;align-items:flex-start;padding:0 14px 0 10px}
+		.composer--adjustment .composer-input-row{flex:0 0 auto;align-items:flex-start;padding:0 10px}
 		.composer--adjustment .composer-note{max-height:52px;padding:4px 0 0}
 		.adjustment-panel{position:relative;overflow:hidden;height:0;flex:0 0 auto}
 		.adjustment-panel-inner{display:flex;flex-direction:column;min-height:0;border-top:1px solid var(--border);margin-top:var(--gap)}
@@ -1681,10 +1688,13 @@ function overlayStyles(): string {
 		   snap. The bottom gap lives on the last row instead, so it animates too. */
 		.section-body{display:flex;flex-direction:column;gap:var(--gap);overflow:hidden}
 		.section-body>.panel-row:last-child{margin-bottom:var(--pad)}
-		/* The 320px card fits two fields side by side; anything narrower (a slim
-		   browser pane, 200% zoom) stacks the pair so the label, the value and the
-		   swatch each keep their room instead of clipping. */
-		@container (max-width:318px){
+		/* The card fits two fields side by side down to ~300px; anything narrower
+		   (a slim browser pane, 200% zoom) stacks the pair so the label, the value
+		   and the swatch each keep their room instead of clipping.
+		   The query measures the card's *content* box, so it has to clear the 320
+		   card minus its 1px borders with room to spare — at 318 the default card
+		   matched and the paired layout never applied at all. */
+		@container (max-width:296px){
 			.panel-row{grid-template-columns:minmax(0,1fr) auto}
 			.field{grid-column:1}
 			.field--wide{grid-column:1}

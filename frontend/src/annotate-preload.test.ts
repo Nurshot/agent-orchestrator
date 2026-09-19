@@ -157,8 +157,12 @@ describe("annotation adjustment preload", () => {
 		// Narrow card (slim browser pane, 200% zoom) stacks the pair instead of
 		// clipping the label, the value and the swatch into one row.
 		expect(styles).toContain("container-type:inline-size");
-		expect(styles).toContain("@container (max-width:318px)");
-		expect(styles).toMatch(/@container \(max-width:318px\)\{\s*\.panel-row\{grid-template-columns:minmax\(0,1fr\) auto\}/);
+		expect(styles).toContain("@container (max-width:296px)");
+		expect(styles).toMatch(/@container \(max-width:296px\)\{\s*\.panel-row\{grid-template-columns:minmax\(0,1fr\) auto\}/);
+		// The query measures the card's *content* box, so a threshold that only
+		// just clears the 320 card (318 minus the borders) can never be met: the
+		// paired layout would be dead code and every palette would stack tall.
+		expect(Number(styles.match(/@container \(max-width:(\d+)px\)/)?.[1])).toBeLessThan(320 - 2);
 		// The panel scrolls without a scrollbar, so the overflowed edge fades.
 		expect(styles).toMatch(/\.adjustment-panel\[data-cue~="bottom"\]::after\{opacity:1\}/);
 		expect(styles).toMatch(/\.adjustment-panel\[data-cue~="top"\]::before\{opacity:1\}/);
@@ -167,7 +171,7 @@ describe("annotation adjustment preload", () => {
 		// The comment and adjustment composers are the same box: switching modes
 		// must not resize the card out from under the row (that read as a jerk).
 		expect(styles).toContain(".composer--adjustment{display:flex;flex-direction:column;padding:var(--pad) 0}");
-		expect(styles).toMatch(/\.composer--comment\{padding:var\(--pad\) 14px var\(--pad\) 10px\}/);
+		expect(styles).toMatch(/\.composer--comment\{padding:var\(--pad\) 10px\}/);
 		expect(styles).not.toMatch(/\.composer--adjustment\{[^}]*border-radius:var\(--radius\)/);
 		expect(styles).not.toMatch(/\.composer--adjustment \.composer-input-row\{[^}]*background:var\(--muted\)/);
 		expect(styles).toContain(".adjust-button:not(:disabled):active{transform:scale(0.98)}");
@@ -479,7 +483,9 @@ describe("annotation adjustment preload", () => {
 		expect(add).not.toBeNull();
 		expect(row?.lastElementChild).toBe(add);
 		expect(add?.disabled).toBe(true);
-		expect(add?.querySelector("svg")?.innerHTML).toContain("M12 5v14M5 12h14");
+		expect(add?.querySelector("svg")?.innerHTML).toContain("M12 19V5m-7 7 7-7 7 7");
+		// Same 28px ghost box as the palette control, not a filled primary button.
+		expect(styles).toMatch(/\.add-button\{[^}]*background:transparent/);
 		expect(styles).toMatch(/\.add-button\{[^}]*align-self:flex-start/);
 	});
 
