@@ -28,7 +28,7 @@ func New(plugin nativeacp.Plugin, log *slog.Logger) ports.ChatDriver {
 		Configure:            configure,
 		PermissionPolicy:     acpdriver.StandardPermissionPolicy(),
 		SessionOptions:       sessionOptions,
-		ValidateTurnSettings: acpdriver.ApprovalFixedAtLaunch("Cline ACP auto-approval"),
+		ValidateTurnSettings: acpdriver.ApprovalFixedAtLaunch("Cline ACP auto-approval", nil),
 	}, log)
 }
 

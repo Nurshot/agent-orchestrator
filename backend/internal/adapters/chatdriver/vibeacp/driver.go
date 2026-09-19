@@ -9,11 +9,11 @@ package vibeacp
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/agent/binaryutil"
 	acpdriver "github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/acp"
+	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/nativeacp"
 	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
 	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
 )
@@ -25,39 +25,35 @@ type vibePlugin interface {
 	AuthStatus(context.Context) (ports.AgentAuthStatus, error)
 }
 
+// acpAdapter presents the separately distributed `vibe-acp` executable as this
+// harness's binary, so the binding runs on the shared native ACP path -- and
+// therefore honors the plugin's AugmentRuntimeEnv hook, keeping Chat and TUI
+// from disagreeing about where Vibe keeps its state -- while auth is still
+// probed through the Vibe CLI plugin itself.
+type acpAdapter struct{ vibePlugin }
+
+func (a acpAdapter) ResolveBinary(ctx context.Context) (string, error) {
+	return resolveVibeACPBinary(ctx, a.vibePlugin)
+}
+
 // New constructs Vibe's Chat driver over the existing Vibe agent plugin.
+//
+// Vibe resolves approvals through ACP permission requests, so AO's stronger
+// modes are answered per request rather than by a launch flag; a mid-session
+// approval change takes effect on the next tool call.
 func New(plugin vibePlugin, log *slog.Logger) ports.ChatDriver {
-	return acpdriver.New(acpdriver.Config{
-		Harness: domain.HarnessVibe,
-		Capabilities: ports.ChatCapabilities{
-			ports.ChatCapabilityStreaming: true,
-			ports.ChatCapabilityTools:     true,
-			ports.ChatCapabilityApprovals: true,
-			ports.ChatCapabilityInterrupt: true,
-			ports.ChatCapabilityResume:    true,
-		},
-		Probe: func(ctx context.Context) error {
-			if _, err := resolveVibeACPBinary(ctx, plugin); err != nil {
-				return fmt.Errorf("%w: %w", ports.ErrChatDriverUnavailable, err)
-			}
-			status, err := plugin.AuthStatus(ctx)
-			if err == nil && status == ports.AgentAuthStatusUnauthorized {
-				return ports.ErrChatAuthRequired
-			}
-			if err != nil && log != nil {
-				log.Debug("Vibe auth probe inconclusive; continuing", "error", err)
-			}
-			return nil
-		},
-		Launch: func(ctx context.Context, cfg acpdriver.LaunchConfig) (acpdriver.Launch, error) {
-			binary, err := resolveVibeACPBinary(ctx, plugin)
-			if err != nil {
-				return acpdriver.Launch{}, fmt.Errorf("%w: %w", ports.ErrChatDriverUnavailable, err)
-			}
-			return acpdriver.Launch{Command: binary, Env: cfg.Env}, nil
-		},
-		ValidateTurnSettings: acpdriver.ApprovalFixedAtLaunch("Vibe ACP approval mode"),
+	return nativeacp.New(acpAdapter{plugin}, nativeacp.Config{
+		Harness:   domain.HarnessVibe,
+		Configure: configure,
+		PermissionPolicy: acpdriver.StandardPermissionPolicy(
+			ports.PermissionModeAuto, ports.PermissionModeBypassPermissions),
 	}, log)
+}
+
+// configure adds nothing: `vibe-acp` takes no AO-relevant flag, and standing
+// instructions are not injectable over its ACP mode.
+func configure(context.Context, acpdriver.LaunchConfig) ([]string, map[string]string, error) {
+	return nil, nil, nil
 }
 
 // resolveVibeACPBinary finds the `vibe-acp` executable. Vibe's one-line and uv

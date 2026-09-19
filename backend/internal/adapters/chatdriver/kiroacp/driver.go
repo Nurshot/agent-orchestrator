@@ -24,14 +24,17 @@ import (
 // instructions (installed during workspace preparation) and Kiro owns models,
 // steering, and auth. Kiro's ACP server advertises session/set_model and
 // session/load, so models and native history are available to Chat.
+//
+// Kiro's mode is not fixed at launch: configure passes no trust flag and the
+// permission policy runs per request against the conversation's current mode,
+// so a mid-session approval change takes effect on the next tool call.
 func New(plugin nativeacp.Plugin, log *slog.Logger) ports.ChatDriver {
 	return nativeacp.New(plugin, nativeacp.Config{
 		Harness:   domain.HarnessKiro,
 		Configure: configure,
 		PermissionPolicy: acpdriver.StandardPermissionPolicy(
 			ports.PermissionModeAuto, ports.PermissionModeBypassPermissions),
-		SessionOptions:       sessionOptions,
-		ValidateTurnSettings: acpdriver.ApprovalFixedAtLaunch("Kiro ACP approval mode"),
+		SessionOptions: sessionOptions,
 	}, log)
 }
 

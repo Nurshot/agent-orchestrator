@@ -29,7 +29,7 @@ func New(plugin nativeacp.Plugin, log *slog.Logger) ports.ChatDriver {
 	return nativeacp.New(plugin, nativeacp.Config{
 		Harness:              domain.HarnessGoose,
 		Configure:            configure,
-		ValidateTurnSettings: acpdriver.ApprovalFixedAtLaunch("Goose ACP approval mode"),
+		ValidateTurnSettings: acpdriver.ApprovalFixedAtLaunch("Goose ACP approval mode", gooseMode),
 	}, log)
 }
 

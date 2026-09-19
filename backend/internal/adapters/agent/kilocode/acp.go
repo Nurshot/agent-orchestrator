@@ -14,6 +14,10 @@ import (
 // highest-precedence config, so the ACP session inherits the same rules and
 // approvals AO would apply to a TUI launch.
 //
+// The generated agent is declared primary: verified against Kilo CLI 7.7.5,
+// default_agent is ignored for a non-primary agent, and the session silently
+// falls back to Kilo's read-only "ask" agent with none of AO's instructions.
+//
 // Model selection is deliberately not written here: the ACP session advertises
 // its own model options, and AO applies the durable choice through
 // session/set_model.
@@ -39,7 +43,7 @@ func PrepareACPConfigContent(
 			agents = map[string]any{}
 		}
 		agentName := kilocodeAOAgentName(sessionID)
-		agents[agentName] = kilocodeAgentSettings{Prompt: systemPrompt}
+		agents[agentName] = kilocodeAgentSettings{Mode: "primary", Prompt: systemPrompt}
 		config["agent"] = agents
 		config["default_agent"] = agentName
 	}

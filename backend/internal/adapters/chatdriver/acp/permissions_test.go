@@ -96,7 +96,7 @@ func TestPermissionOptionReportsMissingKind(t *testing.T) {
 }
 
 func TestApprovalFixedAtLaunchRejectsOnlyRealChanges(t *testing.T) {
-	validate := ApprovalFixedAtLaunch("Kiro ACP approval mode")
+	validate := ApprovalFixedAtLaunch("Kilo Code ACP permission mode", nil)
 	if err := validate(ports.PermissionModeDefault, ports.ChatTurnSettings{}); err != nil {
 		t.Fatalf("unset approval: %v", err)
 	}
@@ -108,7 +108,29 @@ func TestApprovalFixedAtLaunchRejectsOnlyRealChanges(t *testing.T) {
 	if !errors.Is(err, ErrACPSetterUnsupported) {
 		t.Fatalf("err = %v, want ErrACPSetterUnsupported", err)
 	}
-	if !strings.Contains(err.Error(), "Kiro ACP approval mode") {
+	if !strings.Contains(err.Error(), "Kilo Code ACP permission mode") {
 		t.Fatalf("err = %q, want the binding's surface named", err)
+	}
+}
+
+// Goose launches auto and bypass as the same GOOSE_MODE, so switching between
+// them needs no restart even though the AO modes differ.
+func TestApprovalFixedAtLaunchAcceptsModesThatLaunchedIdentically(t *testing.T) {
+	sameProcess := func(mode ports.PermissionMode) string {
+		switch ports.NormalizePermissionMode(mode) {
+		case ports.PermissionModeAuto, ports.PermissionModeBypassPermissions:
+			return "auto"
+		default:
+			return ""
+		}
+	}
+	validate := ApprovalFixedAtLaunch("Goose ACP approval mode", sameProcess)
+	if err := validate(ports.PermissionModeAuto,
+		ports.ChatTurnSettings{Approval: ports.PermissionModeBypassPermissions}); err != nil {
+		t.Fatalf("auto -> bypass launches the same process, so it must be accepted: %v", err)
+	}
+	if err := validate(ports.PermissionModeAuto,
+		ports.ChatTurnSettings{Approval: ports.PermissionModeDefault}); !errors.Is(err, ErrACPSetterUnsupported) {
+		t.Fatalf("err = %v, want ErrACPSetterUnsupported for a mode that launches differently", err)
 	}
 }

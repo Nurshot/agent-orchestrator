@@ -79,15 +79,26 @@ func changesFiles(kind *acpsdk.ToolKind) bool {
 // the user is told to restart Chat, rather than silently ignored.
 //
 // subject names the provider surface in the error, for example
-// "Cline ACP auto-approval".
-func ApprovalFixedAtLaunch(subject string) TurnSettingsValidator {
+// "Cline ACP auto-approval". launchValue optionally maps an AO mode onto the
+// value the launch actually consumed, so a switch between two AO modes that
+// produced the same launch is accepted instead of demanding a pointless
+// restart; pass nil when every mode launches differently.
+func ApprovalFixedAtLaunch(
+	subject string,
+	launchValue func(ports.PermissionMode) string,
+) TurnSettingsValidator {
+	if launchValue == nil {
+		launchValue = func(mode ports.PermissionMode) string {
+			return string(ports.NormalizePermissionMode(mode))
+		}
+	}
 	return func(initial ports.PermissionMode, settings ports.ChatTurnSettings) error {
 		if settings.Approval == "" {
 			return nil
 		}
 		launched := ports.NormalizePermissionMode(initial)
 		requested := ports.NormalizePermissionMode(settings.Approval)
-		if launched == requested {
+		if launchValue(launched) == launchValue(requested) {
 			return nil
 		}
 		return fmt.Errorf(

@@ -28,7 +28,7 @@ func New(plugin nativeacp.Plugin, log *slog.Logger) ports.ChatDriver {
 		Harness:              domain.HarnessKilocode,
 		Configure:            configure,
 		SessionOptions:       sessionOptions,
-		ValidateTurnSettings: acpdriver.ApprovalFixedAtLaunch("Kilo Code ACP permission mode"),
+		ValidateTurnSettings: acpdriver.ApprovalFixedAtLaunch("Kilo Code ACP permission mode", nil),
 	}, log)
 }
 

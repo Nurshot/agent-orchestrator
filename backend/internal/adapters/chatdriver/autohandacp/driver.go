@@ -13,10 +13,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"maps"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/agent/binaryutil"
 	acpdriver "github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/acp"
+	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/nativeacp"
 	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
 	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
 )
@@ -33,45 +33,35 @@ type autohandPlugin interface {
 	AuthStatus(context.Context) (ports.AgentAuthStatus, error)
 }
 
+// acpAdapter presents the separately distributed `autohand-acp` executable as
+// this harness's binary, so the binding runs on the shared native ACP path --
+// and therefore honors the plugin's AugmentRuntimeEnv hook, keeping Chat and
+// TUI from disagreeing about where Autohand keeps its state -- while auth is
+// still probed through the Autohand CLI plugin itself.
+type acpAdapter struct{ autohandPlugin }
+
+func (a acpAdapter) ResolveBinary(ctx context.Context) (string, error) {
+	binary, err := resolveAdapterBinary(ctx, a.autohandPlugin)
+	if err != nil {
+		return "", fmt.Errorf("autohand-acp is not installed: %w", err)
+	}
+	return binary, nil
+}
+
 // New constructs Autohand's Chat driver over the existing Autohand agent plugin.
 func New(plugin autohandPlugin, log *slog.Logger) ports.ChatDriver {
-	return acpdriver.New(acpdriver.Config{
-		Harness: domain.HarnessAutohand,
-		Capabilities: ports.ChatCapabilities{
-			ports.ChatCapabilityStreaming: true,
-			ports.ChatCapabilityTools:     true,
-			ports.ChatCapabilityApprovals: true,
-			ports.ChatCapabilityInterrupt: true,
-			ports.ChatCapabilityResume:    true,
-		},
-		Probe: func(ctx context.Context) error {
-			if _, err := resolveAdapterBinary(ctx, plugin); err != nil {
-				return fmt.Errorf("%w: autohand-acp is not installed: %w", ports.ErrChatDriverUnavailable, err)
-			}
-			status, err := plugin.AuthStatus(ctx)
-			if err == nil && status == ports.AgentAuthStatusUnauthorized {
-				return ports.ErrChatAuthRequired
-			}
-			if err != nil && log != nil {
-				log.Debug("Autohand auth probe inconclusive; continuing", "error", err)
-			}
-			return nil
-		},
-		Launch: func(ctx context.Context, cfg acpdriver.LaunchConfig) (acpdriver.Launch, error) {
-			binary, err := resolveAdapterBinary(ctx, plugin)
-			if err != nil {
-				return acpdriver.Launch{}, fmt.Errorf("%w: autohand-acp is not installed: %w", ports.ErrChatDriverUnavailable, err)
-			}
-			env := maps.Clone(cfg.Env)
-			if env == nil {
-				env = map[string]string{}
-			}
-			env[permissionModeEnvVar] = "external"
-			return acpdriver.Launch{Command: binary, Env: env}, nil
-		},
+	return nativeacp.New(acpAdapter{plugin}, nativeacp.Config{
+		Harness:   domain.HarnessAutohand,
+		Configure: configure,
 		PermissionPolicy: acpdriver.StandardPermissionPolicy(
 			ports.PermissionModeAuto, ports.PermissionModeBypassPermissions),
 	}, log)
+}
+
+// configure routes tool approvals to AO rather than letting Autohand decide
+// them, which is what keeps AO's approval vocabulary authoritative for Chat.
+func configure(context.Context, acpdriver.LaunchConfig) ([]string, map[string]string, error) {
+	return nil, map[string]string{permissionModeEnvVar: "external"}, nil
 }
 
 // resolveAdapterBinary finds the `autohand-acp` executable. npm global installs
