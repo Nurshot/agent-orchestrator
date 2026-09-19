@@ -86,3 +86,21 @@ export async function spawnOrchestrator(
 		throw err;
 	}
 }
+
+/**
+ * Relaunches an orchestrator whose agent exited but whose session row is still
+ * alive, so a launcher click lands on a working agent instead of a dead
+ * terminal. Both launchers (the shared project action and the sidebar's own
+ * handler) route through here so their error handling cannot drift apart.
+ *
+ * A 409 AGENT_NOT_EXITED means it is already running — the caller asked for a
+ * working orchestrator and that is this one, so it resolves rather than throws.
+ */
+export async function resumeOrchestrator(sessionId: string): Promise<void> {
+	const { error, response } = await apiClient.POST("/api/v1/sessions/{sessionId}/resume-agent", {
+		params: { path: { sessionId } },
+	});
+	if (error && apiErrorCode(error) !== "AGENT_NOT_EXITED") {
+		throw new Error(apiErrorMessage(error, `Could not resume the orchestrator (${response.status})`));
+	}
+}

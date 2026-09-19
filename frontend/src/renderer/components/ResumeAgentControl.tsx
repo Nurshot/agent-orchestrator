@@ -10,17 +10,10 @@ import { sessionAgentExited, type WorkspaceSession } from "../types/workspace";
 import { Button } from "./ui/button";
 
 /**
- * Relaunches an agent that exited inside a session whose row is still alive
- * (Ctrl+C, `/exit`, a provider usage limit). Distinct from restore, which
- * revives a TERMINATED row: this preserves the worktree, the terminal identity,
- * and the provider-native conversation, so the daemon resumes rather than
- * restarts.
- *
- * Self-gating, so callers can mount it unconditionally — it renders nothing
- * unless the agent has actually exited. Mounted both in the inspector's Summary
- * and on the terminal pane's ended strip; a session kind that cannot reach the
- * inspector (orchestrators are filtered to the Browser view) still gets a way
- * back from the pane it died on.
+ * Relaunches an agent that exited inside a still-live session. Distinct from
+ * restore, which revives a TERMINATED row: this keeps the worktree, terminal
+ * identity, and native conversation. Self-gating, so the inspector Summary and
+ * the terminal strip can both mount it unconditionally.
  */
 export function ResumeAgentControl({
 	className,

@@ -310,14 +310,9 @@ export function sessionIsActive(session: WorkspaceSession): boolean {
 }
 
 /**
- * Whether the AGENT PROCESS is gone while the session ROW is still alive —
- * Ctrl+C, `/exit`, a provider usage limit. The daemon keeps the worktree, the
- * terminal identity, and the provider-native conversation, so this state is
- * recovered with `resume-agent`, not `restore`.
- *
- * Deliberately not `sessionIsActive`: that reports row liveness, and a Ctrl+C'd
- * session is NOT terminated, so gating recovery on it hides every way out of
- * exactly the state that needs one.
+ * Whether the agent PROCESS is gone while the session ROW is still alive —
+ * Ctrl+C, `/exit`, a usage limit. Recovered with `resume-agent`, not `restore`.
+ * Not `sessionIsActive`, which reports row liveness and calls this state alive.
  */
 export function sessionAgentExited(session: WorkspaceSession | undefined): boolean {
 	return session?.activity?.state === "exited" && session.isTerminated !== true;

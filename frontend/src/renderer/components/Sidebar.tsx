@@ -73,10 +73,9 @@ import { deriveSessionAgentSwitchPresentation } from "../lib/agent-switch-presen
 import { aoBridge } from "../lib/bridge";
 import { useCommandPaletteEnabled } from "../hooks/useCommandPaletteEnabled";
 import { cloudSessionsQueryKey, workspaceQueryKey } from "../hooks/useWorkspaceQuery";
-import { apiClient, apiErrorMessage } from "../lib/api-client";
 import { usePinSession, useUnpinSession } from "../hooks/usePinSession";
 import { spawnCloudOrchestrator } from "../lib/cloud-orchestrator";
-import { spawnOrchestrator } from "../lib/spawn-orchestrator";
+import { resumeOrchestrator, spawnOrchestrator } from "../lib/spawn-orchestrator";
 import { formatTimeCompact, formatTimeTerse } from "../lib/format-time";
 import { useTerminateSession } from "../hooks/useTerminateSession";
 import { useResizable } from "../hooks/useResizable";
@@ -1129,22 +1128,16 @@ const ProjectItem = memo(function ProjectItem({
 		if (isProjectProvisioning || isProjectRestarting) return;
 		if (!expanded) toggleDisclosure();
 		if (orchestrator) {
-			// An orchestrator whose agent exited still owns its worktree and native
-			// conversation. Clicking Orchestrator asks for a WORKING one, so resume
-			// it in place instead of landing on a dead terminal. Never automatic on
-			// the exit itself: the supervisor discards the exit code, so a quit is
-			// indistinguishable from a crash or a rate limit.
+			// Same rule as the shared project launcher: an exited orchestrator is
+			// resumed in place so the click lands on a working agent, not a dead
+			// terminal. See resumeOrchestrator for why this is never automatic.
 			if (sessionAgentExited(orchestrator) && workspace.kind !== "cloud") {
 				setIsSpawning(true);
 				try {
-					const { error } = await apiClient.POST("/api/v1/sessions/{sessionId}/resume-agent", {
-						params: { path: { sessionId: orchestrator.id } },
-					});
-					// Already running: someone resumed it between render and click.
-					if (error && (error as { code?: string }).code !== "AGENT_NOT_EXITED") {
-						console.error("Failed to resume orchestrator:", apiErrorMessage(error));
-					}
+					await resumeOrchestrator(orchestrator.id);
 					await queryClient.invalidateQueries({ queryKey: workspaceQueryKey });
+				} catch (err) {
+					console.error("Failed to resume orchestrator:", err);
 				} finally {
 					setIsSpawning(false);
 				}
