@@ -83,7 +83,7 @@ const postQueue: unknown[] = [];
 const postOnce = (response: unknown) => {
 	postQueue.push(response);
 };
-const createCalls = () => h.post.mock.calls.filter(([path]: [string]) => path !== PREWARM_PATH);
+const createCalls = () => h.post.mock.calls.filter(([path]) => path !== PREWARM_PATH);
 
 beforeEach(() => {
 	postQueue.length = 0;
