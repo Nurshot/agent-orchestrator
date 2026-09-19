@@ -4719,6 +4719,13 @@ body:has(#root .platform-linux) > .browser-popout-overlay {
 	font-weight: var(--font-weight-medium);
 }
 
+/* The shared primary hover is a translucent wash (bg-primary/80). Over the
+   dark annotation toolbar that reads as a half-disabled button, so the Send
+   control steps its tone instead and stays solid. */
+.browser-panel__toolbar--annotation .browser-panel__annotation-send:not(:disabled):hover {
+	background-color: color-mix(in oklch, var(--primary) 90%, var(--background));
+}
+
 .browser-panel__toolbar--annotation .browser-panel__annotation-send:disabled {
 	opacity: 0.72;
 }
