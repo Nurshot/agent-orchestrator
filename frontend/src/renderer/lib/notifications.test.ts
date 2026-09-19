@@ -572,6 +572,36 @@ describe("createNotificationsTransport", () => {
 		]);
 	});
 
+	it.each([
+		{ focusedAtReplay: false, sessionAtReplay: undefined, watchedAtReceipt: true },
+		{ focusedAtReplay: true, sessionAtReplay: "mer-1", watchedAtReceipt: false },
+	])(
+		"keeps watched=$watchedAtReceipt from receipt time while replaying a buffered create",
+		async ({ focusedAtReplay, sessionAtReplay, watchedAtReceipt }) => {
+			let focused = watchedAtReceipt;
+			let visibleSessionId = watchedAtReceipt ? "mer-1" : undefined;
+			vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+			vi.spyOn(document, "hasFocus").mockImplementation(() => focused);
+			const qc = queryClient();
+			const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+			let finishRefresh: (() => void) | undefined;
+			const refresh = new Promise<void>((resolve) => {
+				finishRefresh = resolve;
+			});
+			invalidateSpy.mockReturnValue(refresh);
+			createNotificationsTransport(qc, () => visibleSessionId).connect();
+
+			const reconciliation = reconcileNotifications(qc);
+			EventSourceStub.instances[0].dispatch("notification_created", notification({ id: "buffered" }));
+			focused = focusedAtReplay;
+			visibleSessionId = sessionAtReplay;
+			finishRefresh?.();
+			await reconciliation;
+
+			expect(showNotificationMock).toHaveBeenCalledWith(expect.objectContaining({ id: "buffered", watched: watchedAtReceipt }));
+		},
+	);
+
 	it("cancels an in-flight history fetch before applying a clear and later create", async () => {
 		const qc = queryClient();
 		let requestStarted: (() => void) | undefined;

@@ -28,7 +28,7 @@ const UNRESOLVABLE_TYPES = new Set(["needs_input", "ready_to_merge"]);
 type NotificationsQueryKey = typeof unreadNotificationsQueryKey | typeof recentNotificationsQueryKey;
 
 type LiveNotificationEvent =
-	| { kind: "created"; notification: NotificationDTO }
+	| { kind: "created"; notification: NotificationDTO; watched: boolean }
 	| { kind: "resolved"; notification: NotificationDTO }
 	| { kind: "cleared"; clear: NotificationClear };
 
@@ -380,7 +380,7 @@ export function createNotificationsTransport(
 						title: event.notification.title,
 						body: event.notification.body || undefined,
 						type: event.notification.type,
-						watched: isWatchingNeedsInputSession(event.notification, getVisibleAgentSessionId()),
+						watched: event.watched,
 					});
 				}
 			};
@@ -487,7 +487,11 @@ export function createNotificationsTransport(
 					source.addEventListener("notification_created", (event) => {
 						const notification = parseNotificationEvent(event);
 						if (!notification) return;
-						receiveLiveNotificationEvent({ kind: "created", notification });
+						receiveLiveNotificationEvent({
+							kind: "created",
+							notification,
+							watched: isWatchingNeedsInputSession(notification, getVisibleAgentSessionId()),
+						});
 					});
 					// AO closed the underlying issue (the session got its input, the
 					// PR stopped waiting on a merge). Patch the row live so an open
