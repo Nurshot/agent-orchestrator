@@ -47,22 +47,13 @@ func TestOpenPreMigratedRejectsNewEmptyDatabase(t *testing.T) {
 func TestOpenPreMigratedRejectsStaleMigrationVersion(t *testing.T) {
 	dataDir := t.TempDir()
 
-	// Create a database and migrate to a version behind the current one.
-	db, err := openRawDB(dataDir)
-	if err != nil {
-		t.Fatalf("open raw db: %v", err)
-	}
-	defer func() { _ = db.Close() }()
-
 	want, err := expectedMigrationVersion()
 	if err != nil {
 		t.Fatalf("expected migration version: %v", err)
 	}
-	// Migrate one version behind the latest.
-	upTo(t, db, want-1)
-
-	if err := db.Close(); err != nil {
-		t.Fatalf("close stale db: %v", err)
+	// Put a database one version behind the latest on disk.
+	if err := os.WriteFile(filepath.Join(dataDir, "ao.db"), migratedDatabaseSnapshot(t, want-1), 0o600); err != nil {
+		t.Fatalf("write stale db: %v", err)
 	}
 
 	_, err = OpenPreMigrated(dataDir)
