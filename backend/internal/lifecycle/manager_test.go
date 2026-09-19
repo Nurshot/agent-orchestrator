@@ -5202,8 +5202,12 @@ func TestPRObservation_ReviewCommentNudgesDedupPerComment(t *testing.T) {
 	comments := make([]domain.PullRequestComment, 0, reviewMaxNudge+2)
 	for i := range reviewMaxNudge + 2 {
 		id := fmt.Sprintf("%d", i+1)
+		// Every comment shares one thread: the observer expands a thread into
+		// one row per comment, so this is the routine shape whenever a worker
+		// replies to a review comment without resolving it. Keying on the
+		// thread would collapse them all back into one dedup slot.
 		comments = append(comments, domain.PullRequestComment{
-			ID: id, ThreadID: "T" + id, Author: "alice", File: "foo.go", Line: i + 1,
+			ID: id, ThreadID: "T1", Author: "alice", File: "foo.go", Line: i + 1,
 			Body: "finding " + id, AutoInjectReview: true,
 		})
 	}

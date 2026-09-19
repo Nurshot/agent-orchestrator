@@ -279,12 +279,8 @@ func (m *Manager) ApplyPRObservation(ctx context.Context, id domain.SessionID, o
 				if sig == "" {
 					sig = string(o.Review)
 				}
-				// Key per comment, like the review loop below. One key for the
-				// whole PR would make these nudges share a dedup slot they each
-				// write a different signature to, so every poll re-sends the
-				// ones that are not the most recent -- and share the attempt
-				// budget, so a PR with more than reviewMaxNudge comments could
-				// never deliver the last of them at all.
+				// Per comment, like the review loop below: a shared key is a
+				// shared signature slot and a shared attempt budget.
 				nudges = append(nudges, pendingNudge{key: commentNudgeKey(o.URL, comment), sig: sig, msg: msg, maxAttempts: reviewMaxNudge})
 			}
 		}
@@ -389,19 +385,22 @@ func (m *Manager) sessionComplete(ctx context.Context, id domain.SessionID) (boo
 	return merged, nil
 }
 
-// mergeConflictKey is the reaction-dedup key for a PR's merge-conflict nudge.
-// The send path and the re-arm path share it so the two cannot drift.
-// commentNudgeKey identifies one review comment's nudge. Thread id is
-// preferred so that follow-up comments in a thread AO already nudged about do
-// not reopen it; a comment with no thread falls back to its own id.
+// commentNudgeKey identifies one review comment's nudge. It must be unique per
+// comment, not per thread: the observer expands a thread into one comment row
+// each (observer.go), all sharing the thread id, so keying on the thread would
+// put several comments with several signatures back in one dedup slot -- the
+// rotation this key exists to prevent. A comment with no id falls back to its
+// thread, which is still better than colliding with every other comment.
 func commentNudgeKey(prURL string, comment ports.PRCommentObservation) string {
-	id := strings.TrimSpace(comment.ThreadID)
+	id := strings.TrimSpace(comment.ID)
 	if id == "" {
-		id = strings.TrimSpace(comment.ID)
+		id = strings.TrimSpace(comment.ThreadID)
 	}
 	return "comment:" + prURL + ":" + id
 }
 
+// mergeConflictKey is the reaction-dedup key for a PR's merge-conflict nudge.
+// The send path and the re-arm path share it so the two cannot drift.
 func mergeConflictKey(prURL string) string { return "merge-conflict:" + prURL }
 
 // mergeabilityClearsConflict reports whether an observation positively
