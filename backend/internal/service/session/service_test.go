@@ -776,6 +776,27 @@ func TestListWorkspaceFilesHidesAOManagedStandaloneFiles(t *testing.T) {
 	}
 }
 
+func TestListWorkspaceFilesHidesAOManagedStandaloneDirectoryContents(t *testing.T) {
+	workspace := t.TempDir()
+	writeWorkspaceFile(t, workspace, ".ao/.gitignore", "# managed by agent-orchestrator: AO hook files stay out of git status\n/.gitignore\n/hooks\n")
+	writeWorkspaceFile(t, workspace, ".ao/hooks/run.sh", "#!/bin/sh\n")
+	writeWorkspaceFile(t, workspace, "notes.txt", "user work\n")
+	st := newFakeStore()
+	st.sessions["standalone-1"] = domain.SessionRecord{
+		ID:       "standalone-1",
+		Kind:     domain.KindWorker,
+		Metadata: domain.SessionMetadata{WorkspacePath: workspace},
+	}
+
+	got, err := (&Service{store: st}).ListWorkspaceFiles(context.Background(), "standalone-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Files) != 1 || got.Files[0].Path != "notes.txt" {
+		t.Fatalf("standalone files = %#v, want only user-created notes.txt", got.Files)
+	}
+}
+
 func TestListWorkspaceFilesHidesAOManagedCopilotProfile(t *testing.T) {
 	workspace := t.TempDir()
 	writeWorkspaceFile(t, workspace, ".github/agents/ao-standalone-4.agent.md", "---\nname: ao-standalone-4\ntarget: github-copilot\n---\n\n<!-- managed by agent-orchestrator: copilot agent profile -->\n\nAO instructions\n")

@@ -1368,9 +1368,6 @@ func scratchWorkspaceFiles(root string) ([]WorkspaceFileSummary, bool, error) {
 			}
 			return nil
 		}
-		if entry.IsDir() {
-			return nil
-		}
 		dirPath := filepath.Dir(fullPath)
 		managed, ok := managedByDir[dirPath]
 		if !ok {
@@ -1378,6 +1375,12 @@ func scratchWorkspaceFiles(root string) ([]WorkspaceFileSummary, bool, error) {
 			managedByDir[dirPath] = managed
 		}
 		if _, hidden := managed[entry.Name()]; hidden {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if entry.IsDir() {
 			return nil
 		}
 		if scratchAOManagedCopilotProfile(path.Dir(rel), entry.Name(), fullPath) {
