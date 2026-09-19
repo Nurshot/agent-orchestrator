@@ -932,7 +932,9 @@ function addAgentModeChoice(
 	executionChoices: ChatConfigOption["choices"],
 	permissionChoices: ChatConfigOption["choices"],
 ): ChatConfigOption["choices"] {
-	if (executionChoices.some((choice) => executionChoiceMatches(choice, "agent"))) {
+	// OpenCode names its ordinary agent mode "build", so its catalog already has
+	// one and must not gain a synthetic duplicate.
+	if (executionChoices.some((choice) => executionChoiceMatches(choice, "agent|build"))) {
 		return executionChoices;
 	}
 	const standard = permissionChoices.find((choice) => choiceMatches(choice, "manual"))
