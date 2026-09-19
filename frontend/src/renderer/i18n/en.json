@@ -623,6 +623,7 @@
 	"newTask.titlePlaceholder": "Fix WebGL fallback renderer",
 	"newTask.titleRequired": "Title and brief are required.",
 	"newTask.unableToStart": "Unable to start task",
+	"standalone.workspaceName": "Scratchpad",
 	"notify.bell": "Notifications",
 	"notify.couldNotMarkAllRead": "Could not mark notifications read",
 	"notify.earlierLoadFailed": "Couldn’t load earlier notifications.",

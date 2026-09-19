@@ -640,6 +640,7 @@
 	"newTask.titlePlaceholder": "WebGL-Fallback-Renderer reparieren",
 	"newTask.titleRequired": "Titel und Briefing sind erforderlich.",
 	"newTask.unableToStart": "Aufgabe konnte nicht gestartet werden",
+	"standalone.workspaceName": "Notizblock",
 	"notify.all": "Alle",
 	"notify.bell": "Benachrichtigungen",
 	"notify.couldNotMarkAllRead": "Benachrichtigungen konnten nicht als gelesen markiert werden",

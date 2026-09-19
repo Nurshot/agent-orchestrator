@@ -207,6 +207,30 @@ func TestListWorkspaceTreeHidesDirectoriesContainingOnlyAOManagedFiles(t *testin
 	}
 }
 
+func TestListWorkspaceTreeHidesAOManagedSymlink(t *testing.T) {
+	root := t.TempDir()
+	writeWorkspaceFile(t, root, ".kimi/.gitignore", aoManagedGitignoreSentinel+"\n/.gitignore\n/AGENTS.md\n")
+	writeWorkspaceFile(t, root, "notes.txt", "user work\n")
+	if err := os.Symlink(filepath.Join("..", "notes.txt"), filepath.Join(root, ".kimi", "AGENTS.md")); err != nil {
+		t.Skipf("creating managed symlink: %v", err)
+	}
+
+	st := newFakeStore()
+	st.sessions["standalone-1"] = domain.SessionRecord{
+		ID:       "standalone-1",
+		Kind:     domain.KindWorker,
+		Metadata: domain.SessionMetadata{WorkspacePath: root},
+	}
+
+	tree, err := (&Service{store: st}).ListWorkspaceTree(context.Background(), "standalone-1", ".kimi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tree.Entries) != 0 {
+		t.Fatalf("standalone .kimi entries = %#v, want managed symlink hidden", tree.Entries)
+	}
+}
+
 func TestListWorkspaceTreeHidesAOManagedCopilotProfileDirectory(t *testing.T) {
 	root := t.TempDir()
 	writeWorkspaceFile(t, root, ".github/agents/ao-standalone-4.agent.md", "---\nname: ao-standalone-4\ntarget: github-copilot\n---\n\n"+aoManagedCopilotProfileSentinel+"\n\nAO instructions\n")

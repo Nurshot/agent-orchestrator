@@ -642,6 +642,7 @@
 	"newTask.titlePlaceholder": "Corregir el renderizador de respaldo de WebGL",
 	"newTask.titleRequired": "El título y la descripción son obligatorios.",
 	"newTask.unableToStart": "No se pudo iniciar la tarea",
+	"standalone.workspaceName": "Bloc de notas",
 	"notify.all": "Todas",
 	"notify.bell": "Notificaciones",
 	"notify.couldNotMarkAllRead": "No se pudieron marcar las notificaciones como leídas",

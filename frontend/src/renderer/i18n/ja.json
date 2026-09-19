@@ -640,6 +640,7 @@
 	"newTask.titlePlaceholder": "WebGL フォールバックレンダラーを修正",
 	"newTask.titleRequired": "タイトルとブリーフは必須です。",
 	"newTask.unableToStart": "タスクを開始できません",
+	"standalone.workspaceName": "スクラッチパッド",
 	"notify.all": "すべて",
 	"notify.bell": "通知",
 	"notify.couldNotMarkAllRead": "すべての通知を既読にできませんでした",

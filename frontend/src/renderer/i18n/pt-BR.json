@@ -642,6 +642,7 @@
 	"newTask.titlePlaceholder": "Corrigir renderer de fallback WebGL",
 	"newTask.titleRequired": "Título e briefing são obrigatórios.",
 	"newTask.unableToStart": "Não foi possível iniciar a tarefa",
+	"standalone.workspaceName": "Bloco de notas",
 	"notify.all": "Todas",
 	"notify.bell": "Notificações",
 	"notify.couldNotMarkAllRead": "Não foi possível marcar as notificações como lidas",
