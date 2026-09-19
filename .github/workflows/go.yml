@@ -33,7 +33,13 @@ jobs:
           # Read the version from go.mod so CI can't drift from the module
           # (it previously pinned 1.22 while go.mod declared 1.25).
           go-version-file: backend/go.mod
-          cache: false
+          # Restore the module and build caches. `go test -race ./...` rebuilds
+          # every dependency with race instrumentation, and modernc.org/sqlite
+          # alone is minutes of that on a 4-vCPU runner: the SQLite package did
+          # not start until ~5 minutes into a 20-minute Test step. The cache is
+          # keyed on go.sum, so a dependency bump still gets a cold, correct
+          # build.
+          cache-dependency-path: backend/go.sum
 
       - name: Check formatting
         run: |
@@ -72,7 +78,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: backend/go.mod
-          cache: false
+          cache-dependency-path: backend/go.sum
 
       # Scoped to teardown and kill by name rather than running these packages
       # whole: running them on Windows for the first time surfaced ten
@@ -110,7 +116,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: cloud/go.mod
-          cache: false
+          cache-dependency-path: cloud/go.sum
 
       - name: Check formatting
         run: |
