@@ -64,7 +64,7 @@ import {
 } from "../hooks/useSessionInterfaceTransition";
 import { useAgentSwitchRouteVisibility } from "../hooks/useAgentSwitchVisibility";
 import { useWorkspaceSession, workspaceQueryKey } from "../hooks/useWorkspaceQuery";
-import { useProjectSummary } from "../hooks/useProjectSummary";
+import { supportsProjectSummary, useProjectSummary } from "../hooks/useProjectSummary";
 import { cloudLifecycleStage, type CloudLifecycleStage } from "../lib/cloud-lifecycle";
 import { useCloudCp } from "../hooks/useCloudCp";
 import { useSessionHandoffMenu } from "../hooks/useSessionHandoffMenu";
@@ -1155,7 +1155,8 @@ export function SessionView({ sessionId }: SessionViewProps) {
 		);
 	}, [availableReviewerTerminal, reviewerQuery.isFetched]);
 	const isOrchestrator = session ? isOrchestratorSession(session) : false;
-	const projectSummary = useProjectSummary(session?.workspaceId ?? "", isOrchestrator);
+	const projectSummarySupported = isOrchestrator && supportsProjectSummary(session?.provider);
+	const projectSummary = useProjectSummary(session?.workspaceId ?? "", projectSummarySupported);
 	const projectSummaryAttention = projectSummary.data?.needsAttention.length ?? 0;
 	const hasInspector = Boolean(session);
 	const sizing = useMemo(() => inspectorSizing(inspectorView), [inspectorView]);
@@ -2100,7 +2101,7 @@ export function SessionView({ sessionId }: SessionViewProps) {
 						/>
 					</SessionInspectorRail>
 				) : null}
-				{isOrchestrator && projectSummaryOpen && session ? <ProjectSummaryPanel key={session.workspaceId} onClose={() => setProjectSummaryOpen(false)} orchestrator={session} /> : null}
+				{projectSummarySupported && projectSummaryOpen && session ? <ProjectSummaryPanel key={session.workspaceId} onClose={() => setProjectSummaryOpen(false)} orchestrator={session} /> : null}
 			</div>
 			{hasInspector ? (
 				<div className="session-pinned-actions" data-testid="session-pinned-actions" style={noDragStyle}>
@@ -2139,7 +2140,7 @@ export function SessionView({ sessionId }: SessionViewProps) {
 								: isInspectorOpen ? t("shell.closeInspectorTitle") : t("shell.openInspectorTitle")}
 						</TooltipContent>
 					</Tooltip>
-					{isOrchestrator ? (
+					{projectSummarySupported ? (
 						<TopbarButton aria-label={projectSummaryOpen ? t("projectSummary.close") : t("projectSummary.open")} aria-pressed={projectSummaryOpen} className="relative" onClick={handleToggleProjectSummary} variant="icon">
 							<PanelRight className="size-icon-md" aria-hidden="true" />
 							{projectSummaryAttention > 0 ? <span className="pointer-events-none absolute right-px top-px grid h-3 min-w-3 place-items-center rounded-full bg-warning px-0.5 font-mono text-[7px] font-semibold leading-none text-warning-foreground shadow-sm ring-1 ring-background" data-testid="project-summary-attention-badge">{projectSummaryAttention > 99 ? "99+" : projectSummaryAttention}</span> : null}

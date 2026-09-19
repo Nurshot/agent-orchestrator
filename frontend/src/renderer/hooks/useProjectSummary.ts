@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef } from "react";
 import type { components } from "../../api/schema";
 import { apiClient } from "../lib/api-client";
 import { usesPreviewWorkspaceData } from "../lib/preview-mode";
+import type { AgentProvider } from "../types/workspace";
 import { useWorkspaceQuery } from "./useWorkspaceQuery";
 
 type ProjectSummary = components["schemas"]["ProjectSummaryResponse"]["summary"];
@@ -20,6 +21,10 @@ function previewSummary(projectId: string): ProjectSummary {
 }
 
 export const projectSummaryQueryKey = (projectId: string) => ["project-summary", projectId] as const;
+
+export function supportsProjectSummary(provider: AgentProvider | undefined): boolean {
+	return provider === "codex" || provider === "claude-code";
+}
 
 export function useProjectSummary(projectId: string, enabled: boolean) {
 	const queryClient = useQueryClient();

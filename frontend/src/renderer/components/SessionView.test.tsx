@@ -3011,6 +3011,15 @@ describe("SessionView", () => {
 		expect(screen.getByRole("button", { name: "Open project summary" })).toBeInTheDocument();
 	});
 
+	it("hides project summary for an unsupported orchestrator", () => {
+		workerSession("sess-orch").provider = "grok";
+		render(<SessionView sessionId="sess-orch" />);
+
+		expect(screen.getByRole("button", { name: "Open Browser" })).toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Open project summary" })).not.toBeInTheDocument();
+		expect(screen.queryByTestId("project-summary-panel")).not.toBeInTheDocument();
+	});
+
 	it("switches from Browser to Project Summary and toggles Summary closed", async () => {
 		act(() => useUiStore.getState().setInspectorOpen("sess-orch", true));
 		render(<SessionView sessionId="sess-orch" />);
