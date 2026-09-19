@@ -201,3 +201,29 @@ func TestPrewarmSpawn_SpawnReusesTheWarmedFetch(t *testing.T) {
 		t.Fatalf("fetches after spawn = %d, want the warmed one reused", len(ws.fetches))
 	}
 }
+
+// A session whose asynchronous start was interrupted has no workspace path —
+// the same shape as the phantom seed rows reconcile now cleans up. It must not
+// be cleaned up: the user can see it, its failure explains itself, and its
+// queued messages are still in it. An empty brief makes this sharpest, because
+// that row also still matches the seed-state predicate that rollback deletes on.
+func TestReconcileLive_KeepsAnInterruptedAsyncSpawn(t *testing.T) {
+	m, st, _ := newChatManager(&recordingLauncher{})
+	st.sessions["mer-1"] = domain.SessionRecord{
+		ID: "mer-1", ProjectID: chatTestProject, Kind: domain.KindWorker,
+		Mode: domain.SessionModeChat, ProvisionState: domain.SessionProvisionFailed,
+		ProvisionError: "AO restarted before this session finished starting",
+	}
+
+	if err := m.reconcileLive(context.Background(), st.sessions["mer-1"]); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	stored, ok := st.sessions["mer-1"]
+	if !ok {
+		t.Fatal("reconcile deleted a failed asynchronous spawn the user can still see")
+	}
+	if stored.ProvisionState != domain.SessionProvisionFailed {
+		t.Fatalf("provision state = %q, want the failure preserved", stored.ProvisionState)
+	}
+}
