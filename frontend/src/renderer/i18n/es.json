@@ -993,7 +993,7 @@
 	"settings.language.de": "Deutsch",
 	"settings.language.ptBR": "Português (Brasil)",
 	"settings.models.agentDefault": "Predeterminado del agente",
-	"settings.models.autoRouteLabel": "Auto (enruta automáticamente)",
+	"settings.models.autoRouteLabel": "Auto",
 	"settings.models.browse": "Explorar",
 	"settings.models.custom": "Introducir ID del modelo…",
 	"settings.models.cantFind": "¿No encuentras tu modelo?",

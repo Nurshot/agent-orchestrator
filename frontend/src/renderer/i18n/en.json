@@ -1101,7 +1101,7 @@
 	"settings.language.saveFailed": "Could not save the language preference.",
 	"settings.language.zhCN": "Simplified Chinese",
 	"settings.models.agentDefault": "Agent default",
-	"settings.models.autoRouteLabel": "Auto (routes automatically)",
+	"settings.models.autoRouteLabel": "Auto",
 	"settings.models.browse": "Browse",
 	"settings.models.custom": "Enter model ID…",
 	"settings.models.cantFind": "Can’t find your model?",
