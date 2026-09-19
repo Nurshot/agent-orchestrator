@@ -60,7 +60,14 @@ jobs:
         # The complete SQLite migration suite exceeded 15m under the race
         # detector on the shared runner. Keep a bounded per-package timeout
         # with headroom for the full upgrade matrix; no tests are excluded.
-        run: go test -race -timeout=20m ./...
+        #
+        # -count=1 disables Go's test-result cache. The build cache restored
+        # above also carries test results between runs, and without this a run
+        # reported 158 of 170 packages as (cached) without executing them. The
+        # cache is content-aware for Go inputs but not for the things these
+        # tests actually touch — subprocesses, PATH contents, the network — so
+        # a required check must still run every test. Compilation stays cached.
+        run: go test -race -count=1 -timeout=20m ./...
 
   # The suite above only ever runs on Linux, so the packages whose behaviour is
   # genuinely platform-specific have never been exercised on Windows: worktree
@@ -86,18 +93,18 @@ jobs:
       # and branch namespacing) that have nothing to do with worktree teardown.
       # Widening this is worth doing, but as its own change with its own fixes.
       - name: Test SQLite filesystem path identity
-        run: go test -race -run 'Test(OpenPreservesDataDirectoryCharacters|FragmentPathsKeepDatabasesIsolated|OpenRefusesToHideLegacyDatabase|OpenPrefersExistingIntendedDatabase|DatabaseURIPreservesWindowsPaths)$' ./internal/storage/sqlite
+        run: go test -race -count=1 -run 'Test(OpenPreservesDataDirectoryCharacters|FragmentPathsKeepDatabasesIsolated|OpenRefusesToHideLegacyDatabase|OpenPrefersExistingIntendedDatabase|DatabaseURIPreservesWindowsPaths)$' ./internal/storage/sqlite
 
       - name: Test workspace teardown and session kill
-        run: go test -race -v -run 'Destroy|Discard|Sweep|Kill' ./internal/adapters/workspace/... ./internal/session_manager/
+        run: go test -race -count=1 -v -run 'Destroy|Discard|Sweep|Kill' ./internal/adapters/workspace/... ./internal/session_manager/
 
       - name: Test Windows Chat environment precedence
-        run: go test -race ./internal/adapters/chatdriver/processenv/ ./internal/agentlaunch/
+        run: go test -race -count=1 ./internal/adapters/chatdriver/processenv/ ./internal/agentlaunch/
 
       - name: Test Windows background agent commands have no console
-        run: go test -race -run '^TestBackgroundCommandHasNoConsole$' ./internal/adapters/agent/pi ./internal/adapters/agent/omp ./internal/adapters/agent/primeagent
+        run: go test -race -count=1 -run '^TestBackgroundCommandHasNoConsole$' ./internal/adapters/agent/pi ./internal/adapters/agent/omp ./internal/adapters/agent/primeagent
       - name: Test Windows mobile tunnel subprocesses
-        run: go test -race -run 'Cloudflared|Tunnel|Command' ./internal/mobilebridge/ ./internal/process/
+        run: go test -race -count=1 -run 'Cloudflared|Tunnel|Command' ./internal/mobilebridge/ ./internal/process/
 
       - name: Test native Goose identity
         run: go test -race -count=1 -timeout=10m ./internal/adapters/agent/binaryutil ./internal/adapters/agent/goose
@@ -134,7 +141,9 @@ jobs:
         run: go vet ./...
 
       - name: Test
-        run: go test -race ./...
+        # -count=1 for the same reason as build-test: the restored build cache
+        # would otherwise replay test results from an earlier run.
+        run: go test -race -count=1 ./...
 
   lint:
     runs-on: ubuntu-latest
