@@ -68,14 +68,3 @@ func TestConfigureDeliversModelThroughLaunchEnv(t *testing.T) {
 		t.Fatalf("env = %#v, want %#v", env, wantEnv)
 	}
 }
-
-func TestSessionOptionsUseModelConfigOption(t *testing.T) {
-	if got := sessionOptions(ports.ChatTurnSettings{}); len(got) != 0 {
-		t.Fatalf("empty settings = %#v", got)
-	}
-	got := sessionOptions(ports.ChatTurnSettings{Model: "anthropic/claude-sonnet-4"})
-	want := []acpdriver.SessionOption{{ID: "model", Value: "anthropic/claude-sonnet-4"}}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("options = %#v, want %#v", got, want)
-	}
-}

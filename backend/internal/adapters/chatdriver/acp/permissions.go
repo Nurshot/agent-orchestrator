@@ -2,6 +2,7 @@ package acp
 
 import (
 	"fmt"
+	"strings"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
@@ -105,4 +106,15 @@ func ApprovalFixedAtLaunch(
 			"%w: %s is fixed at process launch (%s); restart Chat to run it in %s",
 			ErrACPSetterUnsupported, subject, launched, requested)
 	}
+}
+
+// ModelOption is the session selector for AO's durable model choice, which most
+// bindings advertise under the config id "model". A binding with further
+// selectors appends to it.
+func ModelOption(settings ports.ChatTurnSettings) []SessionOption {
+	model := strings.TrimSpace(settings.Model)
+	if model == "" {
+		return nil
+	}
+	return []SessionOption{{ID: "model", Value: model}}
 }

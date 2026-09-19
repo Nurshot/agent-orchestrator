@@ -56,10 +56,7 @@ func configure(_ context.Context, cfg acpdriver.LaunchConfig) ([]string, map[str
 // advertises selects with ids "model", "effort", and "mode"; "mode" is Kilo's
 // agent mode (code/architect/...), not an approval mode, so AO leaves it alone.
 func sessionOptions(settings ports.ChatTurnSettings) []acpdriver.SessionOption {
-	options := make([]acpdriver.SessionOption, 0, 2)
-	if model := strings.TrimSpace(settings.Model); model != "" {
-		options = append(options, acpdriver.SessionOption{ID: "model", Value: model})
-	}
+	options := acpdriver.ModelOption(settings)
 	if effort := strings.TrimSpace(settings.Effort); effort != "" {
 		options = append(options, acpdriver.SessionOption{ID: "effort", Value: effort})
 	}

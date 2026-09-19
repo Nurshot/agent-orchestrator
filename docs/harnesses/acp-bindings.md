@@ -97,23 +97,3 @@ depends on it.
 | Muse | third-party, unofficial | `@bex-co/muse-code-acp` is an unofficial community adapter for Meta's `muse` CLI; Meta publishes no first-party ACP server. | Not implemented: no first-party protocol and no local binary to validate the community adapter. |
 | Prime Agent | ACP | `prime-agent --mode acp`; `packages/coding-agent/src/modes/acp`. | Implemented. |
 | Autohand | ACP | Vendor-published `@autohandai/autohand-acp` adapter. | Implemented. |
-
-## Open PRs that also close a harness gap
-
-Audited against `main`; each registers its harness in the chat-driver registry.
-
-- **#5019 Qwen Code Chat UI (native ACP)** — merged. The Qwen gap is closed on
-  `main`; `qwenacp` is in the registry and this branch carries it through the
-  merge.
-- **#5403 GitHub Copilot ACP chat driver** — closes the Copilot gap. Adds a
-  self-contained `copilotacp` binding plus the `LaunchSessionOptions` seam in
-  the shared ACP/native ACP transports and the Copilot adapter helpers it needs.
-  Concrete missing integration: no CI checks have run on the branch. It is
-  mergeable, so it needs a push/CI run and review rather than code changes.
-- **#3989 Agy Chat driver over stream-json** — closes the Agy gap with a native
-  stream-json driver plus CLI/HTTP hook plumbing. Concrete missing integration:
-  the branch is `CONFLICTING`/`DIRTY` against `main` and has no CI checks. It
-  was based on an older `main` whose registry comment predates the Claude, Kimi,
-  Kimchi, Pi, Cursor, and OMP bindings, so it needs a rebase and a CI run.
-
-The two still open are intentionally not duplicated by this change.

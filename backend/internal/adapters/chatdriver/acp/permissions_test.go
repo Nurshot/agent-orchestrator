@@ -2,6 +2,7 @@ package acp
 
 import (
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -132,5 +133,19 @@ func TestApprovalFixedAtLaunchAcceptsModesThatLaunchedIdentically(t *testing.T) 
 	if err := validate(ports.PermissionModeAuto,
 		ports.ChatTurnSettings{Approval: ports.PermissionModeDefault}); !errors.Is(err, ErrACPSetterUnsupported) {
 		t.Fatalf("err = %v, want ErrACPSetterUnsupported for a mode that launches differently", err)
+	}
+}
+
+func TestModelOptionSelectsAdvertisedModel(t *testing.T) {
+	if got := ModelOption(ports.ChatTurnSettings{}); got != nil {
+		t.Fatalf("no model = %#v, want nil so the session keeps the provider default", got)
+	}
+	if got := ModelOption(ports.ChatTurnSettings{Model: "  "}); got != nil {
+		t.Fatalf("blank model = %#v, want nil", got)
+	}
+	got := ModelOption(ports.ChatTurnSettings{Model: "anthropic/claude-sonnet-4"})
+	want := []SessionOption{{ID: "model", Value: "anthropic/claude-sonnet-4"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("options = %#v, want %#v", got, want)
 	}
 }

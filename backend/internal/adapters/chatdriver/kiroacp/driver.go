@@ -10,7 +10,6 @@ package kiroacp
 import (
 	"context"
 	"log/slog"
-	"strings"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/agent/kiro"
 	acpdriver "github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/acp"
@@ -34,7 +33,7 @@ func New(plugin nativeacp.Plugin, log *slog.Logger) ports.ChatDriver {
 		Configure: configure,
 		PermissionPolicy: acpdriver.StandardPermissionPolicy(
 			ports.PermissionModeAuto, ports.PermissionModeBypassPermissions),
-		SessionOptions: sessionOptions,
+		SessionOptions: acpdriver.ModelOption,
 	}, log)
 }
 
@@ -45,13 +44,4 @@ func New(plugin nativeacp.Plugin, log *slog.Logger) ports.ChatDriver {
 // permissions through ACP requests instead of guessing a launch flag.
 func configure(_ context.Context, _ acpdriver.LaunchConfig) ([]string, map[string]string, error) {
 	return []string{"acp", "--agent", kiro.AgentName}, nil, nil
-}
-
-// sessionOptions maps AO's durable model choice onto Kiro's advertised
-// session/set_model selector.
-func sessionOptions(settings ports.ChatTurnSettings) []acpdriver.SessionOption {
-	if model := strings.TrimSpace(settings.Model); model != "" {
-		return []acpdriver.SessionOption{{ID: "model", Value: model}}
-	}
-	return nil
 }

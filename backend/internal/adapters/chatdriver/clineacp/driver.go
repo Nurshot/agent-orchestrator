@@ -27,7 +27,7 @@ func New(plugin nativeacp.Plugin, log *slog.Logger) ports.ChatDriver {
 		Harness:              domain.HarnessCline,
 		Configure:            configure,
 		PermissionPolicy:     acpdriver.StandardPermissionPolicy(),
-		SessionOptions:       sessionOptions,
+		SessionOptions:       acpdriver.ModelOption,
 		ValidateTurnSettings: acpdriver.ApprovalFixedAtLaunch("Cline ACP auto-approval", nil),
 	}, log)
 }
@@ -52,14 +52,4 @@ func configure(_ context.Context, cfg acpdriver.LaunchConfig) ([]string, map[str
 		return args, map[string]string{"CLINE_MODEL": model}, nil
 	}
 	return args, nil, nil
-}
-
-// sessionOptions maps AO's durable model choice onto Cline's advertised "model"
-// config option. The generic transport routes it through
-// session/set_config_option.
-func sessionOptions(settings ports.ChatTurnSettings) []acpdriver.SessionOption {
-	if model := strings.TrimSpace(settings.Model); model != "" {
-		return []acpdriver.SessionOption{{ID: "model", Value: model}}
-	}
-	return nil
 }

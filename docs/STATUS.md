@@ -77,11 +77,9 @@ surface (`npm run sqlc`, `npm run api`).
   independently installed pi-acp adapter does not enforce approval modes, so AO
   admits Pi Chat only after the user explicitly chooses the per-session
   bypass-permissions fallback. The binding reuses the existing Pi config
-  environment and auth probe and is never downloaded by AO. Prime Agent's ACP
-  profile likewise has no permission requests and no native history load, so it
-  is admitted through the same explicit bypass fallback. AO reuses each
-  harness's existing
-  binary/auth/environment resolution and does not bundle provider CLIs. Cursor
+  environment and auth probe and is never downloaded by AO. AO reuses each
+  harness's existing binary/auth/environment resolution and does not bundle
+  provider CLIs. Cursor
   is Chat-only until its ACP and TUI conversation ids are proven to share identity.
   Per-binding launch shapes, permission mappings, standing-instruction handling,
   and the TUI-only harness blocker matrix are in

@@ -32,11 +32,9 @@ import (
 func New(plugin nativeacp.Plugin, log *slog.Logger) ports.ChatDriver {
 	return nativeacp.New(plugin, nativeacp.Config{
 		Harness: domain.HarnessPrimeAgent,
+		// Only the two that differ from nativeacp's defaults.
 		Capabilities: ports.ChatCapabilities{
-			ports.ChatCapabilityStreaming: true,
-			ports.ChatCapabilityTools:     true,
 			ports.ChatCapabilityApprovals: false,
-			ports.ChatCapabilityInterrupt: true,
 			ports.ChatCapabilityResume:    false,
 		},
 		Configure: configure,
