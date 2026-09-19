@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/aoagents/agent-orchestrator/backend/internal/processalive"
 )
 
 const (
@@ -59,11 +61,12 @@ type Endpoint struct {
 }
 
 type Config struct {
-	StateDir   string
-	Binary     string
-	HTTPClient *http.Client
-	Logger     *slog.Logger
-	launch     launchProcess
+	StateDir     string
+	Binary       string
+	HTTPClient   *http.Client
+	Logger       *slog.Logger
+	launch       launchProcess
+	processAlive func(int) bool
 }
 
 type Supervisor struct {
@@ -71,6 +74,7 @@ type Supervisor struct {
 	client *http.Client
 	log    *slog.Logger
 	launch launchProcess
+	alive  func(int) bool
 	once   sync.Once
 
 	mu       sync.RWMutex
@@ -104,7 +108,11 @@ func New(cfg Config) *Supervisor {
 	if launch == nil {
 		launch = launchRunnerProcess
 	}
-	return &Supervisor{cfg: cfg, client: client, log: log, launch: launch, status: Status{State: StateStarting}}
+	alive := cfg.processAlive
+	if alive == nil {
+		alive = processalive.Alive
+	}
+	return &Supervisor{cfg: cfg, client: client, log: log, launch: launch, alive: alive, status: Status{State: StateStarting}}
 }
 
 func (s *Supervisor) Start(ctx context.Context) {
@@ -275,7 +283,7 @@ func (s *Supervisor) maintainSpawned(ctx context.Context, record RuntimeRecord, 
 }
 
 func (s *Supervisor) tryAttach(ctx context.Context, record RuntimeRecord, controlKey, clientKey string) (Endpoint, bool) {
-	if record.Port < 1 || record.Port > 65535 || record.InstanceID == "" || controlKey == "" || clientKey == "" {
+	if !s.alive(record.PID) || record.Port < 1 || record.Port > 65535 || record.InstanceID == "" || controlKey == "" || clientKey == "" {
 		return Endpoint{}, false
 	}
 	baseURL := "http://127.0.0.1:" + strconv.Itoa(record.Port)

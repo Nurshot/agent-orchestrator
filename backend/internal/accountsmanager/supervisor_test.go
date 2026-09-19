@@ -136,8 +136,30 @@ func TestTryAttachRejectsIdentityMismatch(t *testing.T) {
 	port := server.Listener.Addr().(*net.TCPAddr).Port
 
 	s := New(Config{HTTPClient: server.Client()})
-	if _, ok := s.tryAttach(context.Background(), RuntimeRecord{Port: port, InstanceID: "expected"}, "control", "client"); ok {
+	if _, ok := s.tryAttach(context.Background(), RuntimeRecord{PID: os.Getpid(), Port: port, InstanceID: "expected"}, "control", "client"); ok {
 		t.Fatal("tryAttach() accepted an identity mismatch")
+	}
+}
+
+func TestTryAttachRejectsDeadRuntimePIDBeforeContactingPort(t *testing.T) {
+	t.Parallel()
+
+	identityCalls := 0
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ao/internal/identity", func(w http.ResponseWriter, _ *http.Request) {
+		identityCalls++
+		_ = json.NewEncoder(w).Encode(controlIdentity{Service: serviceName, InstanceID: "stale-instance"})
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	port := server.Listener.Addr().(*net.TCPAddr).Port
+
+	s := New(Config{HTTPClient: server.Client(), processAlive: func(int) bool { return false }})
+	if _, ok := s.tryAttach(context.Background(), RuntimeRecord{PID: 424242, Port: port, InstanceID: "stale-instance"}, "control", "client"); ok {
+		t.Fatal("tryAttach() accepted a runtime record whose PID is dead")
+	}
+	if identityCalls != 0 {
+		t.Fatalf("identity calls = %d, want 0 for a dead PID", identityCalls)
 	}
 }
 
