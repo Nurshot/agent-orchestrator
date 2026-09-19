@@ -17,6 +17,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
+
 	"github.com/aoagents/agent-orchestrator/backend/internal/httpd/apierr"
 )
 
@@ -87,6 +89,10 @@ type Service struct {
 
 	mu      sync.Mutex
 	entries map[string]cacheEntry
+
+	// flight dedups concurrent fetches of the same URL so a burst of hovers
+	// costs one upstream round-trip, not one per caller.
+	flight singleflight.Group
 }
 
 // New returns a Service. A nil client gets the default: a short timeout, a
@@ -112,7 +118,9 @@ func New(client *http.Client) *Service {
 
 // Preview returns the cached or freshly fetched metadata for rawURL. rawURL
 // must be an absolute http or https URL; anything else is a 400-class error.
-// Failures are cached under a shorter TTL than successes.
+// Failures are cached under a shorter TTL than successes. Concurrent calls
+// for the same URL share a single upstream fetch via singleflight; that fetch
+// runs under the first caller's context.
 func (s *Service) Preview(ctx context.Context, rawURL string) (Preview, error) {
 	pageURL, err := validateURL(rawURL)
 	if err != nil {
@@ -122,9 +130,19 @@ func (s *Service) Preview(ctx context.Context, rawURL string) (Preview, error) {
 	if e, ok := s.lookup(key); ok {
 		return e.result()
 	}
-	p, failure, err := s.fetch(ctx, pageURL)
-	s.store(key, cacheEntry{preview: p, failure: failure, fetchedAt: s.now()})
-	return p, err
+	v, err, _ := s.flight.Do(key, func() (any, error) {
+		p, failure, fetchErr := s.fetch(ctx, pageURL)
+		s.store(key, cacheEntry{preview: p, failure: failure, fetchedAt: s.now()})
+		return p, fetchErr
+	})
+	if err != nil {
+		return Preview{}, err
+	}
+	p, ok := v.(Preview)
+	if !ok {
+		return Preview{}, apierr.Internal("INTERNAL_ERROR", "unexpected link preview result type")
+	}
+	return p, nil
 }
 
 // result replays a cached entry as a (Preview, error) pair.
@@ -166,23 +184,28 @@ func (s *Service) fetch(ctx context.Context, pageURL *url.URL) (Preview, failure
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return Preview{}, failureFetch, fmt.Errorf("%w: upstream status %d", ErrFetchFailed, resp.StatusCode)
 	}
-	if ct := resp.Header.Get("Content-Type"); ct != "" {
-		mediatype, _, err := mime.ParseMediaType(ct)
-		if err != nil || (mediatype != "text/html" && mediatype != "application/xhtml+xml") {
-			return Preview{}, failureNotFound, errNotHTML
-		}
+	ct := resp.Header.Get("Content-Type")
+	if ct == "" {
+		// No Content-Type at all: do not guess — a binary would otherwise be
+		// cached for 30 minutes as an empty "success" card.
+		return Preview{}, failureNotFound, errNotHTML
+	}
+	mediatype, _, err := mime.ParseMediaType(ct)
+	if err != nil || (mediatype != "text/html" && mediatype != "application/xhtml+xml") {
+		return Preview{}, failureNotFound, errNotHTML
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
 	if err != nil {
 		return Preview{}, failureFetch, fmt.Errorf("%w: %w", ErrFetchFailed, err)
 	}
 
-	// Resolve relative references against the final URL, not the requested
-	// one, so a redirect does not mis-root og:image.
+	// Resolve relative references — and the preview's own URL — against the
+	// final post-redirect URL, so a shortener (t.co etc.) shows the target's
+	// site, not the shortener's.
 	base := resp.Request.URL
 	meta := parseHead(body)
 	p := Preview{
-		URL:         pageURL.String(),
+		URL:         base.String(),
 		Title:       firstNonEmpty(meta.ogTitle, meta.title),
 		Description: firstNonEmpty(meta.ogDescription, meta.description),
 		SiteName:    meta.ogSiteName,
@@ -299,9 +322,18 @@ func parseHead(doc []byte) headMeta {
 		case bytes.HasPrefix(rest, []byte("<!--")):
 			end := bytes.Index(rest[4:], []byte("-->"))
 			if end < 0 {
-				return m
+				// Unterminated comment: skip only the opener so tags after it
+				// are still found, rather than abandoning the rest of the head.
+				i += len("<!--")
+				continue
 			}
 			i += 4 + end + 3
+		case tagOpens(rest, "script"):
+			// Raw-text elements can contain literal "<meta ...>" strings that
+			// must never win via first-writer-wins.
+			i = skipRawTextElement(doc, i, "script")
+		case tagOpens(rest, "style"):
+			i = skipRawTextElement(doc, i, "style")
 		case tagOpens(rest, "meta"):
 			attrs, after := parseTag(doc, i)
 			applyMeta(&m, attrs)
@@ -334,6 +366,22 @@ func headRegion(doc []byte) []byte {
 		return doc[:i]
 	}
 	return doc
+}
+
+// skipRawTextElement returns the offset just past the close tag of the
+// raw-text element (script/style) opening at doc[start]. An unterminated
+// element skips to the end of the document.
+func skipRawTextElement(doc []byte, start int, name string) int {
+	_, tagEnd := parseTag(doc, start)
+	closeAt := indexFold(doc[tagEnd:], "</"+name)
+	if closeAt < 0 {
+		return len(doc)
+	}
+	gt := bytes.IndexByte(doc[tagEnd+closeAt:], '>')
+	if gt < 0 {
+		return len(doc)
+	}
+	return tagEnd + closeAt + gt + 1
 }
 
 // indexFold finds sub in b, ASCII case-insensitively.

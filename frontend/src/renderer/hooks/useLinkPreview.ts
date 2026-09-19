@@ -31,7 +31,8 @@ type LinkPreviewResult = {
  * Uses the shared queryClient imperatively rather than useQuery so AppLink —
  * which renders in many provider-less contexts — stays safe everywhere. The
  * cache/dedupe semantics are identical: one entry per URL, fresh for the
- * session. Errors surface as `isError` and mean "no preview".
+ * session. Errors surface as `isError` and mean "no preview" for the current
+ * hover; they are cleared when the hook is disabled so the next hover retries.
  *
  * Results are keyed by URL: callers like XtermTerminal reuse one hook instance
  * while the hovered URL changes, so state from a previous URL must never be
@@ -45,7 +46,14 @@ export function useLinkPreview(url: string, enabled: boolean) {
 	}));
 
 	useEffect(() => {
-		if (!enabled) return;
+		if (!enabled) {
+			// A failure only suppresses the preview for the current hover. Clearing it
+			// on disable lets the next hover retry — transient daemon/upstream blips
+			// must not kill previews for this component's lifetime. Successes are
+			// untouched: they keep serving from the queryClient cache below.
+			if (result.url === url && result.isError) setResult({ url, isError: false });
+			return;
+		}
 		if (result.url === url && (result.data !== undefined || result.isError)) return;
 		if (queryClient.getQueryData<LinkPreview>(linkPreviewQueryKey(url)) !== undefined) {
 			setResult({ url, data: queryClient.getQueryData<LinkPreview>(linkPreviewQueryKey(url)), isError: false });

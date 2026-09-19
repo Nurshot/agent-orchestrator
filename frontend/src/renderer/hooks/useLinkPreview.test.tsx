@@ -54,4 +54,42 @@ describe("useLinkPreview", () => {
 		await waitFor(() => expect(result.current.isError).toBe(true));
 		expect(result.current.data).toBeUndefined();
 	});
+
+	it("refetches a failed URL when re-enabled after being disabled", async () => {
+		// A transient blip on first hover must not permanently kill previews for
+		// this component: leaving and returning retries the same URL.
+		const url = "https://retry.example.test/";
+		getMock.mockResolvedValue({ data: undefined, error: { message: "upstream down" } });
+
+		const { result, rerender } = renderHook(({ enabled }) => useLinkPreview(url, enabled), {
+			initialProps: { enabled: true },
+		});
+		await waitFor(() => expect(result.current.isError).toBe(true));
+		expect(getMock).toHaveBeenCalledTimes(1);
+
+		rerender({ enabled: false });
+		await waitFor(() => expect(result.current.isError).toBe(false));
+		expect(getMock).toHaveBeenCalledTimes(1);
+
+		rerender({ enabled: true });
+		await waitFor(() => expect(result.current.isError).toBe(true));
+		expect(getMock).toHaveBeenCalledTimes(2);
+	});
+
+	it("serves a succeeded URL from cache when re-enabled without refetching", async () => {
+		const url = "https://cached-hit.example.test/";
+		getMock.mockResolvedValue({ data: { url, title: "Cached" }, error: undefined });
+
+		const { result, rerender } = renderHook(({ enabled }) => useLinkPreview(url, enabled), {
+			initialProps: { enabled: true },
+		});
+		await waitFor(() => expect(result.current.data?.url).toBe(url));
+		expect(getMock).toHaveBeenCalledTimes(1);
+
+		rerender({ enabled: false });
+		rerender({ enabled: true });
+		await waitFor(() => expect(result.current.data?.url).toBe(url));
+		expect(result.current.isError).toBe(false);
+		expect(getMock).toHaveBeenCalledTimes(1);
+	});
 });

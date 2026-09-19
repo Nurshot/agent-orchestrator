@@ -222,3 +222,44 @@ func TestLinkPreviewWithoutServiceAnswers501(t *testing.T) {
 		t.Fatalf("got %d, want 501", res.StatusCode)
 	}
 }
+
+func TestLinkPreviewFollowsRedirectAndReportsFinalURL(t *testing.T) {
+	rig := newLinkPreviewRigWithHandler(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/short" {
+			http.Redirect(w, r, "/final", http.StatusFound)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = io.WriteString(w, ogPage)
+	})
+
+	res := rig.get(t, rig.origin.URL+"/short")
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("got %d, want 200", res.StatusCode)
+	}
+	got := decodeBody(t, res)
+	if got["url"] != rig.origin.URL+"/final" {
+		t.Errorf("url = %v, want the final post-redirect URL", got["url"])
+	}
+	// Assets resolve against the final URL too.
+	if got["imageUrl"] != rig.origin.URL+"/static/og.png" {
+		t.Errorf("imageUrl = %v", got["imageUrl"])
+	}
+}
+
+func TestLinkPreviewRejectsMissingContentType(t *testing.T) {
+	// Header()["Content-Type"] = nil suppresses net/http's sniffing, so the
+	// response really carries no Content-Type even though the body looks like HTML.
+	rig := newLinkPreviewRigWithHandler(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header()["Content-Type"] = nil
+		_, _ = io.WriteString(w, ogPage)
+	})
+
+	res := rig.get(t, rig.origin.URL+"/")
+	if res.StatusCode != http.StatusNotFound {
+		t.Fatalf("got %d, want 404", res.StatusCode)
+	}
+	if got := decodeBody(t, res); got["code"] != "LINK_PREVIEW_NOT_FOUND" {
+		t.Errorf("code = %v", got["code"])
+	}
+}
