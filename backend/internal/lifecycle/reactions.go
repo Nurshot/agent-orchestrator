@@ -279,7 +279,13 @@ func (m *Manager) ApplyPRObservation(ctx context.Context, id domain.SessionID, o
 				if sig == "" {
 					sig = string(o.Review)
 				}
-				nudges = append(nudges, pendingNudge{key: "comment:" + o.URL, sig: sig, msg: msg, maxAttempts: reviewMaxNudge})
+				// Key per comment, like the review loop below. One key for the
+				// whole PR would make these nudges share a dedup slot they each
+				// write a different signature to, so every poll re-sends the
+				// ones that are not the most recent -- and share the attempt
+				// budget, so a PR with more than reviewMaxNudge comments could
+				// never deliver the last of them at all.
+				nudges = append(nudges, pendingNudge{key: commentNudgeKey(o.URL, comment), sig: sig, msg: msg, maxAttempts: reviewMaxNudge})
 			}
 		}
 
@@ -385,6 +391,17 @@ func (m *Manager) sessionComplete(ctx context.Context, id domain.SessionID) (boo
 
 // mergeConflictKey is the reaction-dedup key for a PR's merge-conflict nudge.
 // The send path and the re-arm path share it so the two cannot drift.
+// commentNudgeKey identifies one review comment's nudge. Thread id is
+// preferred so that follow-up comments in a thread AO already nudged about do
+// not reopen it; a comment with no thread falls back to its own id.
+func commentNudgeKey(prURL string, comment ports.PRCommentObservation) string {
+	id := strings.TrimSpace(comment.ThreadID)
+	if id == "" {
+		id = strings.TrimSpace(comment.ID)
+	}
+	return "comment:" + prURL + ":" + id
+}
+
 func mergeConflictKey(prURL string) string { return "merge-conflict:" + prURL }
 
 // mergeabilityClearsConflict reports whether an observation positively
