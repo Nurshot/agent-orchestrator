@@ -951,7 +951,7 @@ func (s *Service) Send(
 		if err != nil {
 			return domain.ConversationTurn{}, fmt.Errorf("prepare worker reports: %w", err)
 		}
-		msg.Text = reports.PrefixUserMessage(msg.Text)
+		msg.Text = reports.AppendToUserMessage(msg.Text)
 	}
 	controller, err := s.Controller(id)
 	if err != nil {

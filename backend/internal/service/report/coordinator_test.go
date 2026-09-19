@@ -112,8 +112,10 @@ func TestCoordinatorAcceptanceAndPiggybackFencing(t *testing.T) {
 	if err != nil || len(batch.Reports) != 1 {
 		t.Fatalf("prepare = %#v, err = %v", batch, err)
 	}
-	if !strings.HasSuffix(batch.PrefixUserMessage("hello"), "User message:\nhello") {
-		t.Fatalf("piggyback text = %q", batch.PrefixUserMessage("hello"))
+	combined := batch.AppendToUserMessage("hello")
+	if !strings.HasPrefix(combined, "hello\n\n<ao-worker-reports>\n") ||
+		!strings.HasSuffix(combined, "\n</ao-worker-reports>") {
+		t.Fatalf("piggyback text = %q", combined)
 	}
 	if store.acked != 0 {
 		t.Fatal("claimed report acknowledged before acceptance")
