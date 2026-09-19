@@ -1581,12 +1581,12 @@ function overlayStyles(): string {
 		.element-header{
 			display:flex;flex:0 0 auto;align-items:center;justify-content:space-between;
 			border-bottom:1px solid var(--border);
-			padding:var(--pad) 10px;font-size:12px;
+			padding:var(--pad);font-size:12px;
 		}
 		.element-header strong{font-weight:600}
 		.adjustment-group{
 			display:flex;flex-direction:column;gap:var(--gap);
-			border-bottom:1px solid var(--border);padding:var(--pad) 0;
+			border-bottom:1px solid var(--border);padding:var(--pad);
 		}
 		/* One grid for every row: two field boxes and a trailing action cell, so
 		   fields, values and link buttons all land on the same edges. */
@@ -1675,13 +1675,13 @@ function overlayStyles(): string {
 		.link-button:not(:disabled):active{transform:scale(0.98)}
 		.link-button svg{width:16px;height:16px}
 		/* Collapsible section: the same pattern for Padding, Margin and Layout. */
-		/* The section container carries no x-padding either: only its heading is
-		   inset, so the rows inside it line up with the rows above. */
-		.panel-section{border-bottom:1px solid var(--border);padding:0}
+		/* Sections take the same inset as the groups, so every row in the panel
+		   shares one gutter and the heading sits on its edge. */
+		.panel-section{border-bottom:1px solid var(--border);padding:0 var(--pad)}
 		.panel-section summary{
 			display:flex;align-items:center;justify-content:space-between;gap:var(--gap);
 			cursor:pointer;color:var(--muted-fg);font-size:12px;font-weight:500;
-			padding:var(--pad) 10px;list-style:none;user-select:none;
+			padding:var(--pad) 0;list-style:none;user-select:none;
 			transition:color 120ms ease;
 		}
 		.panel-section summary:hover{color:var(--fg)}
