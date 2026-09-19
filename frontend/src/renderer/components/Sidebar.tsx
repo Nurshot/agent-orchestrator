@@ -58,6 +58,7 @@ import { IS_DEV } from "../lib/is-dev";
 import {
 	hasConfiguredOrchestratorAgent,
 	newestActiveOrchestrator,
+	sessionAgentExited,
 	openPRs,
 	type WorkspaceSession,
 	type WorkspaceSummary,
@@ -72,6 +73,7 @@ import { deriveSessionAgentSwitchPresentation } from "../lib/agent-switch-presen
 import { aoBridge } from "../lib/bridge";
 import { useCommandPaletteEnabled } from "../hooks/useCommandPaletteEnabled";
 import { cloudSessionsQueryKey, workspaceQueryKey } from "../hooks/useWorkspaceQuery";
+import { apiClient, apiErrorMessage } from "../lib/api-client";
 import { usePinSession, useUnpinSession } from "../hooks/usePinSession";
 import { spawnCloudOrchestrator } from "../lib/cloud-orchestrator";
 import { spawnOrchestrator } from "../lib/spawn-orchestrator";
@@ -1127,6 +1129,26 @@ const ProjectItem = memo(function ProjectItem({
 		if (isProjectProvisioning || isProjectRestarting) return;
 		if (!expanded) toggleDisclosure();
 		if (orchestrator) {
+			// An orchestrator whose agent exited still owns its worktree and native
+			// conversation. Clicking Orchestrator asks for a WORKING one, so resume
+			// it in place instead of landing on a dead terminal. Never automatic on
+			// the exit itself: the supervisor discards the exit code, so a quit is
+			// indistinguishable from a crash or a rate limit.
+			if (sessionAgentExited(orchestrator) && workspace.kind !== "cloud") {
+				setIsSpawning(true);
+				try {
+					const { error } = await apiClient.POST("/api/v1/sessions/{sessionId}/resume-agent", {
+						params: { path: { sessionId: orchestrator.id } },
+					});
+					// Already running: someone resumed it between render and click.
+					if (error && (error as { code?: string }).code !== "AGENT_NOT_EXITED") {
+						console.error("Failed to resume orchestrator:", apiErrorMessage(error));
+					}
+					await queryClient.invalidateQueries({ queryKey: workspaceQueryKey });
+				} finally {
+					setIsSpawning(false);
+				}
+			}
 			selection.goSession(workspace.id, orchestrator.id);
 			return;
 		}

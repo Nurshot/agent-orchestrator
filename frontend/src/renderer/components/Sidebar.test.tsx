@@ -562,6 +562,31 @@ describe("Sidebar", () => {
 		expect(spawnMock).not.toHaveBeenCalled();
 	});
 
+	// The sidebar owns its own openOrchestrator, separate from
+	// useProjectOrchestratorAction. Clicking Orchestrator on an orchestrator whose
+	// agent exited must resume it, not navigate to the dead terminal.
+	it("resumes an exited orchestrator instead of opening its dead terminal", async () => {
+		const user = userEvent.setup();
+		const exitedOrchestrator: WorkspaceSession = {
+			...session,
+			id: "proj-1-orch",
+			kind: "orchestrator",
+			status: "exited",
+			activity: { state: "exited", lastActivityAt: "2026-06-30T00:00:00Z" },
+			isTerminated: false,
+		};
+		renderSidebar({ workspaces: [{ ...workspace, sessions: [exitedOrchestrator] }] });
+
+		await user.click(screen.getByRole("button", { name: "Open Project One orchestrator" }));
+
+		await waitFor(() =>
+			expect(postMock).toHaveBeenCalledWith("/api/v1/sessions/{sessionId}/resume-agent", {
+				params: { path: { sessionId: "proj-1-orch" } },
+			}),
+		);
+		expect(spawnMock).not.toHaveBeenCalled();
+	});
+
 	it("does not spawn from the sidebar while the orchestrator is provisioning", async () => {
 		const user = userEvent.setup();
 		useUiStore.getState().setProjectProvisioning("proj-1", true);
