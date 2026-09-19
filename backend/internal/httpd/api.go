@@ -63,6 +63,9 @@ type APIDeps struct {
 	AgentAuth         controllers.AgentAuthService
 	AgentSwitchPolicy AgentSwitchPolicyControl
 	ProjectSummaries  controllers.ProjectSummaryService
+	// LinkPreview unfurls external URLs for the renderer's hover cards; nil
+	// leaves the route answering 501.
+	LinkPreview controllers.LinkPreviewService
 
 	// Presence tracks which mobile devices are currently running the app.
 	// Nil disables presence tracking (the roster then reports every device offline).
@@ -128,6 +131,7 @@ type API struct {
 	endpoints        *controllers.EndpointsController
 	systemInstall    *controllers.SystemInstallController
 	agentAuth        *controllers.AgentAuthController
+	linkPreview      *controllers.LinkPreviewController
 	events           *EventsController
 }
 
@@ -172,6 +176,7 @@ func NewAPI(cfg config.Config, deps APIDeps) *API {
 		endpoints:     &controllers.EndpointsController{Source: deps.Endpoints},
 		systemInstall: &controllers.SystemInstallController{Installer: deps.Installer},
 		agentAuth:     &controllers.AgentAuthController{Svc: deps.AgentAuth},
+		linkPreview:   &controllers.LinkPreviewController{Svc: deps.LinkPreview},
 		events:        &EventsController{Source: deps.CDC, Live: deps.Events},
 	}
 }
@@ -213,6 +218,7 @@ func (a *API) Register(root chi.Router) {
 			a.endpoints.Register(r)
 			a.systemInstall.Register(r)
 			a.agentAuth.Register(r)
+			a.linkPreview.Register(r)
 			// Sibling REST controllers plug in here.
 		})
 		// Long-lived streams intentionally bypass the REST timeout middleware.
