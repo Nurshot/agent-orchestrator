@@ -11,6 +11,8 @@ import (
 	"context"
 	"log/slog"
 
+	acpsdk "github.com/coder/acp-go-sdk"
+
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/agent/binaryutil"
 	acpdriver "github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/acp"
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/nativeacp"
@@ -26,10 +28,8 @@ type vibePlugin interface {
 }
 
 // acpAdapter presents the separately distributed `vibe-acp` executable as this
-// harness's binary, so the binding runs on the shared native ACP path -- and
-// therefore honors the plugin's AugmentRuntimeEnv hook, keeping Chat and TUI
-// from disagreeing about where Vibe keeps its state -- while auth is still
-// probed through the Vibe CLI plugin itself.
+// harness's binary on the shared native ACP path, while auth is still probed
+// through the Vibe CLI plugin itself.
 type acpAdapter struct{ vibePlugin }
 
 func (a acpAdapter) ResolveBinary(ctx context.Context) (string, error) {
@@ -48,15 +48,34 @@ func (a acpAdapter) ResolveBinary(ctx context.Context) (string, error) {
 // edit from a shell command. accept-edits therefore prompts like default,
 // rather than auto-approving a call that might not be an edit. auto and bypass
 // are unaffected: Vibe always offers allow_once, allow_always,
-// allow_always_permanent, and reject_once, and AO takes the first
-// allow_always-kinded option -- the session-scoped one, not the permanent one.
+// allow_always_permanent, and reject_once, and AO explicitly selects the
+// session-scoped allow_always id rather than the permanent one.
 func New(plugin vibePlugin, log *slog.Logger) ports.ChatDriver {
 	return nativeacp.New(acpAdapter{plugin}, nativeacp.Config{
-		Harness:   domain.HarnessVibe,
-		Configure: configure,
-		PermissionPolicy: acpdriver.StandardPermissionPolicy(
-			ports.PermissionModeAuto, ports.PermissionModeBypassPermissions),
+		Harness:          domain.HarnessVibe,
+		Configure:        configure,
+		PermissionPolicy: permissionPolicy,
 	}, log)
+}
+
+var standardPermissionPolicy = acpdriver.StandardPermissionPolicy(
+	ports.PermissionModeAuto, ports.PermissionModeBypassPermissions)
+
+func permissionPolicy(
+	mode ports.PermissionMode,
+	params acpsdk.RequestPermissionRequest,
+) (acpsdk.PermissionOptionId, bool) {
+	switch ports.NormalizePermissionMode(mode) {
+	case ports.PermissionModeAuto, ports.PermissionModeBypassPermissions:
+		for _, option := range params.Options {
+			if option.Kind == acpsdk.PermissionOptionKindAllowAlways && option.OptionId == "allow_always" {
+				return option.OptionId, true
+			}
+		}
+		return acpdriver.PermissionOption(params.Options, acpsdk.PermissionOptionKindAllowOnce)
+	default:
+		return standardPermissionPolicy(mode, params)
+	}
 }
 
 // configure adds nothing: `vibe-acp` takes no AO-relevant flag, and standing

@@ -7,8 +7,36 @@ import (
 	"runtime"
 	"testing"
 
+	acpsdk "github.com/coder/acp-go-sdk"
+
 	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
 )
+
+func TestPermissionPolicyNeverSelectsVibesPermanentGrant(t *testing.T) {
+	session := acpsdk.PermissionOption{
+		OptionId: "allow_always", Kind: acpsdk.PermissionOptionKindAllowAlways,
+	}
+	permanent := acpsdk.PermissionOption{
+		OptionId: "allow_always_permanent", Kind: acpsdk.PermissionOptionKindAllowAlways,
+	}
+	once := acpsdk.PermissionOption{
+		OptionId: "allow_once", Kind: acpsdk.PermissionOptionKindAllowOnce,
+	}
+	for _, tt := range []struct {
+		options []acpsdk.PermissionOption
+		want    acpsdk.PermissionOptionId
+	}{
+		{options: []acpsdk.PermissionOption{session, permanent, once}, want: session.OptionId},
+		{options: []acpsdk.PermissionOption{permanent, session, once}, want: session.OptionId},
+		{options: []acpsdk.PermissionOption{permanent, once}, want: once.OptionId},
+	} {
+		id, handled := permissionPolicy(ports.PermissionModeAuto,
+			acpsdk.RequestPermissionRequest{Options: tt.options})
+		if !handled || id != tt.want {
+			t.Fatalf("selection = (%q, %v), want (%q, true)", id, handled, tt.want)
+		}
+	}
+}
 
 // The adapter beside the resolved `vibe` wins over any `vibe-acp` on PATH, so
 // a second Vibe installation cannot be spliced into the session.

@@ -34,10 +34,8 @@ type autohandPlugin interface {
 }
 
 // acpAdapter presents the separately distributed `autohand-acp` executable as
-// this harness's binary, so the binding runs on the shared native ACP path --
-// and therefore honors the plugin's AugmentRuntimeEnv hook, keeping Chat and
-// TUI from disagreeing about where Autohand keeps its state -- while auth is
-// still probed through the Autohand CLI plugin itself.
+// this harness's binary on the shared native ACP path, while auth is still
+// probed through the Autohand CLI plugin itself.
 type acpAdapter struct{ autohandPlugin }
 
 func (a acpAdapter) ResolveBinary(ctx context.Context) (string, error) {
