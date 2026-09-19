@@ -655,7 +655,6 @@
 	"onboarding.githubConnectedDetail": "Los agentes pueden abrir pull requests y leer issues.",
 	"onboarding.githubInstallDetail": "Necesario para pull requests e issues.",
 	"onboarding.githubSignInDetail": "Inicia sesión una vez para pull requests e issues.",
-	"onboarding.cloudCaveat": "Vista previa temprana: los sandboxes pueden tardar en iniciarse y perder trabajo.",
 	"onboarding.cloudOptionYesLabel": "Añadir sesiones en la nube",
 	"onboarding.cloudOptionYesDetail": "Te deja ejecutar un proyecto en un sandbox remoto.",
 	"onboarding.cloudOptionNoLabel": "Mantenerlo local",

@@ -43,7 +43,6 @@ export function OnboardingCloudStep({ cloudEnabled }: { cloudEnabled: boolean })
 					onClick={() => choose(false)}
 				/>
 			</div>
-			<p className="px-1 text-center text-caption leading-snug text-muted-foreground/80">{t("onboarding.cloudCaveat")}</p>
 			{offering.error ? (
 				<p className="px-1 text-center text-caption leading-snug text-destructive" role="alert">
 					{offering.error}

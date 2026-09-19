@@ -648,7 +648,6 @@
 	"onboarding.githubConnectedDetail": "Agents can open pull requests and read issues.",
 	"onboarding.githubInstallDetail": "Needed for pull requests and issues.",
 	"onboarding.githubSignInDetail": "Sign in once for pull requests and issues.",
-	"onboarding.cloudCaveat": "Early preview: sandboxes can be slow to start, and can lose work.",
 	"onboarding.cloudOptionYesLabel": "Add cloud sessions",
 	"onboarding.cloudOptionYesDetail": "Lets you run a project in a remote sandbox.",
 	"onboarding.cloudOptionNoLabel": "Keep it local",

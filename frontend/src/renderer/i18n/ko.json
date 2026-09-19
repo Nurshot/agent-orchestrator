@@ -653,7 +653,6 @@
 	"onboarding.githubConnectedDetail": "에이전트가 풀 리퀘스트를 만들고 이슈를 읽을 수 있습니다.",
 	"onboarding.githubInstallDetail": "풀 리퀘스트와 이슈에 필요합니다.",
 	"onboarding.githubSignInDetail": "한 번 로그인하면 풀 리퀘스트와 이슈를 사용할 수 있습니다.",
-	"onboarding.cloudCaveat": "초기 프리뷰: 샌드박스 시작이 느리거나 작업이 유실될 수 있습니다.",
 	"onboarding.cloudOptionYesLabel": "클라우드 세션 추가",
 	"onboarding.cloudOptionYesDetail": "프로젝트를 원격 샌드박스에서 실행할 수 있습니다.",
 	"onboarding.cloudOptionNoLabel": "로컬 유지",

@@ -653,7 +653,6 @@
 	"onboarding.githubConnectedDetail": "エージェントがプルリクエストを作成し、Issue を読み取れます。",
 	"onboarding.githubInstallDetail": "プルリクエストと Issue に必要です。",
 	"onboarding.githubSignInDetail": "一度サインインすればプルリクエストと Issue を使えます。",
-	"onboarding.cloudCaveat": "早期プレビュー: サンドボックスの起動が遅れたり、作業が失われることがあります。",
 	"onboarding.cloudOptionYesLabel": "クラウドセッションを追加",
 	"onboarding.cloudOptionYesDetail": "プロジェクトをリモートサンドボックスで実行できるようにします。",
 	"onboarding.cloudOptionNoLabel": "ローカルのまま",

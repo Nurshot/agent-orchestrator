@@ -653,7 +653,6 @@
 	"onboarding.githubConnectedDetail": "代理可以创建拉取请求并读取议题。",
 	"onboarding.githubInstallDetail": "创建拉取请求和读取议题时需要。",
 	"onboarding.githubSignInDetail": "登录一次即可创建拉取请求和读取议题。",
-	"onboarding.cloudCaveat": "早期预览：沙箱启动可能较慢，也可能丢失工作。",
 	"onboarding.cloudOptionYesLabel": "添加云端会话",
 	"onboarding.cloudOptionYesDetail": "让你可以把项目放在远程沙箱中运行。",
 	"onboarding.cloudOptionNoLabel": "保持本地",

@@ -457,7 +457,6 @@ describe("onboarding route", () => {
 		expect(await screen.findByRole("heading", { name: "Run sessions in the cloud" })).toBeInTheDocument();
 		expect(screen.getByText("Optional. Everything works locally either way.")).toBeInTheDocument();
 		expect(screen.getByText("Lets you run a project in a remote sandbox.")).toBeInTheDocument();
-		expect(screen.getByText(/Early preview/)).toBeInTheDocument();
 
 		// Choosing applies the setting in place; Continue is what moves the flow on.
 		await user.click(screen.getByRole("button", { name: "Add cloud sessions" }));
