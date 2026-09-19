@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -260,7 +261,19 @@ func readPrivateFile(path string) ([]byte, error) {
 	if info.Mode().Perm()&0o077 != 0 {
 		return nil, fmt.Errorf("permissions must not grant group or other access")
 	}
-	return os.ReadFile(path)
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	openedInfo, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !openedInfo.Mode().IsRegular() || !os.SameFile(info, openedInfo) {
+		return nil, fmt.Errorf("file changed while it was inspected")
+	}
+	return io.ReadAll(file)
 }
 
 func writePrivateExclusive(path string, b []byte) error {

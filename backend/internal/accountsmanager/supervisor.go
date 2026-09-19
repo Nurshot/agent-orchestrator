@@ -63,12 +63,14 @@ type Config struct {
 	Binary     string
 	HTTPClient *http.Client
 	Logger     *slog.Logger
+	launch     launchProcess
 }
 
 type Supervisor struct {
 	cfg    Config
 	client *http.Client
 	log    *slog.Logger
+	launch launchProcess
 	once   sync.Once
 
 	mu       sync.RWMutex
@@ -83,6 +85,12 @@ type controlIdentity struct {
 	EngineVersion string `json:"engineVersion"`
 }
 
+type managedProcess interface {
+	Kill() error
+}
+
+type launchProcess func(binary, stateRoot string) (managedProcess, <-chan error, error)
+
 func New(cfg Config) *Supervisor {
 	client := cfg.HTTPClient
 	if client == nil {
@@ -92,7 +100,11 @@ func New(cfg Config) *Supervisor {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Supervisor{cfg: cfg, client: client, log: log, status: Status{State: StateStarting}}
+	launch := cfg.launch
+	if launch == nil {
+		launch = launchRunnerProcess
+	}
+	return &Supervisor{cfg: cfg, client: client, log: log, launch: launch, status: Status{State: StateStarting}}
 }
 
 func (s *Supervisor) Start(ctx context.Context) {
@@ -153,7 +165,7 @@ func (s *Supervisor) run(ctx context.Context) {
 		}
 
 		startedAt := time.Now()
-		proc, wait, startErr := s.startProcess(state.Root)
+		proc, wait, startErr := s.launch(s.cfg.Binary, state.Root)
 		if startErr != nil {
 			s.setDegraded(ReasonStartFailed)
 		} else {
@@ -185,8 +197,8 @@ func (s *Supervisor) run(ctx context.Context) {
 	}
 }
 
-func (s *Supervisor) startProcess(stateRoot string) (*os.Process, <-chan error, error) {
-	cmd := exec.Command(s.cfg.Binary, "serve", "--state-dir", stateRoot) //nolint:gosec // explicit packaged binary path and fixed argv.
+func launchRunnerProcess(binary, stateRoot string) (managedProcess, <-chan error, error) {
+	cmd := exec.Command(binary, "serve", "--state-dir", stateRoot) //nolint:gosec // explicit packaged binary path and fixed argv.
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 	if err := cmd.Start(); err != nil {
@@ -241,7 +253,7 @@ func (s *Supervisor) maintainAttached(ctx context.Context, record RuntimeRecord,
 	}
 }
 
-func (s *Supervisor) maintainSpawned(ctx context.Context, record RuntimeRecord, state privateState, proc *os.Process, wait <-chan error) error {
+func (s *Supervisor) maintainSpawned(ctx context.Context, record RuntimeRecord, state privateState, proc managedProcess, wait <-chan error) error {
 	ticker := time.NewTicker(leaseInterval)
 	defer ticker.Stop()
 	for {

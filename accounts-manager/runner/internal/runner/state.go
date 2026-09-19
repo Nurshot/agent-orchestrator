@@ -2,6 +2,7 @@ package runner
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,10 +51,11 @@ func LoadState(root string) (*State, error) {
 	}
 
 	configPath := filepath.Join(root, configFileName)
-	if _, err = readPrivateRegularFile(configPath); err != nil {
+	configBytes, err := readPrivateRegularFile(configPath)
+	if err != nil {
 		return nil, fmt.Errorf("configuration: %w", err)
 	}
-	cfg, err := sdkconfig.LoadConfig(configPath)
+	cfg, err := sdkconfig.ParseConfigBytes(configBytes)
 	if err != nil {
 		return nil, fmt.Errorf("load configuration: %w", err)
 	}
@@ -128,5 +130,17 @@ func readPrivateRegularFile(path string) ([]byte, error) {
 	if info.Mode().Perm()&0o077 != 0 {
 		return nil, fmt.Errorf("permissions must not grant group or other access")
 	}
-	return os.ReadFile(path)
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	openedInfo, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !openedInfo.Mode().IsRegular() || !os.SameFile(info, openedInfo) {
+		return nil, fmt.Errorf("file changed while it was inspected")
+	}
+	return io.ReadAll(file)
 }

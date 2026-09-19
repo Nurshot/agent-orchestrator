@@ -3,6 +3,7 @@ package accountsmanager
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -196,6 +198,124 @@ func TestMissingBinaryDegradesWithoutBlocking(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("status did not become degraded: %#v", s.Status())
+}
+
+func TestStartReattachesExistingRunnerWithoutStartingBinary(t *testing.T) {
+	t.Parallel()
+
+	const controlKey = "reattach-control"
+	leaseCalls := make(chan struct{}, 1)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	mux.HandleFunc("/ao/internal/identity", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer "+controlKey {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(controlIdentity{Service: serviceName, InstanceID: "reattach-instance", EngineVersion: "v7.3.8"})
+	})
+	mux.HandleFunc("/ao/internal/lease", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer "+controlKey {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		select {
+		case leaseCalls <- struct{}{}:
+		default:
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	port := server.Listener.Addr().(*net.TCPAddr).Port
+
+	stateDir := t.TempDir()
+	if err := os.Chmod(stateDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	state, err := ensureState(stateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(state.Root, "control.key"), []byte(controlKey+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err = updateConfigPort(state.ConfigPath, port); err != nil {
+		t.Fatal(err)
+	}
+	recordBytes, _ := json.Marshal(RuntimeRecord{PID: os.Getpid(), Port: port, InstanceID: "reattach-instance", UpstreamVersion: "v7.3.8"})
+	if err = writePrivateAtomic(filepath.Join(state.Root, "runtime.json"), recordBytes); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s := New(Config{StateDir: stateDir, HTTPClient: server.Client()})
+	s.Start(ctx)
+	waitForStatus(t, s, StateReady, time.Second)
+	if endpoint, ok := s.Endpoint(); !ok || endpoint.BaseURL != server.URL {
+		t.Fatalf("endpoint = %#v, ok = %v", endpoint, ok)
+	}
+	select {
+	case <-leaseCalls:
+	case <-time.After(time.Second):
+		t.Fatal("replacement daemon did not renew the existing runner lease")
+	}
+}
+
+func TestCrashedRunnerBecomesDegradedAndRestarts(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	if err := os.Chmod(stateDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	binary := filepath.Join(stateDir, "fake-runner")
+	if err := os.WriteFile(binary, []byte("fake"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	launches := 0
+	launch := func(_, _ string) (managedProcess, <-chan error, error) {
+		mu.Lock()
+		launches++
+		mu.Unlock()
+		wait := make(chan error, 1)
+		wait <- errors.New("crashed")
+		return fakeManagedProcess{}, wait, nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s := New(Config{StateDir: stateDir, Binary: binary, launch: launch})
+	s.Start(ctx)
+	waitForStatus(t, s, StateDegraded, time.Second)
+	if got := s.Status().Reason; got != ReasonProcessExited {
+		t.Fatalf("reason = %q, want %q", got, ReasonProcessExited)
+	}
+	time.Sleep(1100 * time.Millisecond)
+	mu.Lock()
+	gotLaunches := launches
+	mu.Unlock()
+	if gotLaunches < 2 {
+		t.Fatalf("launches = %d, want a backoff restart", gotLaunches)
+	}
+}
+
+type fakeManagedProcess struct{}
+
+func (fakeManagedProcess) Kill() error { return nil }
+
+func waitForStatus(t *testing.T, supervisor *Supervisor, want State, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if supervisor.Status().State == want {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("status = %#v, want %q", supervisor.Status(), want)
 }
 
 func assertPrivateMode(t *testing.T, path string, want os.FileMode) {
