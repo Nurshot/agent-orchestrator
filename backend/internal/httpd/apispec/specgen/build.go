@@ -212,7 +212,6 @@ var schemaNames = map[string]string{ //nolint:gosec // Public OpenAPI type names
 	"DomainRoleOverride":              "RoleOverride",
 	"DomainProjectSummary":            "ProjectSummaryView",
 	"DomainProjectAttentionItem":      "ProjectAttentionItem",
-	"DomainProjectSummaryOutput":      "ProjectSummaryOutput",
 	// httpd/controllers (wire envelopes)
 	"ControllersListProjectsResponse":                     "ListProjectsResponse",
 	"ControllersProjectResponse":                          "ProjectResponse",

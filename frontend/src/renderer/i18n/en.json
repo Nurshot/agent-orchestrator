@@ -2036,7 +2036,5 @@
 	"projectSummary.needsInput": "Needs input",
 	"projectSummary.attention": "Needs your input",
 	"projectSummary.discuss": "Discuss in chat",
-	"projectSummary.discussPrompt": "Regarding {{name}}: {{question}}",
-	"projectSummary.outputs": "Meaningful outputs",
-	"projectSummary.pullRequest": "PR #{{number}}"
+	"projectSummary.discussPrompt": "Regarding {{name}}: {{question}}"
 }

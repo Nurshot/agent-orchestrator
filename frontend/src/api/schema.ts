@@ -3795,16 +3795,6 @@ export interface components {
             resolveError?: string;
             sessionPrefix: string;
         };
-        ProjectSummaryOutput: {
-            kind: string;
-            label?: string;
-            number?: number;
-            reference?: string;
-            sessionId: string;
-            sessionName: string;
-            state?: string;
-            url?: string;
-        };
         ProjectSummaryResponse: {
             summary: components["schemas"]["ProjectSummaryView"];
         };
@@ -3816,7 +3806,6 @@ export interface components {
             generationError?: string;
             narrative: string;
             needsAttention: components["schemas"]["ProjectAttentionItem"][];
-            outputs: components["schemas"]["ProjectSummaryOutput"][];
             projectId: string;
             sourceWatermark: string;
         };

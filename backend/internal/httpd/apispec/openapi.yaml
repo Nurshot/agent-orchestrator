@@ -10746,29 +10746,6 @@ components:
       - sessionPrefix
       - folderMissing
       type: object
-    ProjectSummaryOutput:
-      properties:
-        kind:
-          type: string
-        label:
-          type: string
-        number:
-          type: integer
-        reference:
-          type: string
-        sessionId:
-          type: string
-        sessionName:
-          type: string
-        state:
-          type: string
-        url:
-          type: string
-      required:
-      - sessionId
-      - sessionName
-      - kind
-      type: object
     ProjectSummaryResponse:
       properties:
         summary:
@@ -10793,10 +10770,6 @@ components:
           items:
             $ref: '#/components/schemas/ProjectAttentionItem'
           type: array
-        outputs:
-          items:
-            $ref: '#/components/schemas/ProjectSummaryOutput'
-          type: array
         projectId:
           type: string
         sourceWatermark:
@@ -10807,7 +10780,6 @@ components:
       - activeWorkers
       - completedWorkers
       - needsAttention
-      - outputs
       - sourceWatermark
       - generatedAt
       type: object

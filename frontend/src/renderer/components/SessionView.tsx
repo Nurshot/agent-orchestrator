@@ -2127,9 +2127,9 @@ export function SessionView({ sessionId }: SessionViewProps) {
 						</TooltipContent>
 					</Tooltip>
 					{isOrchestrator ? (
-						<TopbarButton aria-label={projectSummaryOpen ? t("projectSummary.close") : t("projectSummary.open")} aria-pressed={projectSummaryOpen} onClick={() => setProjectSummaryOpen((open) => !open)} variant="icon">
+						<TopbarButton aria-label={projectSummaryOpen ? t("projectSummary.close") : t("projectSummary.open")} aria-pressed={projectSummaryOpen} className="relative" onClick={() => setProjectSummaryOpen((open) => !open)} variant="icon">
 							<PanelRight className="size-icon-md" aria-hidden="true" />
-							{projectSummaryAttention > 0 ? <span className="min-w-4 rounded-full bg-warning px-1 font-mono text-[9px] leading-4 text-warning-foreground">{projectSummaryAttention}</span> : null}
+							{projectSummaryAttention > 0 ? <span className="pointer-events-none absolute right-px top-px grid h-3 min-w-3 place-items-center rounded-full bg-warning px-0.5 font-mono text-[7px] font-semibold leading-none text-warning-foreground shadow-sm ring-1 ring-background" data-testid="project-summary-attention-badge">{projectSummaryAttention > 99 ? "99+" : projectSummaryAttention}</span> : null}
 						</TopbarButton>
 					) : null}
 					{/* Keep the global notification action trailing at the window edge. */}
@@ -2137,9 +2137,9 @@ export function SessionView({ sessionId }: SessionViewProps) {
 				</div>
 			) : isOrchestrator ? (
 				<div className="session-pinned-actions" data-testid="orchestrator-pinned-actions" style={noDragStyle}>
-					<TopbarButton aria-label={projectSummaryOpen ? t("projectSummary.close") : t("projectSummary.open")} aria-pressed={projectSummaryOpen} onClick={() => setProjectSummaryOpen((open) => !open)} variant="icon">
+					<TopbarButton aria-label={projectSummaryOpen ? t("projectSummary.close") : t("projectSummary.open")} aria-pressed={projectSummaryOpen} className="relative" onClick={() => setProjectSummaryOpen((open) => !open)} variant="icon">
 						<PanelRight className="size-icon-md" aria-hidden="true" />
-						{projectSummaryAttention > 0 ? <span className="min-w-4 rounded-full bg-warning px-1 font-mono text-[9px] leading-4 text-warning-foreground">{projectSummaryAttention}</span> : null}
+						{projectSummaryAttention > 0 ? <span className="pointer-events-none absolute right-px top-px grid h-3 min-w-3 place-items-center rounded-full bg-warning px-0.5 font-mono text-[7px] font-semibold leading-none text-warning-foreground shadow-sm ring-1 ring-background" data-testid="project-summary-attention-badge">{projectSummaryAttention > 99 ? "99+" : projectSummaryAttention}</span> : null}
 					</TopbarButton>
 					<NotificationCenter style={noDragStyle} />
 				</div>

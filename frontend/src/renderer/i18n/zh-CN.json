@@ -2028,8 +2028,6 @@
 	"projectSummary.attention": "Needs your input",
 	"projectSummary.discuss": "Discuss in chat",
 	"projectSummary.discussPrompt": "Regarding {{name}}: {{question}}",
-	"projectSummary.outputs": "Meaningful outputs",
-	"projectSummary.pullRequest": "PR #{{number}}",
 	"shell.goHome": "返回主页",
 	"settings.cloudAgents.github.title": "GitHub private repositories",
 	"settings.cloudAgents.github.connected": "Connected",

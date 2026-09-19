@@ -14,7 +14,6 @@ function previewSummary(projectId: string): ProjectSummary {
 		activeWorkers: 3,
 		completedWorkers: 1,
 		needsAttention: [{ sessionId: "demo-needs-input", sessionName: "Resolve reviewer feedback on terminal polish", question: "Should the compact terminal keep the status row visible when space is constrained?" }],
-		outputs: [{ sessionId: "demo-needs-input", sessionName: "Resolve reviewer feedback on terminal polish", kind: "pull_request", url: "https://github.com/aoagents/agent-orchestrator/pull/318", number: 318, state: "Changes requested" }],
 	};
 }
 

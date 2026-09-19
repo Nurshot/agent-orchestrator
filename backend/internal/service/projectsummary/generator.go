@@ -23,6 +23,7 @@ type GenerationRequest struct {
 	WorkspacePath string
 	Existing      string
 	Facts         domain.ProjectSummary
+	Reports       []GenerationReport
 }
 
 // NarrativeGenerator updates the running project narrative.
@@ -72,7 +73,10 @@ func (g *CLIGenerator) Update(ctx context.Context, request GenerationRequest) (s
 	if err != nil {
 		return "", fmt.Errorf("resolve %s CLI: %w", request.Harness, err)
 	}
-	facts, err := json.Marshal(request.Facts)
+	facts, err := json.Marshal(struct {
+		domain.ProjectSummary
+		Reports []GenerationReport `json:"reports,omitempty"`
+	}{ProjectSummary: request.Facts, Reports: request.Reports})
 	if err != nil {
 		return "", fmt.Errorf("encode project facts: %w", err)
 	}

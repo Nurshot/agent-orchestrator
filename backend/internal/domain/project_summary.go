@@ -10,7 +10,6 @@ type ProjectSummary struct {
 	ActiveWorkers    int                    `json:"activeWorkers"`
 	CompletedWorkers int                    `json:"completedWorkers"`
 	NeedsAttention   []ProjectAttentionItem `json:"needsAttention"`
-	Outputs          []ProjectSummaryOutput `json:"outputs"`
 	SourceWatermark  string                 `json:"sourceWatermark"`
 	GeneratedAt      time.Time              `json:"generatedAt"`
 	GenerationError  string                 `json:"generationError,omitempty"`
@@ -21,16 +20,4 @@ type ProjectAttentionItem struct {
 	SessionID   SessionID `json:"sessionId"`
 	SessionName string    `json:"sessionName"`
 	Question    string    `json:"question"`
-}
-
-// ProjectSummaryOutput is a meaningful persisted link surfaced by the project briefing.
-type ProjectSummaryOutput struct {
-	SessionID   SessionID `json:"sessionId"`
-	SessionName string    `json:"sessionName"`
-	Kind        string    `json:"kind"`
-	Reference   string    `json:"reference,omitempty"`
-	Label       string    `json:"label,omitempty"`
-	URL         string    `json:"url,omitempty"`
-	Number      int       `json:"number,omitempty"`
-	State       string    `json:"state,omitempty"`
 }
