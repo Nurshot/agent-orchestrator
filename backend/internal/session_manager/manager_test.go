@@ -3418,14 +3418,82 @@ func TestKill_DeletesStaleRestoreMarker(t *testing.T) {
 	}
 }
 
-// TestKill_OtherWorkspaceErrorStillFails: only the typed dirty refusal is a
-// success-with-preserved-workspace; any other teardown failure keeps erroring.
-func TestKill_OtherWorkspaceErrorStillFails(t *testing.T) {
+// TestKill_UnnamedWorkspaceErrorPreservesAndTerminates is the #5463 regression
+// on the workspace half. A teardown failure AO has no typed name for (a locked
+// worktree git will not prune, a path that no longer resolves to a live
+// worktree) used to fail the kill, which left `terminated` false — and
+// `ao session cleanup` only walks terminated sessions, so the row was reachable
+// by no path at all. Nothing is force-removed: the worktree stays on disk for
+// cleanup to retry and report on. Only the session's claim on the sidebar goes.
+func TestKill_UnnamedWorkspaceErrorPreservesAndTerminates(t *testing.T) {
 	m, st, _, ws := newManager()
 	st.sessions["mer-1"] = mkLive("mer-1")
-	ws.destroyErr = errors.New("disk on fire")
-	if _, err := m.Kill(ctx, "mer-1"); err == nil || !strings.Contains(err.Error(), "disk on fire") {
-		t.Fatalf("kill err = %v, want workspace error surfaced", err)
+	ws.destroyErr = errors.New("path is still registered after git worktree prune")
+
+	freed, err := m.Kill(ctx, "mer-1")
+	if err != nil {
+		t.Fatalf("Kill: %v", err)
+	}
+	if freed {
+		t.Fatal("freed = true, want false: the worktree was left on disk")
+	}
+	if !st.sessions["mer-1"].IsTerminated {
+		t.Fatal("session must be marked terminated so cleanup can reach it")
+	}
+	if calls := strings.Join(ws.calls, ","); strings.Contains(calls, "ForceDestroy") {
+		t.Fatalf("calls = %s, want no ForceDestroy: a refused teardown is never forced", calls)
+	}
+}
+
+// TestKill_AlreadyAbsentWorkspaceIsNotReportedFreed: a worktree that was gone
+// before Kill ran released no disk, so `ao session kill` must not claim it did.
+func TestKill_AlreadyAbsentWorkspaceIsNotReportedFreed(t *testing.T) {
+	m, st, _, ws := newManager()
+	st.sessions["mer-1"] = mkLive("mer-1")
+	ws.destroyReclaim = ports.WorkspaceReclaimAlreadyAbsent
+
+	freed, err := m.Kill(ctx, "mer-1")
+	if err != nil {
+		t.Fatalf("Kill: %v", err)
+	}
+	if freed {
+		t.Fatal("freed = true for a workspace that was already absent")
+	}
+	if !st.sessions["mer-1"].IsTerminated {
+		t.Fatal("session must be marked terminated")
+	}
+}
+
+// TestKill_UnprovableRuntimeReleaseStillTerminates is the #5463 regression on
+// the runtime half. conpty reports ErrRuntimeProbeInconclusive when its pty
+// registry can no longer account for a handle — the usual state for a session
+// whose agent has already exited. Retrying the kill cannot change that answer,
+// so it must not be the thing that keeps the row alive forever. Teardown
+// continues and `ao session cleanup` re-releases the handle best-effort.
+func TestKill_UnprovableRuntimeReleaseStillTerminates(t *testing.T) {
+	for name, destroyErr := range map[string]error{
+		"probe inconclusive": fmt.Errorf("conpty: pty registry scan incomplete: %w", ports.ErrRuntimeProbeInconclusive),
+		"runtime gone":       fmt.Errorf("tmux: no server running: %w", ports.ErrRuntimeUnavailable),
+	} {
+		t.Run(name, func(t *testing.T) {
+			m, st, rt, ws := newManager()
+			st.sessions["mer-1"] = mkLive("mer-1")
+			rt.destroyErr = destroyErr
+
+			freed, err := m.Kill(ctx, "mer-1")
+			if err != nil {
+				t.Fatalf("Kill: %v", err)
+			}
+			if !freed {
+				t.Fatal("freed = false: workspace teardown must still run")
+			}
+			if ws.destroyed != 1 {
+				t.Fatalf("workspace destroys = %d, want 1", ws.destroyed)
+			}
+			if !st.sessions["mer-1"].IsTerminated {
+				t.Fatal("session must be marked terminated")
+			}
+		})
 	}
 }
 func TestKill_WorkspaceProjectDestroysChildrenBeforeRoot(t *testing.T) {
