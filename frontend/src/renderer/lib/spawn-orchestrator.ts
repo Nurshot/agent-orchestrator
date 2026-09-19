@@ -89,9 +89,13 @@ export async function spawnOrchestrator(
 
 /**
  * Relaunches an orchestrator whose agent exited but whose session row is still
- * alive, so a launcher click lands on a working agent instead of a dead
- * terminal. Both launchers (the shared project action and the sidebar's own
- * handler) route through here so their error handling cannot drift apart.
+ * alive. Both launchers route through here so their error handling cannot
+ * drift apart.
+ *
+ * Only ever on an explicit click, never on the exit itself: the supervisor
+ * discards the agent's exit code, so a deliberate quit is indistinguishable
+ * from a crash or a rate limit, and auto-relaunching the last of those loops
+ * against a metered API.
  *
  * A 409 AGENT_NOT_EXITED means it is already running — the caller asked for a
  * working orchestrator and that is this one, so it resolves rather than throws.

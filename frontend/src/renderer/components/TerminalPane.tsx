@@ -1303,7 +1303,6 @@ function TerminalEndedStrip({ canRestore, error, isRestoring, onRestore, session
 					<div className="mt-0.5 truncate text-xs text-muted-foreground">{message}</div>
 				</div>
 				{error && <div className="max-w-content-max truncate text-xs text-destructive">{error}</div>}
-				{/* A shell or reviewer terminal ending says nothing about the agent. */}
 				{variant === "session" && session ? <ResumeAgentControl session={session} /> : null}
 				{canRestore && (
 					<Tooltip>

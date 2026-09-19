@@ -1128,9 +1128,7 @@ const ProjectItem = memo(function ProjectItem({
 		if (isProjectProvisioning || isProjectRestarting) return;
 		if (!expanded) toggleDisclosure();
 		if (orchestrator) {
-			// Same rule as the shared project launcher: an exited orchestrator is
-			// resumed in place so the click lands on a working agent, not a dead
-			// terminal. See resumeOrchestrator for why this is never automatic.
+			// Mirrors useProjectOrchestratorAction; both launchers must stay in step.
 			if (sessionAgentExited(orchestrator) && workspace.kind !== "cloud") {
 				setIsSpawning(true);
 				try {

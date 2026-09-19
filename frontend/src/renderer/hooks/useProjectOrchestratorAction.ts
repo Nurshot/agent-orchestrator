@@ -63,7 +63,6 @@ export function useProjectOrchestratorAction({
 	const spawnError = formatOrchestratorStartupError(
 		error ? (error instanceof Error ? error.message : t("shell.couldNotSpawn")) : startupError ?? "",
 	);
-	// Local orchestrator that is alive but whose agent exited: resumable in place.
 	const resumableOrchestrator =
 		orchestrator && sessionAgentExited(orchestrator) && project?.kind !== CLOUD_PROJECT_KIND
 			? orchestrator
@@ -73,11 +72,6 @@ export function useProjectOrchestratorAction({
 		mutationFn: async (mode?: "tui") => {
 			if (!projectId) return;
 			setStartupError(projectId, null);
-			// An exited orchestrator keeps its worktree and native conversation, so a
-			// launcher click resumes it in place rather than spawning a second one.
-			// Never automatic on the exit itself: the supervisor discards the exit
-			// code, so a deliberate quit is indistinguishable from a crash or a rate
-			// limit, and auto-relaunching the latter loops against a metered API.
 			const openedSessionId = resumableOrchestrator
 				? (await resumeOrchestrator(resumableOrchestrator.id), resumableOrchestrator.id)
 				: project?.kind === CLOUD_PROJECT_KIND
