@@ -485,7 +485,7 @@ export function HarnessSettingsSection({ titleHidden = false }: { titleHidden?: 
 								{authStatus === "authorized" ? (
 									<span className="inline-flex items-center gap-1 text-xs font-medium text-success"><Check className="size-4" aria-hidden="true" />{isSetupAction ? t("settings.harness.configured") : t("settings.harness.loggedIn")}</span>
 								) : (
-									<Button disabled={!authPlan.available || authState?.pending || Boolean(authWorkflow)} size="sm" onClick={() => void startAuth(agentId)}>
+									<Button data-terminal-focus-handoff="true" disabled={!authPlan.available || authState?.pending || Boolean(authWorkflow)} size="sm" onClick={() => void startAuth(agentId)}>
 										{authState?.pending ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : null}
 										{authState?.pending ? t("settings.harness.loggingIn") : isSetupAction ? t("settings.harness.setup") : t("settings.harness.login")}
 									</Button>
@@ -648,7 +648,7 @@ function HarnessAuthTerminalPanel({ workflow, onClose, onRetry, onTerminalState 
 					<button type="button" aria-label={t("settings.close")} className="grid size-7 place-items-center rounded text-settings-muted hover:bg-interactive-hover" disabled={workflow.phase === "closing" || workflow.phase === "verifying"} onClick={onClose}><X className="size-4" aria-hidden="true" /></button>
 				</div>
 			</div>
-			<div className="h-[300px] min-h-0"><TerminalPane daemonReady={shell ? shell.daemonStatus.state === "ready" : true} fontSize={12} inputRequest={inputRequest} onInputRequestResult={handleInputRequestResult} onTerminalStateChange={handleTerminalState} terminalTarget={{ kind: "shell", handleId: workflow.terminal.handleId, generation: workflow.terminal.createdAt, title: workflow.terminal.title }} theme={theme} /></div>
+			<div className="h-[300px] min-h-0"><TerminalPane daemonReady={shell ? shell.daemonStatus.state === "ready" : true} focusRequested={workflow.phase === "running" && terminalState === "attached"} fontSize={12} inputRequest={inputRequest} onInputRequestResult={handleInputRequestResult} onTerminalStateChange={handleTerminalState} terminalTarget={{ kind: "shell", handleId: workflow.terminal.handleId, generation: workflow.terminal.createdAt, title: workflow.terminal.title }} theme={theme} /></div>
 			{retryable ? <div className="flex items-center justify-end border-t border-(--color-border-settings-input) bg-surface/90 px-3 py-2"><Button type="button" size="sm" variant="outline" onClick={workflow.phase === "cleanup_failed" ? onClose : onRetry}>{workflow.phase === "cleanup_failed" ? t("settings.harness.retry") : workflow.action === "setup" ? t("settings.harness.setup") : t("settings.harness.login")}</Button></div> : null}
 		</div>
 	);

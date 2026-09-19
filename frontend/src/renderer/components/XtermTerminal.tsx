@@ -252,10 +252,12 @@ function canAutoFocusTerminal(host: HTMLElement): boolean {
 	if (!(activeElement instanceof HTMLElement) || activeElement === document.body || !activeElement.isConnected) return true;
 	if (host.contains(activeElement)) return true;
 	// Selecting a session in the sidebar deliberately leaves its navigation
-	// button focused. Terminal tabs are the same intentional handoff within the
-	// pane. Every other focused control remains authoritative.
+	// button focused. Terminal tabs and controls that launch an inline PTY are
+	// the same intentional handoff. Every other focused control remains
+	// authoritative.
 	return (
 		activeElement.matches("button[aria-current='page']") ||
+		activeElement.matches("button[data-terminal-focus-handoff='true']") ||
 		(activeElement.matches("button[role='tab'][aria-current]") &&
 			activeElement.closest('[data-testid="session-workspace-topbar"]') !== null)
 	);
