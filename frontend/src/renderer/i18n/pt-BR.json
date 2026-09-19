@@ -66,6 +66,7 @@
 	"browser.annotationActive": "Anotando",
 	"browser.annotationCount_one": "{{count}} anotação",
 	"browser.annotationCount_other": "{{count}} anotações",
+	"browser.annotationCount_many": "{{count}} anotações",
 	"browser.annotationDiscardAll": "Descartar tudo",
 	"browser.annotationDiscardAllComments": "Descartar todos os comentários",
 	"browser.annotationExit": "Sair",
