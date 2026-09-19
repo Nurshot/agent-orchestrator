@@ -98,11 +98,8 @@ export function orderedProviderControls(options: ChatConfigOption[]): ChatConfig
  */
 function isPermissionModeOption(option: ChatConfigOption): boolean {
 	if (option.category !== "mode" && option.id !== "mode") return false;
-	return option.choices.some((choice) => !isExecutionModeChoice(choice));
-}
-
-function isExecutionModeChoice(choice: { value: string; name: string }): boolean {
-	return [choice.value, choice.name].some((text) => /^(?:plan|agent|build)(?:[\s_-]mode)?$/i.test(text.trim()));
+	return option.choices.some((choice) =>
+		![choice.value, choice.name].some((text) => /^(?:plan|agent|build)(?:[\s_-]mode)?$/i.test(text.trim())));
 }
 
 export function turnSettingsRows(snapshot: ConversationSnapshot, models: ChatModel[], options: ChatConfigOption[]): TurnSettingRow[] {
