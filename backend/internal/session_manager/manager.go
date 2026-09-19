@@ -406,6 +406,9 @@ type Manager struct {
 	clock                       func() time.Time
 	reconcileWorkers            int
 	defaultBranchRefreshTimeout time.Duration
+	// killTeardown bounds Kill's detached teardown. Zero means
+	// killTeardownBudget; tests shrink it to prove what survives its expiry.
+	killTeardown time.Duration
 	// openTranscriptFile is os.Open in production. The narrow seam lets tests
 	// deterministically prove that a post-stop transcript read failure falls
 	// back without advertising the provider path.
@@ -1794,16 +1797,19 @@ func expectedWorkspaceRefusal(err error) bool {
 		errors.Is(err, ports.ErrWorkspaceDeferred)
 }
 
-// runtimeAlreadyReleased reports a Destroy failure that proves nothing about a
-// live process: the runtime infrastructure is gone, or its liveness probe came
-// back inconclusive. Neither can be resolved by asking the user to kill the
-// session again — the answer will not change — so terminal intent is recorded
-// and the handle is re-released best-effort by `ao session cleanup`. Every
-// other runtime error still fails the kill closed, because it may mean a
-// killable agent process is still running (#5463).
-func runtimeAlreadyReleased(err error) bool {
-	return errors.Is(err, ports.ErrRuntimeUnavailable) ||
-		errors.Is(err, ports.ErrRuntimeProbeInconclusive)
+// runtimeConclusivelyAbsent reports a Destroy failure that is itself evidence
+// the runtime is already gone — tmux answering "no server running", and only
+// that class. There is nothing left to release, so refusing the kill would
+// strand the session for a condition no retry can clear (#5463).
+//
+// ErrRuntimeProbeInconclusive is deliberately NOT included: its port contract
+// says the runtime may still be live and callers "must not recreate, destroy,
+// archive, or otherwise treat the session as dead". Marking the row terminated
+// is treating it as dead, and it would leave a possibly-live agent running with
+// no owner and no row pointing at it — worse than a visible stuck session.
+// Every other runtime error stays fail-closed for the same reason.
+func runtimeConclusivelyAbsent(err error) bool {
+	return errors.Is(err, ports.ErrRuntimeUnavailable)
 }
 
 // terminateWithPreservedWorkspace records terminal intent for a session whose
@@ -1816,10 +1822,34 @@ func (m *Manager) terminateWithPreservedWorkspace(ctx context.Context, id domain
 	if cause != nil && !expectedWorkspaceRefusal(cause) {
 		m.logger.Warn("kill: workspace teardown failed; worktree preserved", "sessionID", id, "error", cause)
 	}
+	return m.recordTermination(ctx, id, dropRestoreMarker)
+}
+
+// killTeardownBudget bounds the detached teardown Kill runs below. Sized just
+// past the REST layer's default 60s request cap: long enough that a teardown
+// which was going to finish still finishes coherently after the caller has
+// given up, short enough that a genuinely wedged git or runtime call does not
+// hold this session's agent-operation lock (and the connection chi only
+// cancels, never aborts) for minutes on end.
+const killTeardownBudget = 90 * time.Second
+
+// terminalIntentBudget bounds the two writes that record a kill actually
+// happened. They run on their own context because by the time Kill reaches
+// them every destructive step is already done: refusing the write because the
+// teardown budget ran out mid-unlink leaves a session dead everywhere except
+// the row the UI reads, and `ao session cleanup` only walks terminated rows, so
+// nothing can reach it afterwards (#5463). Short, because these are two small
+// local writes, not the git and runtime calls the teardown budget exists for.
+const terminalIntentBudget = 15 * time.Second
+
+// recordTermination performs the writes that outlive teardown: the restore
+// marker must not survive a user kill (#2319) and the row must end up
+// terminated. Deliberately detached from the teardown budget — see
+// terminalIntentBudget.
+func (m *Manager) recordTermination(ctx context.Context, id domain.SessionID, dropRestoreMarker bool) error {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), terminalIntentBudget)
+	defer cancel()
 	if dropRestoreMarker {
-		// The restore marker must not survive a user kill, or the next boot's
-		// RestoreAll could resurrect a session the user explicitly terminated
-		// (#2319).
 		if err := m.store.DeleteSessionWorktrees(ctx, id); err != nil {
 			m.logger.Warn("kill: delete restore marker failed", "sessionID", id, "error", err)
 		}
@@ -1830,14 +1860,6 @@ func (m *Manager) terminateWithPreservedWorkspace(ctx context.Context, id domain
 	m.cleanupSystemPromptDir(id)
 	return nil
 }
-
-// killTeardownBudget bounds the detached teardown Kill runs below. Sized just
-// past the REST layer's default 60s request cap: long enough that a teardown
-// which was going to finish still finishes coherently after the caller has
-// given up, short enough that a genuinely wedged git or runtime call does not
-// hold this session's agent-operation lock (and the connection chi only
-// cancels, never aborts) for minutes on end.
-const killTeardownBudget = 90 * time.Second
 
 // Kill tears down the runtime and workspace, then records terminal intent with
 // the LCM. A workspace teardown refused by the worktree-remove safety
@@ -1859,7 +1881,11 @@ func (m *Manager) Kill(ctx context.Context, id domain.SessionID) (bool, error) {
 	// tab used to produce. Values still flow through, so request-scoped logging
 	// keeps working; only the cancellation is dropped, under its own ceiling so
 	// a wedged git or runtime call cannot pin the goroutine forever.
-	ctx, cancelTeardown := context.WithTimeout(context.WithoutCancel(ctx), killTeardownBudget)
+	budget := m.killTeardown
+	if budget <= 0 {
+		budget = killTeardownBudget
+	}
+	ctx, cancelTeardown := context.WithTimeout(context.WithoutCancel(ctx), budget)
 	defer cancelTeardown()
 
 	if err := m.beginAgentOperation(ctx, id, agentOperationKill); err != nil {
@@ -1913,10 +1939,10 @@ func (m *Manager) Kill(ctx context.Context, id domain.SessionID) (bool, error) {
 		m.stopChatBestEffort(ctx, id)
 	} else if handle.ID != "" {
 		if err := m.runtime.Destroy(ctx, handle); err != nil {
-			if !runtimeAlreadyReleased(err) {
+			if !runtimeConclusivelyAbsent(err) {
 				return false, fmt.Errorf("kill %s: runtime: %w", id, err)
 			}
-			m.logger.Warn("kill: runtime release unprovable; terminating anyway", "sessionID", id, "handle", handle.ID, "error", err)
+			m.logger.Warn("kill: runtime already gone; continuing teardown", "sessionID", id, "handle", handle.ID, "error", err)
 		}
 	}
 	if err := m.terminateReviewer(ctx, id, "cancelled by worker session termination"); err != nil {
@@ -1951,32 +1977,19 @@ func (m *Manager) Kill(ctx context.Context, id domain.SessionID) (bool, error) {
 			m.cleanupAgentWorkspace(ctx, rec, ws.Path)
 		}
 	} else if ws.Path != "" {
-		// A worktree that was already gone frees nothing, so ask the adapter
-		// what it actually reclaimed rather than inferring it from a nil error.
-		reclaim := ports.WorkspaceReclaimRemoved
-		var err error
-		if reclaimer, ok := m.workspace.(ports.WorkspaceReclaimer); ok {
-			reclaim, err = reclaimer.DestroyReclaim(ctx, ws)
-		} else {
-			err = m.workspace.Destroy(ctx, ws)
-		}
-		if err != nil {
+		if err := m.workspace.Destroy(ctx, ws); err != nil {
 			return false, m.terminateWithPreservedWorkspace(ctx, id, err, true)
 		}
-		freed = reclaim != ports.WorkspaceReclaimAlreadyAbsent
+		freed = true
 		m.cleanupAgentWorkspace(ctx, rec, ws.Path)
 	}
-	// Clear the restore marker so the next boot's RestoreAll cannot resurrect a
-	// killed session (#2319). For workspace projects this must happen after
-	// teardown reads the rows; dirty-preserved rows return above and are left as
-	// non-restorable inventory.
-	if err := m.store.DeleteSessionWorktrees(ctx, id); err != nil {
-		m.logger.Warn("kill: delete restore marker failed", "sessionID", id, "error", err)
+	// Clearing the restore marker keeps the next boot's RestoreAll from
+	// resurrecting a killed session (#2319). For workspace projects it must
+	// happen after teardown reads the rows; dirty-preserved rows return above
+	// and are left as non-restorable inventory.
+	if err := m.recordTermination(ctx, id, true); err != nil {
+		return false, err
 	}
-	if err := m.lcm.MarkTerminated(ctx, id); err != nil {
-		return false, fmt.Errorf("kill %s: %w", id, err)
-	}
-	m.cleanupSystemPromptDir(id)
 	return freed, nil
 }
 
