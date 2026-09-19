@@ -1581,12 +1581,12 @@ function overlayStyles(): string {
 		.element-header{
 			display:flex;flex:0 0 auto;align-items:center;justify-content:space-between;
 			border-bottom:1px solid var(--border);
-			padding:var(--pad) 12px;font-size:12px;
+			padding:var(--pad) 10px;font-size:12px;
 		}
 		.element-header strong{font-weight:600}
 		.adjustment-group{
 			display:flex;flex-direction:column;gap:var(--gap);
-			border-bottom:1px solid var(--border);padding:var(--pad) 12px;
+			border-bottom:1px solid var(--border);padding:var(--pad) 10px;
 		}
 		/* One grid for every row: two field boxes and a trailing action cell, so
 		   fields, values and link buttons all land on the same edges. */
@@ -1594,10 +1594,14 @@ function overlayStyles(): string {
 			display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) var(--control);
 			align-items:center;gap:var(--gap);min-height:var(--control);
 		}
+		/* Only a row that actually carries a lock reserves the trailing cell.
+		   Without this, every other row left the control column empty and the
+		   fields stopped short of the card's right edge. */
+		.panel-row:not(:has(.link-button)){grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 		.field{
 			display:grid;grid-template-columns:40px minmax(0,1fr) auto;
 			align-items:center;gap:4px;box-sizing:border-box;
-			min-width:0;height:var(--control);padding-inline:5px;
+			min-width:0;height:var(--control);padding-inline:0;
 			border-radius:var(--radius);background:color-mix(in oklch,var(--muted) 70%,transparent);
 			transition:background-color 120ms ease,box-shadow 120ms ease;
 		}
@@ -1640,7 +1644,7 @@ function overlayStyles(): string {
 		}
 		/* A changed field swaps its label for its reset, in place. */
 		.field-reset{
-			position:absolute;inset-inline-start:-4px;top:50%;
+			position:absolute;inset-inline-start:0;top:50%;
 			display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;
 			border:0;border-radius:6px;background:transparent;color:var(--fg);padding:0;
 			opacity:0;pointer-events:none;transform:translateY(-50%) scale(0.25);
@@ -1669,7 +1673,7 @@ function overlayStyles(): string {
 		.link-button--active{border-color:#4d8dff;background:color-mix(in oklch,#4d8dff 22%,var(--bg));color:#78a8ff}
 		.link-button--active:hover{border-color:#4d8dff;background:color-mix(in oklch,#4d8dff 22%,var(--bg));color:#78a8ff}
 		/* Collapsible section: the same pattern for Padding, Margin and Layout. */
-		.panel-section{border-bottom:1px solid var(--border);padding:0 12px}
+		.panel-section{border-bottom:1px solid var(--border);padding:0 10px}
 		.panel-section summary{
 			display:flex;align-items:center;justify-content:space-between;gap:var(--gap);
 			cursor:pointer;color:var(--muted-fg);font-size:12px;font-weight:500;
@@ -1696,6 +1700,8 @@ function overlayStyles(): string {
 		   matched and the paired layout never applied at all. */
 		@container (max-width:296px){
 			.panel-row{grid-template-columns:minmax(0,1fr) auto}
+			/* Stacked rows keep the field at its own width, lock or no lock. */
+			.panel-row:not(:has(.link-button)){grid-template-columns:minmax(0,1fr) auto}
 			.field{grid-column:1}
 			.field--wide{grid-column:1}
 		}
