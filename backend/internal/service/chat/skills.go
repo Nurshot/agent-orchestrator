@@ -40,7 +40,7 @@ func (s *Service) Skills(ctx context.Context, id domain.SessionID) ([]ports.Chat
 		return skills, nil
 	}
 	// A reattached ACP conversation answers empty for the rest of its life: the
-	// catalog only ever arrives by push, and nothing re-sends it (migration 0148).
+	// catalog only ever arrives by push, and nothing re-sends it (migration 0149).
 	// The stored catalog is the better answer, and a provider that genuinely has
 	// none stored an empty list, so this stays empty for it.
 	record, err := s.store.ConversationForSession(ctx, id)
