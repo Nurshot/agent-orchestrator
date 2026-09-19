@@ -664,6 +664,15 @@ type BrowserStatusResponse struct {
 	Transport   string           `json:"transport"`
 }
 
+// AccountsManagerStatusResponse is the redacted health projection for AO's
+// private Accounts Manager runner. Runtime coordinates and credentials are
+// intentionally not part of this contract.
+type AccountsManagerStatusResponse struct {
+	State         string  `json:"state" enum:"starting,ready,degraded"`
+	Reason        *string `json:"reason" enum:"binary_missing,configuration_invalid,start_failed,health_timeout,process_exited"`
+	EngineVersion string  `json:"engineVersion,omitempty"`
+}
+
 // BrowserCommandRequest is the stable daemon-facing command envelope. Action
 // arguments remain action-specific JSON so new target-scoped operations do not
 // require a new transport or Electron IPC surface.

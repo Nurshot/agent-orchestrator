@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/v1/accounts-manager/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return the safe status of the private Accounts Manager runner */
+        get: operations["getAccountsManagerStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agents": {
         parameters: {
             query?: never;
@@ -2470,6 +2487,13 @@ export interface components {
             reporting_owner?: "http" | "agent_switch_saga";
             requestId?: string;
         };
+        AccountsManagerStatusResponse: {
+            engineVersion?: string;
+            /** @enum {null|string} */
+            reason: "binary_missing" | "configuration_invalid" | "start_failed" | "health_timeout" | "process_exited" | null;
+            /** @enum {string} */
+            state: "starting" | "ready" | "degraded";
+        };
         AcknowledgeSessionInterfaceTransitionNoticeResponse: {
             ok: boolean;
             sessionId: string;
@@ -4555,6 +4579,35 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getAccountsManagerStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountsManagerStatusResponse"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
     listAgents: {
         parameters: {
             query?: never;

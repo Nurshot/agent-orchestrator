@@ -8,6 +8,25 @@ servers:
 - description: Local daemon (loopback only)
   url: http://127.0.0.1:3001
 paths:
+  /api/v1/accounts-manager/status:
+    get:
+      operationId: getAccountsManagerStatus
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountsManagerStatusResponse'
+          description: OK
+        "501":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Not Implemented
+      summary: Return the safe status of the private Accounts Manager runner
+      tags:
+      - system
   /api/v1/agents:
     get:
       operationId: listAgents
@@ -7116,6 +7135,30 @@ components:
       - error
       - code
       - message
+      type: object
+    AccountsManagerStatusResponse:
+      properties:
+        engineVersion:
+          type: string
+        reason:
+          enum:
+          - binary_missing
+          - configuration_invalid
+          - start_failed
+          - health_timeout
+          - process_exited
+          type:
+          - "null"
+          - string
+        state:
+          enum:
+          - starting
+          - ready
+          - degraded
+          type: string
+      required:
+      - state
+      - reason
       type: object
     AcknowledgeSessionInterfaceTransitionNoticeResponse:
       properties:
