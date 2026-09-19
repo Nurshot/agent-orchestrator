@@ -923,6 +923,22 @@ describe("terminal restore", () => {
 			}
 		});
 
+		// Cloud sessions recover through the control plane; the local daemon has
+		// never heard of them, so this button must not appear for one.
+		it("does not offer resume for a cloud session", () => {
+			terminalState.value = "exited";
+			const view = renderPane({
+				...worker,
+				...exited,
+				cloud: { orgId: "org-1" },
+			});
+			try {
+				expect(screen.queryByRole("button", { name: "Resume agent" })).not.toBeInTheDocument();
+			} finally {
+				view.restore();
+			}
+		});
+
 		it("offers restore and not resume once the row is terminated", () => {
 			terminalState.value = "exited";
 			const view = renderPane({

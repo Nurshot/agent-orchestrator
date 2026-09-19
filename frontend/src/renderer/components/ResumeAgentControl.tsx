@@ -56,7 +56,10 @@ export function ResumeAgentControl({
 		},
 	});
 
-	if (!sessionAgentExited(session) || session.activeAgentSwitch) return null;
+	// Cloud sessions re-provision through the control plane (useRestoreSession),
+	// not this local-daemon route — the local daemon has never heard of them and
+	// would answer "Unknown session".
+	if (!sessionAgentExited(session) || session.activeAgentSwitch || session.cloud) return null;
 
 	const error = resume.error instanceof Error ? resume.error.message : null;
 	return (
