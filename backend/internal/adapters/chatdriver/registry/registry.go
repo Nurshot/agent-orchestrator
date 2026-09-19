@@ -26,6 +26,7 @@ import (
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/agent/opencode"
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/agent/pi"
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/agent/primeagent"
+	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/agent/qwen"
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/agent/vibe"
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/auggieacp"
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/autohandacp"
@@ -43,6 +44,7 @@ import (
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/opencodeacp"
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/piacp"
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/primeagentacp"
+	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/qwenacp"
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/vibeacp"
 	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
 	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
@@ -73,9 +75,9 @@ func New(drivers ...ports.ChatDriver) *Registry {
 // Codex uses its native app-server protocol. Claude Code uses AO's reusable ACP
 // transport plus claude-agent-acp, pointed at the user's own Claude executable.
 // Auggie, Autohand, Cline, Cursor, Goose, Kilo Code, Kiro, OpenCode, Droid,
-// Kimi, Kimchi, Pi, Prime Agent, Vibe, and OMP expose ACP themselves, so AO
-// launches the exact executable resolved by each existing agent plugin. No path
-// scrapes terminal output or packages a second provider CLI.
+// Kimi, Kimchi, Pi, Prime Agent, Qwen, Vibe, and OMP expose ACP themselves, so
+// AO launches the exact executable resolved by each existing agent plugin. No
+// path scrapes terminal output or packages a second provider CLI.
 //
 // Every other harness stays TUI-only until the same is true of it. The driver
 // reuses the harness's existing agent plugin for binary resolution and auth, so
@@ -99,6 +101,7 @@ func Build(log *slog.Logger) *Registry {
 		piacp.New(pi.New(), log),
 		cursoracp.New(cursor.New(), log),
 		ompacp.New(omp.New(), log),
+		qwenacp.New(qwen.New(), log),
 	)
 }
 

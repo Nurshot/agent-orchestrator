@@ -68,14 +68,19 @@ surface (`npm run sqlc`, `npm run api`).
   (`autohand-acp`), Cline (native `cline --acp`), Goose (native `goose acp`),
   Kilo Code (native `kilocode acp`), Kiro (native `kiro-cli acp`), Vibe
   (native `vibe-acp`), Prime Agent (native `prime-agent --mode acp`), Cursor,
-  OpenCode, Droid, Kimchi, Kimi, Pi, and OMP. OMP Chat uses native `omp acp` and
-  requires OMP 15.0.0 or newer. Pi's independently
-  installed pi-acp adapter does not enforce approval modes, so AO admits Pi Chat
-  only after the user explicitly chooses the per-session bypass-permissions
-  fallback. The binding reuses the existing Pi config environment and auth
-  probe and is never downloaded by AO. Prime Agent's ACP profile likewise has no
-  permission requests and no native history load, so it is admitted through the
-  same explicit bypass fallback. AO reuses each harness's existing
+  OpenCode, Droid, Kimchi, Kimi, Pi, OMP, and Qwen. Qwen Chat uses native
+  `qwen --acp` and requires Qwen Code 0.16.0 or newer. Qwen Code's ACP mode
+  enforces approval modes over `session/request_permission` (verified live: a
+  non-read-only shell under auto-edit asks), so AO maps its permission modes
+  onto Qwen's (default to Ask Permissions) and admits Qwen Chat in every mode.
+  OMP Chat uses native `omp acp` and requires OMP 15.0.0 or newer. Pi's
+  independently installed pi-acp adapter does not enforce approval modes, so AO
+  admits Pi Chat only after the user explicitly chooses the per-session
+  bypass-permissions fallback. The binding reuses the existing Pi config
+  environment and auth probe and is never downloaded by AO. Prime Agent's ACP
+  profile likewise has no permission requests and no native history load, so it
+  is admitted through the same explicit bypass fallback. AO reuses each
+  harness's existing
   binary/auth/environment resolution and does not bundle provider CLIs. Cursor
   is Chat-only until its ACP and TUI conversation ids are proven to share identity.
   Per-binding launch shapes, permission mappings, standing-instruction handling,

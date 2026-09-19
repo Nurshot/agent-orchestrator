@@ -24,7 +24,7 @@ agent plugin. AO never downloads, packages, or substitutes the provider CLI.
 | Vibe | `vibe-acp` | session-advertised model options | ACP requests; `accept-edits`/`auto`/`bypass` auto-resolve | not injectable |
 
 Codex remains on its native app-server. Claude Code, Cursor, OpenCode, Droid,
-Kimi, Kimchi, Pi, and OMP keep the bindings they already shipped.
+Kimi, Kimchi, Pi, OMP, and Qwen keep the bindings they already shipped.
 
 ### Deliberate limitations
 
@@ -102,10 +102,9 @@ depends on it.
 
 Audited against `main`; each registers its harness in the chat-driver registry.
 
-- **#5019 Qwen Code Chat UI (native ACP)** — fully closes the Qwen gap. Adds a
-  `qwenacp` binding with a version probe and live tests, registers it, and has
-  all CI checks passing and the branch mergeable. No missing integration for the
-  Chat gap.
+- **#5019 Qwen Code Chat UI (native ACP)** — merged. The Qwen gap is closed on
+  `main`; `qwenacp` is in the registry and this branch carries it through the
+  merge.
 - **#5403 GitHub Copilot ACP chat driver** — closes the Copilot gap. Adds a
   self-contained `copilotacp` binding plus the `LaunchSessionOptions` seam in
   the shared ACP/native ACP transports and the Copilot adapter helpers it needs.
@@ -117,4 +116,4 @@ Audited against `main`; each registers its harness in the chat-driver registry.
   was based on an older `main` whose registry comment predates the Claude, Kimi,
   Kimchi, Pi, Cursor, and OMP bindings, so it needs a rebase and a CI run.
 
-These three are intentionally not duplicated by this change.
+The two still open are intentionally not duplicated by this change.
