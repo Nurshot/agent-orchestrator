@@ -8,6 +8,7 @@ const cloudMocks = vi.hoisted(() => ({
 	me: vi.fn(),
 	listProviderConnections: vi.fn(),
 	listUserProviderConnections: vi.fn(),
+	listProjects: vi.fn(),
 	createSession: vi.fn(),
 }));
 
@@ -16,6 +17,7 @@ vi.mock("../hooks/useCloudCp", () => ({
 		me: cloudMocks.me,
 		listProviderConnections: cloudMocks.listProviderConnections,
 		listUserProviderConnections: cloudMocks.listUserProviderConnections,
+		listProjects: cloudMocks.listProjects,
 		createSession: cloudMocks.createSession,
 	}),
 }));
@@ -53,20 +55,27 @@ describe("spawnCloudOrchestrator", () => {
 		cloudMocks.me.mockReset();
 		cloudMocks.listProviderConnections.mockReset();
 		cloudMocks.listUserProviderConnections.mockReset();
+		cloudMocks.listProjects.mockReset();
 		cloudMocks.createSession.mockReset();
 	});
 
-	it("starts without a user kickoff prompt so the role comes only from the system prompt", async () => {
+	function primeClient(project?: { id: string; config?: Record<string, unknown> }) {
 		const queryClient = new QueryClient();
 		queryClient.setQueryData<Settings>(settingsQueryKey, {
 			cloudControlPlaneUrl: "https://cloud.example.com",
 		} as Settings);
 		cloudMocks.me.mockResolvedValue({ organizations: [{ id: "org-1" }] });
+		cloudMocks.listUserProviderConnections.mockResolvedValue({ providerConnections: [] });
+		cloudMocks.listProjects.mockResolvedValue({ items: project ? [project] : [] });
+		cloudMocks.createSession.mockResolvedValue({ session: { id: "session-1" } });
+		return queryClient;
+	}
+
+	it("starts without a user kickoff prompt so the role comes only from the system prompt", async () => {
+		const queryClient = primeClient({ id: "project-1" });
 		cloudMocks.listProviderConnections.mockResolvedValue({
 			providerConnections: [connection("claude-code")],
 		});
-		cloudMocks.listUserProviderConnections.mockResolvedValue({ providerConnections: [] });
-		cloudMocks.createSession.mockResolvedValue({ session: { id: "session-1" } });
 
 		await expect(spawnCloudOrchestrator(queryClient, "project-1")).resolves.toBe("session-1");
 		expect(cloudMocks.createSession).toHaveBeenCalledWith("org-1", {
@@ -76,5 +85,41 @@ describe("spawnCloudOrchestrator", () => {
 			displayName: "Orchestrator",
 			prompt: "",
 		});
+	});
+
+	it("honors the project's configured orchestrator agent over the Codex-first fallback", async () => {
+		// The project picked Claude Code, but Codex is also connected (e.g. a
+		// ChatGPT login). The configured choice must win instead of Codex-first.
+		const queryClient = primeClient({
+			id: "project-1",
+			config: { orchestrator: { agent: "claude-code" } },
+		});
+		cloudMocks.listProviderConnections.mockResolvedValue({
+			providerConnections: [connection("codex"), connection("claude-code")],
+		});
+
+		await expect(spawnCloudOrchestrator(queryClient, "project-1")).resolves.toBe("session-1");
+		expect(cloudMocks.createSession).toHaveBeenCalledWith(
+			"org-1",
+			expect.objectContaining({ harness: "claude-code", kind: "orchestrator" }),
+		);
+	});
+
+	it("falls back to the connected-credential priority when the configured agent is not connected", async () => {
+		// Project configured Cursor, but only Codex is connected: fall back rather
+		// than block the spawn on an unusable choice.
+		const queryClient = primeClient({
+			id: "project-1",
+			config: { orchestrator: { agent: "cursor" } },
+		});
+		cloudMocks.listProviderConnections.mockResolvedValue({
+			providerConnections: [connection("codex")],
+		});
+
+		await expect(spawnCloudOrchestrator(queryClient, "project-1")).resolves.toBe("session-1");
+		expect(cloudMocks.createSession).toHaveBeenCalledWith(
+			"org-1",
+			expect.objectContaining({ harness: "codex" }),
+		);
 	});
 });

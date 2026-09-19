@@ -22,15 +22,39 @@ import { captureRendererEvent } from "./telemetry";
 // when Codex is not connected.
 const CLOUD_ORCHESTRATOR_HARNESS_PRIORITY: readonly CloudCpAgentProvider[] = ["codex", "claude-code", "cursor"];
 
-export function selectCloudOrchestratorHarness(
+function connectedProviders(
 	connections: readonly CloudCpProviderConnection[],
-): CloudCpAgentProvider | undefined {
-	const connected = new Set(
+): Set<string> {
+	return new Set(
 		connections
 			.filter((connection) => connection.label === "default" && connection.validationState === "valid")
 			.map((connection) => connection.provider),
 	);
+}
+
+export function selectCloudOrchestratorHarness(
+	connections: readonly CloudCpProviderConnection[],
+): CloudCpAgentProvider | undefined {
+	const connected = connectedProviders(connections);
 	return CLOUD_ORCHESTRATOR_HARNESS_PRIORITY.find((harness) => connected.has(harness));
+}
+
+// The orchestrator agent the user chose for this project (Project Settings or
+// the create-project flow, stored at config.orchestrator.agent). Returned only
+// when it is set AND its credential is connected; otherwise undefined so the
+// caller falls back to the connected-credential priority. Without honoring this,
+// the launcher always took the Codex-first default and ignored a user who picked
+// Claude Code (or Cursor) for the project.
+export function resolveConfiguredOrchestratorHarness(
+	project: { config?: Record<string, unknown> } | undefined,
+	connections: readonly CloudCpProviderConnection[],
+): CloudCpAgentProvider | undefined {
+	const orchestrator = (project?.config as { orchestrator?: { agent?: unknown } } | undefined)?.orchestrator;
+	const agent = typeof orchestrator?.agent === "string" ? orchestrator.agent.trim() : "";
+	if (agent === "") return undefined;
+	return connectedProviders(connections).has(agent as CloudCpAgentProvider)
+		? (agent as CloudCpAgentProvider)
+		: undefined;
 }
 
 /** Spawns a cloud orchestrator session for the project and returns its id. */
@@ -48,17 +72,20 @@ export async function spawnCloudOrchestrator(queryClient: QueryClient, projectId
 	// more than one); omitted lets the control plane use its default. Read
 	// directly from localStorage since this launcher is deliberately hook-free.
 	const provider = readSelectedSandboxProvider();
-	// #4960: pick the orchestrator harness from the user's connected Cloud
-	// coding-agent credentials (Codex -> Claude Code -> Cursor) instead of
-	// hardcoding claude-code.
-	const [orgCredentials, personalCredentials] = await Promise.all([
+	// Pick the orchestrator harness. Prefer the agent the user configured for
+	// this project (config.orchestrator.agent); only when the project has not
+	// chosen one do we fall back to the connected-credential priority
+	// (#4960: Codex -> Claude Code -> Cursor). Previously the configured choice
+	// was ignored, so a project set to Claude Code still launched Codex whenever
+	// a Codex credential happened to be connected.
+	const [orgCredentials, personalCredentials, projects] = await Promise.all([
 		client.listProviderConnections(orgId),
 		client.listUserProviderConnections(),
+		client.listProjects(orgId, { limit: 100 }),
 	]);
-	const harness = selectCloudOrchestratorHarness([
-		...orgCredentials.providerConnections,
-		...personalCredentials.providerConnections,
-	]);
+	const connections = [...orgCredentials.providerConnections, ...personalCredentials.providerConnections];
+	const project = projects.items.find((candidate) => candidate.id === projectId);
+	const harness = resolveConfiguredOrchestratorHarness(project, connections) ?? selectCloudOrchestratorHarness(connections);
 	if (!harness) throw new Error("Connect a Cloud coding agent before spawning an orchestrator.");
 	try {
 		const { session } = await client.createSession(orgId, {
