@@ -280,19 +280,6 @@ type ListSessionsResponse struct {
 	Sessions []SessionView `json:"sessions"`
 }
 
-// PrewarmSpawnRequest is the body of POST /api/v1/sessions/prewarm.
-type PrewarmSpawnRequest struct {
-	// ProjectID is the project whose next spawn should be warmed.
-	ProjectID domain.ProjectID `json:"projectId"`
-}
-
-// PrewarmSpawnResponse acknowledges that the warm-up was scheduled. It reports
-// no outcome on purpose: the work is best effort and the spawn is correct
-// whether or not it finished.
-type PrewarmSpawnResponse struct {
-	OK bool `json:"ok"`
-}
-
 // SpawnSessionRequest is the body of POST /api/v1/sessions.
 type SpawnSessionRequest struct {
 	// ProjectID is omitted for a standalone worker session.

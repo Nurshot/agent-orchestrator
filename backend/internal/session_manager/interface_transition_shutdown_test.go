@@ -391,12 +391,6 @@ func TestInterfaceTransitionChatToTUIRetainsShutdownFenceAcrossRestart(t *testin
 	}
 }
 
-// Queue-before-controller is not exercised by this fake's tests; the spawns it
-// drives are synchronous.
-func (c *shutdownGuardTransitionChat) EnsureChatConversation(_ context.Context, _ domain.SessionID) error {
-	return nil
-}
-
 func (c *shutdownGuardTransitionChat) QueueChatPrompt(_ context.Context, _ domain.SessionID, _ string) (string, error) {
 	return "", nil
 }

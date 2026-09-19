@@ -53,10 +53,6 @@ type ChatLauncher interface {
 	HasLiveChatController(id domain.SessionID) bool
 	// StopChat releases a session's controller.
 	StopChat(ctx context.Context, id domain.SessionID) error
-	// EnsureChatConversation opens a provisioning session's conversation before
-	// its controller exists, so the chat surface has a timeline to render while
-	// the agent starts.
-	EnsureChatConversation(ctx context.Context, id domain.SessionID) error
 	// QueueChatPrompt records the opening prompt as a queued turn instead of
 	// sending it. An asynchronous spawn has no controller yet; DrainChatQueue
 	// delivers this turn, and anything the user typed after it, in order.

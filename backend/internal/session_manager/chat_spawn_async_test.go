@@ -61,9 +61,6 @@ func TestSpawnAsyncChat_AnswersBeforeWorkspaceAndController(t *testing.T) {
 	if got := launcher.queued; len(got) != 1 || got[0] != "do the thing" {
 		t.Fatalf("queued = %v, want the opening prompt", got)
 	}
-	if len(launcher.conversationsEnsured) != 1 {
-		t.Fatalf("conversations ensured = %v, want the session's own", launcher.conversationsEnsured)
-	}
 	if rt.created != 0 {
 		t.Fatal("chat spawn touched the terminal runtime")
 	}
@@ -201,33 +198,6 @@ func TestFailInterruptedProvisioning(t *testing.T) {
 	}
 	if got := st.sessions["mer-2"].ProvisionState; got != domain.SessionProvisionReady {
 		t.Fatalf("healthy session = %q, want untouched", got)
-	}
-}
-
-// The dialog warms the remote refresh on open; the spawn that follows seconds
-// later must reuse it instead of paying for the same fetch again.
-func TestPrewarmSpawn_SpawnReusesTheWarmedFetch(t *testing.T) {
-	launcher := &recordingLauncher{}
-	m, _, _ := newChatManager(launcher)
-	m.browserCapabilities = browsersvc.NewAuthority()
-	m.runBackground = func(work func()) { work() }
-	ws := m.workspace.(*fakeWorkspace)
-	m.store.(*fakeStore).projects[string(chatTestProject)] = domain.ProjectRecord{
-		ID: string(chatTestProject), Path: "/repo/mer", Config: testRoleAgents(),
-	}
-
-	if err := m.PrewarmSpawn(context.Background(), chatTestProject); err != nil {
-		t.Fatalf("prewarm: %v", err)
-	}
-	if len(ws.fetches) != 1 {
-		t.Fatalf("prewarm fetches = %d, want 1", len(ws.fetches))
-	}
-
-	if _, _, _, err := m.Spawn(context.Background(), asyncChatSpawnConfig("do the thing")); err != nil {
-		t.Fatalf("spawn: %v", err)
-	}
-	if len(ws.fetches) != 1 {
-		t.Fatalf("fetches after spawn = %d, want the warmed one reused", len(ws.fetches))
 	}
 }
 

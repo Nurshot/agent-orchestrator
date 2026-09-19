@@ -3328,12 +3328,6 @@ func TestInterfaceTransitionStatusReportsUnverifiedWhenInspectionFails(t *testin
 	}
 }
 
-// Queue-before-controller is not exercised by this fake's tests; the spawns it
-// drives are synchronous.
-func (c *transitionChat) EnsureChatConversation(_ context.Context, _ domain.SessionID) error {
-	return nil
-}
-
 func (c *transitionChat) QueueChatPrompt(_ context.Context, _ domain.SessionID, _ string) (string, error) {
 	return "", nil
 }

@@ -167,7 +167,6 @@ func (c *SessionsController) Register(r chi.Router) {
 	r.Get("/sessions", c.list)
 	r.Post("/sessions", c.spawn)
 	r.Post("/sessions/cleanup", c.cleanup)
-	r.Post("/sessions/prewarm", c.prewarmSpawn)
 	r.Get("/sessions/{sessionId}", c.get)
 	r.Get("/sessions/{sessionId}/preview", c.preview)
 	r.Post("/sessions/{sessionId}/preview", c.setPreview)
@@ -1445,36 +1444,6 @@ func (c *SessionsController) rollback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	envelope.WriteJSON(w, http.StatusOK, RollbackSessionResponse{OK: true, SessionID: sessionID(r), Deleted: out.Deleted, Killed: out.Killed})
-}
-
-// spawnPrewarmer is the optional service capability behind POST
-// /sessions/prewarm. It is asserted rather than required so a build without it
-// answers 501 instead of failing to compile every focused fake.
-type spawnPrewarmer interface {
-	PrewarmSpawn(ctx context.Context, projectID domain.ProjectID) error
-}
-
-// prewarmSpawn warms the slow parts of a spawn before the user asks for one.
-// The desktop calls it when the new-task dialog opens; it answers immediately
-// and its failure costs the caller nothing, so the response carries no result
-// to act on.
-func (c *SessionsController) prewarmSpawn(w http.ResponseWriter, r *http.Request) {
-	prewarmer, ok := c.Svc.(spawnPrewarmer)
-	if c.Svc == nil || !ok {
-		apispec.NotImplemented(w, r, "POST", "/api/v1/sessions/prewarm")
-		return
-	}
-	var in PrewarmSpawnRequest
-	if err := decodeJSON(r, &in); err != nil {
-		envelope.WriteAPIError(w, r, http.StatusBadRequest, "bad_request",
-			"INVALID_JSON", "Invalid JSON body", nil)
-		return
-	}
-	if err := prewarmer.PrewarmSpawn(r.Context(), in.ProjectID); err != nil {
-		envelope.WriteError(w, r, err)
-		return
-	}
-	envelope.WriteJSON(w, http.StatusAccepted, PrewarmSpawnResponse{OK: true})
 }
 
 func (c *SessionsController) cleanup(w http.ResponseWriter, r *http.Request) {

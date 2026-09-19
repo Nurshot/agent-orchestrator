@@ -87,15 +87,9 @@ type recordingLauncher struct {
 
 	// The asynchronous spawn path records the opening prompt instead of sending
 	// it, then drains once the controller is live.
-	conversationsEnsured []domain.SessionID
-	queued               []string
-	queueErr             error
-	drained              []domain.SessionID
-}
-
-func (l *recordingLauncher) EnsureChatConversation(_ context.Context, id domain.SessionID) error {
-	l.conversationsEnsured = append(l.conversationsEnsured, id)
-	return nil
+	queued   []string
+	queueErr error
+	drained  []domain.SessionID
 }
 
 func (l *recordingLauncher) QueueChatPrompt(_ context.Context, _ domain.SessionID, text string) (string, error) {
@@ -1498,12 +1492,6 @@ func TestChatSpawn_RollbackGivesEachCleanupStepAFreshDeadline(t *testing.T) {
 	if !st.sessions["mer-1"].IsTerminated {
 		t.Fatal("session row was not terminated after chat shutdown exhausted its deadline")
 	}
-}
-
-// Queue-before-controller is not exercised by this fake's tests; the spawns it
-// drives are synchronous.
-func (l *deadlineConsumingChatLauncher) EnsureChatConversation(_ context.Context, _ domain.SessionID) error {
-	return nil
 }
 
 func (l *deadlineConsumingChatLauncher) QueueChatPrompt(_ context.Context, _ domain.SessionID, _ string) (string, error) {

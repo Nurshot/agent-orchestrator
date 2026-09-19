@@ -109,47 +109,6 @@ func TestSendWithoutControllerStillRefusedWhenNotProvisioning(t *testing.T) {
 	}
 }
 
-// Stop before the controller arrives: everything queued at that moment is
-// cancelled, and anything typed afterwards still sends.
-func TestCancelQueuedBeforeStart(t *testing.T) {
-	st, provisioningSession := openProvisioningStore(t, domain.SessionProvisionProvisioning)
-	svc := provisioningService(t, st)
-	ctx := context.Background()
-
-	if _, err := svc.Send(ctx, provisioningSession, ports.ChatUserMessage{
-		Text: "before stop", Origin: domain.MessageOriginHuman,
-	}); err != nil {
-		t.Fatalf("send: %v", err)
-	}
-	if err := svc.CancelQueuedBeforeStart(ctx, provisioningSession); err != nil {
-		t.Fatalf("cancel queued: %v", err)
-	}
-	if _, err := svc.Send(ctx, provisioningSession, ports.ChatUserMessage{
-		Text: "after stop", Origin: domain.MessageOriginHuman,
-	}); err != nil {
-		t.Fatalf("send after stop: %v", err)
-	}
-
-	snapshot, err := svc.Snapshot(ctx, provisioningSession)
-	if err != nil {
-		t.Fatalf("snapshot: %v", err)
-	}
-	// Stop settles the withdrawn turns as interrupted, exactly as it does for a
-	// live controller, so the timeline reads the same either side of startup.
-	var queued, interrupted int
-	for _, turn := range snapshot.Turns {
-		switch turn.State {
-		case domain.TurnStateQueued:
-			queued++
-		case domain.TurnStateInterrupted:
-			interrupted++
-		}
-	}
-	if interrupted != 1 || queued != 1 {
-		t.Fatalf("turns after stop: %d interrupted, %d queued; want 1 and 1", interrupted, queued)
-	}
-}
-
 // The queue advances the conversation sequence without a single provider event.
 // Start must still treat this as a conversation's first controller: reserving a
 // fresh provider boundary here would open a brand-new session as if it were a

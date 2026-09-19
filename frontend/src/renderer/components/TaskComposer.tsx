@@ -252,16 +252,6 @@ export function TaskComposer({
 			return data.project as Project;
 		},
 	});
-	// Opening this dialog is the earliest reliable signal that a spawn is coming.
-	// The daemon uses it to get the git work a spawn would otherwise do with the
-	// user waiting — the default-branch fetch — out of the way while they type.
-	// Fire-and-forget by design: a failed or unfinished warm-up costs the spawn
-	// nothing, so there is no state to track and nothing to report.
-	useEffect(() => {
-		if (!projectId || isCloudProject || isStandalone) return;
-		void apiClient.POST("/api/v1/sessions/prewarm", { body: { projectId } });
-	}, [projectId, isCloudProject, isStandalone]);
-
 	const agentsQuery = useAgentReadinessQuery();
 	const { settings } = useSettings();
 	// The composer preselects the agent and model a spawn would actually use

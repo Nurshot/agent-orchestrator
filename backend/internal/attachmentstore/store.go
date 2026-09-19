@@ -53,25 +53,10 @@ func New(dataDir string) *Store {
 // Returning success therefore means both the history copy and the agent-visible
 // copy exist.
 func (s *Store) Put(ctx context.Context, id domain.SessionID, workspacePath, name string, data []byte) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if err := validateSessionID(id); err != nil {
-		return err
-	}
-	if err := validateName(name); err != nil {
-		return err
-	}
-	if len(data) == 0 {
-		return errEmpty
-	}
-	if len(data) > MaxFileBytes {
-		return errTooLarge
-	}
 	if strings.TrimSpace(workspacePath) == "" {
 		return errors.New("attachment workspace path is empty")
 	}
-	if err := s.putCanonical(ctx, id, name, data); err != nil {
+	if err := s.PutCanonical(ctx, id, name, data); err != nil {
 		return err
 	}
 	sessionRoot, err := s.openCanonicalSession(ctx, id, true)
@@ -109,10 +94,6 @@ func (s *Store) PutCanonical(ctx context.Context, id domain.SessionID, name stri
 	if len(data) > MaxFileBytes {
 		return errTooLarge
 	}
-	return s.putCanonical(ctx, id, name, data)
-}
-
-func (s *Store) putCanonical(ctx context.Context, id domain.SessionID, name string, data []byte) error {
 	if s.dataDir == "" {
 		return errors.New("attachment data directory is empty")
 	}

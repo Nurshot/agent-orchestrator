@@ -74,25 +74,7 @@ function Wrap({ children, queryClient = new QueryClient({ defaultOptions: { quer
 
 const task = () => screen.getByRole("textbox", { name: "Task" });
 
-// The composer warms the daemon's spawn path when it opens, so a POST is no
-// longer necessarily a task creation. Queue create responses through postOnce
-// and assert against createCalls: a prewarm must neither consume a queued
-// response nor count as a create.
-const PREWARM_PATH = "/api/v1/sessions/prewarm";
-const postQueue: unknown[] = [];
-const postOnce = (response: unknown) => {
-	postQueue.push(response);
-};
-const createCalls = () => h.post.mock.calls.filter(([path]) => path !== PREWARM_PATH);
-
 beforeEach(() => {
-	postQueue.length = 0;
-	h.post.mockImplementation(async (path: string) => {
-		if (path === PREWARM_PATH) return { data: { ok: true } };
-		const next = postQueue.shift();
-		if (next instanceof Error) throw next;
-		return next ?? { data: {} };
-	});
 	h.get.mockImplementation(async (path: string) => {
 		if (path.includes("/models")) {
 			return {
@@ -122,7 +104,7 @@ afterEach(() => {
 describe("TaskComposer", () => {
 	it("starts a standalone worker without loading or sending a project", async () => {
 		const onCreated = vi.fn();
-		postOnce({ data: { session: { id: "standalone-1" } } });
+		h.post.mockResolvedValueOnce({ data: { session: { id: "standalone-1" } } });
 
 		render(
 			<Wrap>
@@ -145,7 +127,7 @@ describe("TaskComposer", () => {
 				}),
 			}),
 		);
-		expect(createCalls()[0][1].body).not.toHaveProperty("projectId");
+		expect(h.post.mock.calls[0][1].body).not.toHaveProperty("projectId");
 		expect(h.get.mock.calls.some(([path]) => path === "/api/v1/projects/{id}")).toBe(false);
 	});
 
@@ -183,7 +165,7 @@ describe("TaskComposer", () => {
 			}
 			return { data: { status: "ok", project: { agent: "codex", config: {} } } };
 		});
-		postOnce({
+		h.post.mockResolvedValueOnce({
 			error: { code: "AGENT_BINARY_NOT_FOUND", message: "Codex is not installed" },
 		});
 		let finishReadiness!: (value: { agents: ReturnType<typeof agentReadiness>[] }) => void;
@@ -217,7 +199,7 @@ describe("TaskComposer", () => {
 
 	it("starts a promptless worker when the task is empty", async () => {
 		const onCreated = vi.fn();
-		postOnce({ data: { workerId: "sess-empty" } });
+		h.post.mockResolvedValueOnce({ data: { workerId: "sess-empty" } });
 
 		render(
 			<Wrap>
@@ -300,7 +282,7 @@ describe("TaskComposer", () => {
 		const onSubmittingChange = vi.fn();
 		const onCreated = vi.fn();
 		let resolveCreate!: (value: { data: { workerId: string } }) => void;
-		postOnce(new Promise((resolve) => (resolveCreate = resolve)));
+		h.post.mockReturnValueOnce(new Promise((resolve) => (resolveCreate = resolve)));
 
 		render(
 			<Wrap>
@@ -346,7 +328,7 @@ describe("TaskComposer", () => {
 			return { data: { status: "ok", project: { agent: "codex", config: {} } } };
 		});
 		let rejectCreate!: (error: Error) => void;
-		postOnce(new Promise((_resolve, reject) => (rejectCreate = reject)));
+		h.post.mockReturnValueOnce(new Promise((_resolve, reject) => (rejectCreate = reject)));
 
 		render(
 			<Wrap>
@@ -364,7 +346,7 @@ describe("TaskComposer", () => {
 
 		fireEvent.click(screen.getByRole("button", { name: "Start task" }));
 
-		await waitFor(() => expect(createCalls()).toHaveLength(1));
+		await waitFor(() => expect(h.post).toHaveBeenCalledOnce());
 		expect(agent).toBeDisabled();
 		expect(model).toBeDisabled();
 		expect(prompt).toBeDisabled();
@@ -426,7 +408,7 @@ describe("TaskComposer", () => {
 			return { data: { status: "ok", project: { agent: "codex", config: {} } } };
 		});
 		let rejectCreate!: (error: Error) => void;
-		postOnce(new Promise((_resolve, reject) => (rejectCreate = reject)));
+		h.post.mockReturnValueOnce(new Promise((_resolve, reject) => (rejectCreate = reject)));
 
 		render(
 			<Wrap>
@@ -439,7 +421,7 @@ describe("TaskComposer", () => {
 
 		fireEvent.click(screen.getByRole("button", { name: "Start task" }));
 
-		await waitFor(() => expect(createCalls()).toHaveLength(1));
+		await waitFor(() => expect(h.post).toHaveBeenCalledOnce());
 		for (const control of modelControls) expect(control).toBeDisabled();
 
 		await act(async () => rejectCreate(new Error("creation failed")));
@@ -448,7 +430,7 @@ describe("TaskComposer", () => {
 	});
 
 	it("attaches a selected file and sends it in the delegate body", async () => {
-		postOnce({ data: { workerId: "sess-1" } });
+		h.post.mockResolvedValueOnce({ data: { workerId: "sess-1" } });
 
 		const { container } = render(
 			<Wrap>
@@ -465,8 +447,8 @@ describe("TaskComposer", () => {
 		fireEvent.change(task(), { target: { value: "Use the notes" } });
 		fireEvent.click(screen.getByText("Start task"));
 
-		await waitFor(() => expect(createCalls()).toHaveLength(1));
-		const body = createCalls()[0][1].body as {
+		await waitFor(() => expect(h.post).toHaveBeenCalledTimes(1));
+		const body = h.post.mock.calls[0][1].body as {
 			attachments?: Array<{ mimeType: string; data: string }>;
 		};
 		expect(body.attachments).toHaveLength(1);
@@ -475,7 +457,7 @@ describe("TaskComposer", () => {
 	});
 
 	it("waits for a selected file read before submitting", async () => {
-		postOnce({ data: { workerId: "sess-1" } });
+		h.post.mockResolvedValueOnce({ data: { workerId: "sess-1" } });
 		let finishRead!: () => void;
 		class SlowFileReader {
 			error: Error | null = null;
@@ -505,17 +487,17 @@ describe("TaskComposer", () => {
 		fireEvent.change(task(), { target: { value: "Use the slow file" } });
 		fireEvent.click(screen.getByText("Start task"));
 
-		expect(createCalls()).toHaveLength(0);
+		expect(h.post).not.toHaveBeenCalled();
 
 		await act(async () => finishRead());
-		await waitFor(() => expect(createCalls()).toHaveLength(1));
-		expect(createCalls()[0][1].body).toMatchObject({
+		await waitFor(() => expect(h.post).toHaveBeenCalledTimes(1));
+		expect(h.post.mock.calls[0][1].body).toMatchObject({
 			attachments: [{ mimeType: "text/plain", data: "AQID" }],
 		});
 	});
 
 	it("waits for both rapidly selected file batches before delegating", async () => {
-		postOnce({ data: { workerId: "sess-1" } });
+		h.post.mockResolvedValueOnce({ data: { workerId: "sess-1" } });
 		const pendingReads: Array<() => void> = [];
 		class SlowFileReader {
 			error: Error | null = null;
@@ -545,15 +527,15 @@ describe("TaskComposer", () => {
 		});
 		fireEvent.change(task(), { target: { value: "Use both files" } });
 		fireEvent.click(screen.getByText("Start task"));
-		expect(createCalls()).toHaveLength(0);
+		expect(h.post).not.toHaveBeenCalled();
 
 		await act(async () => pendingReads.shift()?.());
 		await waitFor(() => expect(pendingReads).toHaveLength(1));
-		expect(createCalls()).toHaveLength(0);
+		expect(h.post).not.toHaveBeenCalled();
 		await act(async () => pendingReads.shift()?.());
 
-		await waitFor(() => expect(createCalls()).toHaveLength(1));
-		expect(createCalls()[0][1].body).toMatchObject({
+		await waitFor(() => expect(h.post).toHaveBeenCalledTimes(1));
+		expect(h.post.mock.calls[0][1].body).toMatchObject({
 			attachments: [
 				{ mimeType: "text/plain", data: "AQ==" },
 				{ mimeType: "text/plain", data: "Ag==" },
@@ -562,7 +544,7 @@ describe("TaskComposer", () => {
 	});
 
 	it("removes a selected file before submitting", async () => {
-		postOnce({ data: { workerId: "sess-1" } });
+		h.post.mockResolvedValueOnce({ data: { workerId: "sess-1" } });
 
 		const { container } = render(
 			<Wrap>
@@ -581,13 +563,13 @@ describe("TaskComposer", () => {
 		fireEvent.change(task(), { target: { value: "No attachment now" } });
 		fireEvent.click(screen.getByText("Start task"));
 
-		await waitFor(() => expect(createCalls()).toHaveLength(1));
-		expect(createCalls()[0][1].body).not.toHaveProperty("attachments");
+		await waitFor(() => expect(h.post).toHaveBeenCalledTimes(1));
+		expect(h.post.mock.calls[0][1].body).not.toHaveProperty("attachments");
 	});
 
 	it("clears busy state when a create rejects", async () => {
 		const onSubmittingChange = vi.fn();
-		postOnce(new Error("nope"));
+		h.post.mockRejectedValueOnce(new Error("nope"));
 
 		render(
 			<Wrap>
@@ -619,7 +601,7 @@ describe("TaskComposer", () => {
 			}
 			return { data: { status: "ok", project: { agent: "grok", config: {} } } };
 		});
-		postOnce({ data: { workerId: "sess-grok" } });
+		h.post.mockResolvedValueOnce({ data: { workerId: "sess-grok" } });
 
 		render(<Wrap><TaskComposer projectId="proj-1" onCreated={vi.fn()} /></Wrap>);
 
@@ -656,8 +638,9 @@ describe("TaskComposer", () => {
 			}
 			return { data: { status: "ok", project: { agent: "codex", config: {} } } };
 		});
-		postOnce({ error: { code: "CHAT_DRIVER_UNAVAILABLE" } });
-		postOnce({ data: { workerId: "sess-tui" } });
+		h.post
+			.mockResolvedValueOnce({ error: { code: "CHAT_DRIVER_UNAVAILABLE" } })
+			.mockResolvedValueOnce({ data: { workerId: "sess-tui" } });
 		const onCreated = vi.fn();
 
 		render(
@@ -687,17 +670,18 @@ describe("TaskComposer", () => {
 			}
 			return { data: { status: "ok", project: { agent: "cursor", config: {} } } };
 		});
-		postOnce({
-			error: {
-				code: "SESSION_MODE_UNSUPPORTED",
-				message: "This provider cannot satisfy the selected approval policy",
-				details: {
-					missingCapabilities: ["approvals"],
-					allowedApprovalModes: ["bypass-permissions"],
+		h.post
+			.mockResolvedValueOnce({
+				error: {
+					code: "SESSION_MODE_UNSUPPORTED",
+					message: "This provider cannot satisfy the selected approval policy",
+					details: {
+						missingCapabilities: ["approvals"],
+						allowedApprovalModes: ["bypass-permissions"],
+					},
 				},
-			},
-		});
-		postOnce({ data: { workerId: "sess-pi" } });
+			})
+			.mockResolvedValueOnce({ data: { workerId: "sess-pi" } });
 		const onCreated = vi.fn();
 
 		render(
@@ -718,7 +702,7 @@ describe("TaskComposer", () => {
 				body: expect.objectContaining({ approvalMode: "bypass-permissions" }),
 			}),
 		);
-		expect(createCalls()[1][1].body).not.toHaveProperty("mode");
+		expect(h.post.mock.calls[1][1].body).not.toHaveProperty("mode");
 	});
 
 	it("reports dirty then clears it on unmount", () => {
@@ -743,7 +727,7 @@ describe("TaskComposer", () => {
 				data: { status: "ok", project: { agent: "claude-code", config: { worker: { agent: "codex" } } } },
 			};
 		});
-		postOnce({ data: { workerId: "sess-3" } });
+		h.post.mockResolvedValueOnce({ data: { workerId: "sess-3" } });
 
 		render(
 			<Wrap>
@@ -1038,7 +1022,7 @@ describe("TaskComposer", () => {
 				},
 			};
 		});
-		postOnce({ data: { workerId: "sess-2" } });
+		h.post.mockResolvedValueOnce({ data: { workerId: "sess-2" } });
 
 		render(
 			<Wrap>
@@ -1095,21 +1079,21 @@ describe("TaskComposer", () => {
 		expect(screen.queryByRole("button", { name: "Effort" })).not.toBeInTheDocument();
 
 		fireEvent.click(screen.getByText("Start task"));
-		await waitFor(() => expect(createCalls()).toHaveLength(1));
-		expect(createCalls()[0][1].body).not.toHaveProperty("effort");
+		await waitFor(() => expect(h.post).toHaveBeenCalledTimes(1));
+		expect(h.post.mock.calls[0][1].body).not.toHaveProperty("effort");
 
 		await userEvent.click(picker);
 		await userEvent.click(screen.getByRole("menuitem", { name: /Reasoning effort/ }));
 		await userEvent.click(await screen.findByRole("menuitemradio", { name: "Low" }));
 		fireEvent.click(screen.getByText("Start task"));
-		await waitFor(() => expect(createCalls()).toHaveLength(2));
-		expect(createCalls()[1][1].body).toEqual(expect.objectContaining({ effort: "low" }));
+		await waitFor(() => expect(h.post).toHaveBeenCalledTimes(2));
+		expect(h.post.mock.calls[1][1].body).toEqual(expect.objectContaining({ effort: "low" }));
 
 		await userEvent.click(picker);
 		await userEvent.click(screen.getByRole("menuitem", { name: /Reasoning effort/ }));
 		await userEvent.click(await screen.findByRole("menuitemradio", { name: "Provider default" }));
 		fireEvent.click(screen.getByText("Start task"));
-		await waitFor(() => expect(createCalls()).toHaveLength(3));
-		expect(createCalls()[2][1].body).toEqual(expect.objectContaining({ effort: "" }));
+		await waitFor(() => expect(h.post).toHaveBeenCalledTimes(3));
+		expect(h.post.mock.calls[2][1].body).toEqual(expect.objectContaining({ effort: "" }));
 	});
 });

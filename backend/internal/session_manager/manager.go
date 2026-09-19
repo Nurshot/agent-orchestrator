@@ -406,12 +406,6 @@ type Manager struct {
 	clock                       func() time.Time
 	reconcileWorkers            int
 	defaultBranchRefreshTimeout time.Duration
-	// defaultBranchFetchTTL is how long a completed remote refresh stays good
-	// for. The new-task dialog warms this on open, so the spawn that follows
-	// usually finds the fetch already done instead of paying for it inline.
-	defaultBranchFetchTTL time.Duration
-	defaultBranchFetchMu  sync.Mutex
-	defaultBranchFetchAt  map[string]time.Time
 	// runBackground runs an asynchronous spawn's remaining work. Nil means a
 	// plain goroutine; tests substitute a synchronous runner.
 	runBackground    func(func())
@@ -684,14 +678,10 @@ type interfaceTransitionConfig struct {
 // Production sendConfirm bounds: 3 Enters total (1 from Send + 2 re-sends),
 // each given 2s to flip the session active, polled every 300ms.
 const (
-	sendConfirmPollInterval     = 300 * time.Millisecond
-	sendConfirmAttemptDeadline  = 2 * time.Second
-	sendConfirmMaxAttempts      = 3
-	defaultBranchRefreshTimeout = 5 * time.Second
-	// defaultBranchFetchTTL is short on purpose: it exists to collapse the
-	// prewarm and the spawn that follows it seconds later into one fetch, not to
-	// let a session start from a stale base.
-	defaultBranchFetchTTL         = 60 * time.Second
+	sendConfirmPollInterval       = 300 * time.Millisecond
+	sendConfirmAttemptDeadline    = 2 * time.Second
+	sendConfirmMaxAttempts        = 3
+	defaultBranchRefreshTimeout   = 5 * time.Second
 	promptDeliveryDeadlineReserve = 5 * time.Second
 )
 
@@ -770,8 +760,6 @@ func New(d Deps) *Manager {
 		clock:                          d.Clock,
 		reconcileWorkers:               d.ReconcileWorkers,
 		defaultBranchRefreshTimeout:    defaultBranchRefreshTimeout,
-		defaultBranchFetchTTL:          defaultBranchFetchTTL,
-		defaultBranchFetchAt:           map[string]time.Time{},
 		openTranscriptFile:             os.Open,
 		lookPath:                       d.LookPath,
 		executable:                     d.Executable,
@@ -1347,12 +1335,6 @@ func (m *Manager) refreshDefaultBranchesBestEffort(ctx context.Context, project 
 		if target.resolved.BaseRef == "" {
 			continue
 		}
-		if m.defaultBranchFetchFresh(target.repoPath) {
-			// Already refreshed moments ago — by the new-task dialog warming this
-			// path, or by a sibling spawn. Re-fetching would buy nothing and cost
-			// a network round trip with the user waiting on it.
-			continue
-		}
 		if err := refresher.FetchDefaultBranch(fetchCtx, target.repoPath, target.resolved); err != nil {
 			m.logger.Warn("spawn: default branch refresh failed; continuing with local refs",
 				"projectID", project.ID,
@@ -1362,57 +1344,10 @@ func (m *Manager) refreshDefaultBranchesBestEffort(ctx context.Context, project 
 				"baseRef", target.resolved.BaseRef,
 				"error", err,
 			)
-			continue
 		}
-		m.recordDefaultBranchFetch(target.repoPath)
 	}
 	return baseRefs
 }
-
-// defaultBranchFetchFresh reports whether this repository's remote refresh is
-// recent enough to reuse.
-func (m *Manager) defaultBranchFetchFresh(repoPath string) bool {
-	if m.defaultBranchFetchTTL <= 0 {
-		return false
-	}
-	m.defaultBranchFetchMu.Lock()
-	defer m.defaultBranchFetchMu.Unlock()
-	at, ok := m.defaultBranchFetchAt[repoPath]
-	return ok && m.clock().Sub(at) < m.defaultBranchFetchTTL
-}
-
-func (m *Manager) recordDefaultBranchFetch(repoPath string) {
-	m.defaultBranchFetchMu.Lock()
-	defer m.defaultBranchFetchMu.Unlock()
-	if m.defaultBranchFetchAt == nil {
-		m.defaultBranchFetchAt = make(map[string]time.Time)
-	}
-	m.defaultBranchFetchAt[repoPath] = m.clock()
-}
-
-// PrewarmSpawn runs the spawn path's remote refresh ahead of the spawn itself,
-// off the caller's request. The desktop calls it when the new-task dialog opens:
-// by the time the user has typed a brief and pressed start, the fetch that used
-// to sit in front of the worktree is usually already done.
-//
-// Best effort by definition — a spawn whose prewarm failed, or never finished,
-// simply does the fetch itself as before.
-func (m *Manager) PrewarmSpawn(ctx context.Context, projectID domain.ProjectID) error {
-	project, err := m.loadProject(ctx, projectID)
-	if err != nil {
-		return err
-	}
-	m.runInBackground(func() {
-		bg, cancel := context.WithTimeout(context.WithoutCancel(ctx), m.defaultBranchRefreshTimeout+prewarmResolveBudget)
-		defer cancel()
-		m.refreshDefaultBranchesBestEffort(bg, project)
-	})
-	return nil
-}
-
-// prewarmResolveBudget covers the local ref resolution that precedes the
-// bounded network refresh.
-const prewarmResolveBudget = 5 * time.Second
 
 func (m *Manager) createSessionWorkspace(ctx context.Context, project domain.ProjectRecord, cfg ports.SpawnConfig, id domain.SessionID, branch string, baseRefs map[string]string) (ports.WorkspaceInfo, *ports.WorkspaceProjectInfo, error) {
 	projectKind := project.Kind.WithDefault()

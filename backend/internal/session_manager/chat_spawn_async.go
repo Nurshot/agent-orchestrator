@@ -56,12 +56,6 @@ func (m *Manager) beginAsyncChatSpawn(ctx context.Context, in asyncChatSpawn) (d
 		m.rollbackSpawnSeedRowAfterFailure(ctx, id)
 		return domain.SessionRecord{}, 0, 0, wrapSpawnStage(id, ErrSpawnCreate, err)
 	}
-	// The conversation exists before the controller so the chat surface has a
-	// timeline to render the moment the client navigates to the session.
-	if err := m.chat.EnsureChatConversation(ctx, id); err != nil {
-		m.rollbackSpawnSeedRowAfterFailure(ctx, id)
-		return domain.SessionRecord{}, 0, 0, wrapSpawnStage(id, ErrChatController, err)
-	}
 	if in.prompt != "" {
 		if _, err := m.chat.QueueChatPrompt(ctx, id, in.prompt); err != nil {
 			m.rollbackSpawnSeedRowAfterFailure(ctx, id)
@@ -174,18 +168,9 @@ func (m *Manager) failAsyncChatSpawn(ctx context.Context, id domain.SessionID, c
 	cleanupCtx, cancel := spawnRollbackContext(ctx)
 	defer cancel()
 	m.stopChatBestEffort(cleanupCtx, id)
-	if _, err := m.setProvisionState(cleanupCtx, id, domain.SessionProvisionFailed, asyncSpawnFailureMessage(cause)); err != nil {
+	if _, err := m.setProvisionState(cleanupCtx, id, domain.SessionProvisionFailed, cause.Error()); err != nil {
 		m.logger.Error("spawn: record failed start", "sessionID", id, "error", err)
 	}
-}
-
-// asyncSpawnFailureMessage keeps the stage sentinel's wording, which already
-// names the step that failed in the user's terms.
-func asyncSpawnFailureMessage(cause error) string {
-	if cause == nil {
-		return "the session could not be started"
-	}
-	return cause.Error()
 }
 
 func (m *Manager) setProvisionState(

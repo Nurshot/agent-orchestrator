@@ -109,17 +109,6 @@ func (s *Service) ensureConversation(
 	return conversation, nil
 }
 
-// EnsureConversation opens a provisioning session's conversation so the chat
-// surface has something to render while the agent starts.
-func (s *Service) EnsureConversation(ctx context.Context, id domain.SessionID) error {
-	record, err := s.requireChatSession(ctx, id)
-	if err != nil {
-		return err
-	}
-	_, err = s.ensureConversation(ctx, record)
-	return err
-}
-
 // DrainQueued dispatches whatever was queued while the session had no
 // controller. Called once the controller is live; a session with an empty queue
 // is a no-op.
@@ -130,24 +119,4 @@ func (s *Service) DrainQueued(ctx context.Context, id domain.SessionID) error {
 	}
 	controller.drain(ctx)
 	return nil
-}
-
-// CancelQueuedBeforeStart is Stop for a session whose controller has not
-// arrived yet: everything queued at this moment is cancelled, and anything
-// typed afterwards still sends. It is the same cutoff rule the live controller
-// applies, moved ahead of the controller's existence.
-func (s *Service) CancelQueuedBeforeStart(ctx context.Context, id domain.SessionID) error {
-	record, err := s.requireChatSession(ctx, id)
-	if err != nil {
-		return err
-	}
-	if !record.ProvisionState.IsProvisioning() {
-		return ErrNotProvisioning
-	}
-	conversation, err := s.ensureConversation(ctx, record)
-	if err != nil {
-		return err
-	}
-	now := s.now()
-	return s.store.CancelQueuedTurns(ctx, conversation.ID, now, now)
 }
