@@ -159,6 +159,13 @@ export class TerminalLocalEchoController {
 	 * source of truth for whether subsequent keys still belong to a slash command.
 	 */
 	private slashLine: string | null = null;
+	/**
+	 * Whether the remote terminal currently has bracketed paste mode (DECSET 2004)
+	 * enabled, tracked from its output stream. Gates the Enter paste-wrap below: it
+	 * is only safe to send ESC[200~..ESC[201~ to a TUI that asked for bracketed
+	 * paste; a plain shell would otherwise receive the literal marker bytes.
+	 */
+	private bracketedPasteActive = false;
 
 	constructor(options: TerminalLocalEchoOptions) {
 		this.now = options.now ?? Date.now;
@@ -167,6 +174,18 @@ export class TerminalLocalEchoController {
 
 	get pendingCount(): number {
 		return this.draft.length + this.pending.length + this.slashPending.length;
+	}
+
+	/**
+	 * Track the remote's bracketed paste mode (DECSET 2004) from its output so the
+	 * Enter flush can decide whether wrapping the draft is safe. Fed the raw server
+	 * chunk before reconciliation; when both markers appear the later one wins.
+	 */
+	observeServerOutput(text: string): void {
+		const enabled = text.lastIndexOf("\x1b[?2004h");
+		const disabled = text.lastIndexOf("\x1b[?2004l");
+		if (enabled === -1 && disabled === -1) return;
+		this.bracketedPasteActive = enabled > disabled;
 	}
 
 	/**
@@ -259,7 +278,16 @@ export class TerminalLocalEchoController {
 			this.pending = draft.map(({ char }) => ({ char, at: now }));
 			const text = draft.map(({ char }) => char).join("");
 			if (data === "\r" || data === "\n") {
-				return { sendUpstream: text, submitUpstream: data };
+				// The flushed line and its Enter reach the worker PTY back-to-back and
+				// are usually coalesced into a single read(); an agent TUI (Codex) then
+				// reads "text\r" as a paste that inserts the text WITHOUT submitting,
+				// so the user has to press Enter a second time. When the remote enabled
+				// bracketed paste, wrap the line in paste markers: the TUI ends the
+				// paste at ESC[201~ and reads the trailing Enter as a real submit even
+				// when the two writes coalesce. Sending Enter as a distinct event still
+				// matters for terminals without bracketed paste, so keep it separate.
+				const sendUpstream = this.bracketedPasteActive ? `\x1b[200~${text}\x1b[201~` : text;
+				return { sendUpstream, submitUpstream: data };
 			}
 			return { sendUpstream: text + data };
 		}
@@ -478,6 +506,9 @@ export function withLineBufferedLocalInput(
 				innerDataUnsubscribe = inner.onData(id, (bytes) => {
 					const text = decoder.decode(bytes, { stream: true });
 					if (text.length === 0) return;
+					// Track bracketed paste mode from the raw stream before the
+					// synchronized-output buffer can hold part of it back.
+					controller.observeServerOutput(text);
 					for (const output of synchronizedOutput.push(text)) {
 						const { write } = controller.handleServerData(output);
 						emitLocal(write);

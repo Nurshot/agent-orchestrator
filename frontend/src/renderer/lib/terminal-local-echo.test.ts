@@ -44,6 +44,36 @@ describe("TerminalLocalEchoController", () => {
 		expect(controller.pendingCount).toBe(0);
 	});
 
+	it("wraps the flushed line in bracketed paste on Enter once the remote enables DECSET 2004", () => {
+		// An agent TUI (Codex) enables bracketed paste and reads a coalesced
+		// "line\r" as a paste that inserts without submitting, forcing a second
+		// Enter. Wrapping the line so the trailing Enter lands outside ESC[201~
+		// makes it submit on the first Enter even when the writes coalesce.
+		const { controller } = createController();
+		controller.observeServerOutput("\x1b[?2004h");
+		for (const char of [..."ls"]) controller.handleKeystroke(char);
+		expect(controller.handleKeystroke("\r")).toEqual({
+			sendUpstream: "\x1b[200~ls\x1b[201~",
+			submitUpstream: "\r",
+		});
+	});
+
+	it("never wraps a plain shell that has not enabled bracketed paste", () => {
+		const { controller } = createController();
+		controller.handleKeystroke("l");
+		controller.handleKeystroke("s");
+		expect(controller.handleKeystroke("\r")).toEqual({ sendUpstream: "ls", submitUpstream: "\r" });
+	});
+
+	it("stops wrapping once the remote disables bracketed paste (last marker wins)", () => {
+		const { controller } = createController();
+		// A single chunk carrying enable then disable: the later marker wins.
+		controller.observeServerOutput("\x1b[?2004h...\x1b[?2004l");
+		controller.handleKeystroke("l");
+		controller.handleKeystroke("s");
+		expect(controller.handleKeystroke("\r")).toEqual({ sendUpstream: "ls", submitUpstream: "\r" });
+	});
+
 	it("keeps unmatched predictions pending across partially matching server chunks", () => {
 		const { controller } = createController();
 		controller.handleKeystroke("a");
