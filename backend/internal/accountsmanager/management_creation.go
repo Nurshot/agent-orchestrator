@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const (
@@ -28,15 +29,20 @@ type CredentialImport struct {
 }
 
 type rawCredentialRecord struct {
-	AuthIndex   string `json:"auth_index"`
-	Name        string `json:"name"`
-	Provider    string `json:"provider"`
-	Type        string `json:"type"`
-	AccountType string `json:"account_type"`
-	Email       string `json:"email"`
-	Status      string `json:"status"`
-	Disabled    bool   `json:"disabled"`
-	Unavailable bool   `json:"unavailable"`
+	AuthIndex     string               `json:"auth_index"`
+	Name          string               `json:"name"`
+	Provider      string               `json:"provider"`
+	Type          string               `json:"type"`
+	AccountType   string               `json:"account_type"`
+	Email         string               `json:"email"`
+	Status        string               `json:"status"`
+	Disabled      bool                 `json:"disabled"`
+	Unavailable   bool                 `json:"unavailable"`
+	CreatedAt     time.Time            `json:"created_at"`
+	UpdatedAt     time.Time            `json:"updated_at"`
+	LastRefresh   time.Time            `json:"last_refresh"`
+	SupportsQuota bool                 `json:"supports_quota"`
+	Cooldowns     []CredentialCooldown `json:"cooldowns"`
 }
 
 func (c *ManagementClient) AddAPIKey(ctx context.Context, input APIKeyInput) (CredentialSummary, error) {
@@ -171,7 +177,7 @@ func findRawAPIKey(items []json.RawMessage, provider Provider, key, baseURL stri
 		if ref == "" {
 			return CredentialSummary{}, false
 		}
-		return CredentialSummary{Ref: ref, Provider: provider, Kind: "api_key", Status: "active"}, true
+		return CredentialSummary{Ref: ref, Provider: provider, Kind: CredentialAPIKey, Status: CredentialActive}, true
 	}
 	return CredentialSummary{}, false
 }
@@ -267,11 +273,48 @@ func summaryFromRawCredential(record rawCredentialRecord) CredentialSummary {
 		provider = Provider(strings.ToLower(strings.TrimSpace(record.Type)))
 	}
 	return CredentialSummary{
-		Ref:      strings.TrimSpace(record.AuthIndex),
-		Provider: provider,
-		Kind:     strings.TrimSpace(record.AccountType),
-		Email:    strings.TrimSpace(record.Email),
-		Status:   strings.TrimSpace(record.Status),
-		Disabled: record.Disabled,
+		Ref:             strings.TrimSpace(record.AuthIndex),
+		Provider:        provider,
+		Kind:            normalizeCredentialKind(record.AccountType),
+		Email:           strings.TrimSpace(record.Email),
+		Status:          normalizeCredentialState(record.Status, record.Disabled),
+		Disabled:        record.Disabled,
+		Unavailable:     record.Unavailable,
+		CreatedAt:       record.CreatedAt,
+		UpdatedAt:       record.UpdatedAt,
+		LastRefreshedAt: record.LastRefresh,
+		QuotaSupported:  record.SupportsQuota,
+		Cooldowns:       append([]CredentialCooldown(nil), record.Cooldowns...),
+	}
+}
+
+func normalizeCredentialKind(raw string) CredentialKind {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "oauth":
+		return CredentialOAuth
+	case "api_key", "api-key", "apikey":
+		return CredentialAPIKey
+	default:
+		return CredentialUnknown
+	}
+}
+
+func normalizeCredentialState(raw string, disabled bool) CredentialState {
+	if disabled {
+		return CredentialDisabled
+	}
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "active", "ok":
+		return CredentialActive
+	case "pending":
+		return CredentialPending
+	case "refreshing", "recovering":
+		return CredentialRefreshing
+	case "error", "failed", "unavailable":
+		return CredentialError
+	case "disabled":
+		return CredentialDisabled
+	default:
+		return CredentialUnknownState
 	}
 }

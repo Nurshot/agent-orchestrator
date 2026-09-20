@@ -66,14 +66,48 @@ const (
 	ProviderClaude Provider = "claude"
 )
 
+type CredentialKind string
+
+const (
+	CredentialOAuth   CredentialKind = "oauth"
+	CredentialAPIKey  CredentialKind = "api_key"
+	CredentialUnknown CredentialKind = "unknown"
+)
+
+type CredentialState string
+
+const (
+	CredentialActive       CredentialState = "active"
+	CredentialPending      CredentialState = "pending"
+	CredentialRefreshing   CredentialState = "refreshing"
+	CredentialError        CredentialState = "error"
+	CredentialDisabled     CredentialState = "disabled"
+	CredentialUnknownState CredentialState = "unknown"
+)
+
+type CredentialCooldown struct {
+	Scope            string    `json:"scope"`
+	Model            string    `json:"model_key"`
+	Reason           string    `json:"reason"`
+	RetryAt          time.Time `json:"retry_at"`
+	RemainingSeconds int64     `json:"remaining_seconds"`
+	HTTPStatus       int       `json:"http_status"`
+}
+
 type CredentialSummary struct {
-	Ref        string
-	Provider   Provider
-	Kind       string
-	Email      string
-	Status     string
-	Disabled   bool
-	ObservedAt time.Time
+	Ref             string
+	Provider        Provider
+	Kind            CredentialKind
+	Email           string
+	Status          CredentialState
+	Disabled        bool
+	Unavailable     bool
+	ObservedAt      time.Time
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	LastRefreshedAt time.Time
+	QuotaSupported  bool
+	Cooldowns       []CredentialCooldown
 }
 
 type RoutingStrategy string
@@ -110,16 +144,8 @@ func NewManagementClient(source EndpointSource, client *http.Client) *Management
 
 func (c *ManagementClient) ListCredentials(ctx context.Context) ([]CredentialSummary, error) {
 	var payload struct {
-		ObservedAt time.Time `json:"observed_at"`
-		Files      []struct {
-			AuthIndex   string `json:"auth_index"`
-			Provider    string `json:"provider"`
-			Type        string `json:"type"`
-			AccountType string `json:"account_type"`
-			Email       string `json:"email"`
-			Status      string `json:"status"`
-			Disabled    bool   `json:"disabled"`
-		} `json:"files"`
+		ObservedAt time.Time             `json:"observed_at"`
+		Files      []rawCredentialRecord `json:"files"`
 	}
 	if err := c.doJSON(ctx, "list credentials", http.MethodGet, "/v0/management/auth-files", nil, &payload); err != nil {
 		return nil, err
@@ -139,15 +165,9 @@ func (c *ManagementClient) ListCredentials(ctx context.Context) ([]CredentialSum
 		if provider != ProviderCodex && provider != ProviderClaude {
 			continue
 		}
-		credentials = append(credentials, CredentialSummary{
-			Ref:        ref,
-			Provider:   provider,
-			Kind:       strings.TrimSpace(file.AccountType),
-			Email:      strings.TrimSpace(file.Email),
-			Status:     strings.TrimSpace(file.Status),
-			Disabled:   file.Disabled,
-			ObservedAt: payload.ObservedAt,
-		})
+		summary := summaryFromRawCredential(file)
+		summary.ObservedAt = payload.ObservedAt
+		credentials = append(credentials, summary)
 	}
 	return credentials, nil
 }

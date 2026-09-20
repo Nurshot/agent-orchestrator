@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -195,7 +196,7 @@ func TestManagementClientListCredentialsFiltersAndRedacts(t *testing.T) {
 		t.Fatalf("ListCredentials() count = %d, want %d", len(got), len(want))
 	}
 	for i := range want {
-		if got[i] != want[i] {
+		if !reflect.DeepEqual(got[i], want[i]) {
 			t.Fatalf("ListCredentials()[%d] = %#v, want %#v", i, got[i], want[i])
 		}
 	}
