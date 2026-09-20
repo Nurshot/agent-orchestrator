@@ -94,6 +94,11 @@ type CredentialCooldown struct {
 	HTTPStatus       int       `json:"http_status"`
 }
 
+type CredentialQuotaObservation struct {
+	ObservedAt time.Time
+	Signals    map[string]string
+}
+
 type CredentialSummary struct {
 	Ref             string
 	Provider        Provider
@@ -108,6 +113,8 @@ type CredentialSummary struct {
 	LastRefreshedAt time.Time
 	QuotaSupported  bool
 	Cooldowns       []CredentialCooldown
+	Quota           CredentialQuotaObservation
+	ModelQuota      map[string]CredentialQuotaObservation
 }
 
 type RoutingStrategy string

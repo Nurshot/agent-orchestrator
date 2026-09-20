@@ -29,20 +29,27 @@ type CredentialImport struct {
 }
 
 type rawCredentialRecord struct {
-	AuthIndex     string               `json:"auth_index"`
-	Name          string               `json:"name"`
-	Provider      string               `json:"provider"`
-	Type          string               `json:"type"`
-	AccountType   string               `json:"account_type"`
-	Email         string               `json:"email"`
-	Status        string               `json:"status"`
-	Disabled      bool                 `json:"disabled"`
-	Unavailable   bool                 `json:"unavailable"`
-	CreatedAt     time.Time            `json:"created_at"`
-	UpdatedAt     time.Time            `json:"updated_at"`
-	LastRefresh   time.Time            `json:"last_refresh"`
-	SupportsQuota bool                 `json:"supports_quota"`
-	Cooldowns     []CredentialCooldown `json:"cooldowns"`
+	AuthIndex     string                         `json:"auth_index"`
+	Name          string                         `json:"name"`
+	Provider      string                         `json:"provider"`
+	Type          string                         `json:"type"`
+	AccountType   string                         `json:"account_type"`
+	Email         string                         `json:"email"`
+	Status        string                         `json:"status"`
+	Disabled      bool                           `json:"disabled"`
+	Unavailable   bool                           `json:"unavailable"`
+	CreatedAt     time.Time                      `json:"created_at"`
+	UpdatedAt     time.Time                      `json:"updated_at"`
+	LastRefresh   time.Time                      `json:"last_refresh"`
+	SupportsQuota bool                           `json:"supports_quota"`
+	Cooldowns     []CredentialCooldown           `json:"cooldowns"`
+	Quota         rawQuotaObservation            `json:"quota"`
+	ModelQuota    map[string]rawQuotaObservation `json:"model_quotas"`
+}
+
+type rawQuotaObservation struct {
+	ObservedAt time.Time         `json:"observed_at"`
+	Signals    map[string]string `json:"signals"`
 }
 
 func (c *ManagementClient) AddAPIKey(ctx context.Context, input APIKeyInput) (CredentialSummary, error) {
@@ -285,7 +292,30 @@ func summaryFromRawCredential(record rawCredentialRecord) CredentialSummary {
 		LastRefreshedAt: record.LastRefresh,
 		QuotaSupported:  record.SupportsQuota,
 		Cooldowns:       append([]CredentialCooldown(nil), record.Cooldowns...),
+		Quota:           projectQuotaObservation(record.Quota),
+		ModelQuota:      projectModelQuotaObservations(record.ModelQuota),
 	}
+}
+
+func projectQuotaObservation(raw rawQuotaObservation) CredentialQuotaObservation {
+	signals := make(map[string]string, len(raw.Signals))
+	for key, value := range raw.Signals {
+		signals[key] = value
+	}
+	return CredentialQuotaObservation{ObservedAt: raw.ObservedAt, Signals: signals}
+}
+
+func projectModelQuotaObservations(raw map[string]rawQuotaObservation) map[string]CredentialQuotaObservation {
+	if len(raw) == 0 {
+		return nil
+	}
+	projected := make(map[string]CredentialQuotaObservation, len(raw))
+	for model, observation := range raw {
+		if trimmed := strings.TrimSpace(model); trimmed != "" {
+			projected[trimmed] = projectQuotaObservation(observation)
+		}
+	}
+	return projected
 }
 
 func normalizeCredentialKind(raw string) CredentialKind {
