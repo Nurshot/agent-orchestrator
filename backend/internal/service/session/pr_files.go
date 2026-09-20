@@ -35,8 +35,8 @@ type PRFiles struct {
 
 // ListPRFiles returns the committed changed-file set for an associated PR.
 // Git reads are revision-only and never inspect or mutate the worktree/index.
-func (s *Service) ListPRFiles(ctx context.Context, id domain.SessionID, number int) (PRFiles, error) {
-	rec, pr, err := s.prFileSource(ctx, id, number)
+func (s *Service) ListPRFiles(ctx context.Context, id domain.SessionID, number int, sourceURL string) (PRFiles, error) {
+	rec, pr, err := s.prFileSource(ctx, id, number, sourceURL)
 	if err != nil {
 		return PRFiles{}, err
 	}
@@ -71,8 +71,8 @@ func (s *Service) ListPRFiles(ctx context.Context, id domain.SessionID, number i
 }
 
 // GetPRFile returns one file and its exact base...head diff for an associated PR.
-func (s *Service) GetPRFile(ctx context.Context, id domain.SessionID, number int, rawPath string) (WorkspaceFileDetail, error) {
-	rec, pr, err := s.prFileSource(ctx, id, number)
+func (s *Service) GetPRFile(ctx context.Context, id domain.SessionID, number int, sourceURL, rawPath string) (WorkspaceFileDetail, error) {
+	rec, pr, err := s.prFileSource(ctx, id, number, sourceURL)
 	if err != nil {
 		return WorkspaceFileDetail{}, err
 	}
@@ -129,8 +129,8 @@ func (s *Service) GetPRFile(ctx context.Context, id domain.SessionID, number int
 // GetPRFileRevision reads one immutable side of the selected PR comparison.
 // It intentionally does not delegate to workspace revision readers: a PR view
 // must never fall back to the mutable session worktree while expanding a hunk.
-func (s *Service) GetPRFileRevision(ctx context.Context, id domain.SessionID, number int, rawPath string, side WorkspaceFileBlobSide) (WorkspaceFileRevision, error) {
-	rec, pr, err := s.prFileSource(ctx, id, number)
+func (s *Service) GetPRFileRevision(ctx context.Context, id domain.SessionID, number int, sourceURL, rawPath string, side WorkspaceFileBlobSide) (WorkspaceFileRevision, error) {
+	rec, pr, err := s.prFileSource(ctx, id, number, sourceURL)
 	if err != nil {
 		return WorkspaceFileRevision{}, err
 	}
@@ -178,7 +178,7 @@ func (s *Service) GetPRFileRevision(ctx context.Context, id domain.SessionID, nu
 	return result, nil
 }
 
-func (s *Service) prFileSource(ctx context.Context, id domain.SessionID, number int) (domain.SessionRecord, domain.PullRequest, error) {
+func (s *Service) prFileSource(ctx context.Context, id domain.SessionID, number int, sourceURL string) (domain.SessionRecord, domain.PullRequest, error) {
 	rec, err := s.sessionWorkspaceRecord(ctx, id)
 	if err != nil {
 		return domain.SessionRecord{}, domain.PullRequest{}, err
@@ -188,18 +188,52 @@ func (s *Service) prFileSource(ctx context.Context, id domain.SessionID, number 
 		return domain.SessionRecord{}, domain.PullRequest{}, fmt.Errorf("list PRs for files: %w", err)
 	}
 	for _, pr := range prs {
-		if pr.Number != number {
+		if pr.Number != number || (sourceURL != "" && !strings.EqualFold(strings.TrimSpace(pr.URL), strings.TrimSpace(sourceURL))) {
 			continue
 		}
 		if strings.TrimSpace(pr.BaseSHA) == "" || strings.TrimSpace(pr.HeadSHA) == "" {
 			return domain.SessionRecord{}, domain.PullRequest{}, unavailablePRSource()
 		}
-		if err := ensurePRRevisionObjects(ctx, rec.Metadata.WorkspacePath, pr); err != nil {
+		root, err := s.prWorkspaceRoot(ctx, rec, pr)
+		if err != nil {
+			return domain.SessionRecord{}, domain.PullRequest{}, err
+		}
+		rec.Metadata.WorkspacePath = root
+		if err := ensurePRRevisionObjects(ctx, root, pr); err != nil {
 			return domain.SessionRecord{}, domain.PullRequest{}, err
 		}
 		return rec, pr, nil
 	}
 	return domain.SessionRecord{}, domain.PullRequest{}, apierr.NotFound("PR_NOT_FOUND", "Pull request is not associated with this session")
+}
+
+// prWorkspaceRoot chooses the registered repository whose origin matches the
+// PR's persisted provider repository. Workspace projects can contain child
+// repositories, so the session root is not necessarily the PR's git root.
+func (s *Service) prWorkspaceRoot(ctx context.Context, rec domain.SessionRecord, pr domain.PullRequest) (string, error) {
+	rows, err := s.store.ListSessionWorktrees(ctx, rec.ID)
+	if err != nil || len(rows) == 0 {
+		return rec.Metadata.WorkspacePath, err
+	}
+	want := strings.Trim(strings.ToLower(pr.Repo), "/")
+	for _, row := range rows {
+		if strings.TrimSpace(row.WorktreePath) == "" {
+			continue
+		}
+		origin, originErr := gitWorkspaceOutput(ctx, row.WorktreePath, "remote", "get-url", "origin")
+		if originErr != nil {
+			continue
+		}
+		identity, parseErr := domain.ParseRepositoryIdentity(strings.TrimSpace(origin))
+		if parseErr != nil {
+			continue
+		}
+		got := strings.ToLower(identity.Namespace + "/" + identity.Name)
+		if got == want {
+			return row.WorktreePath, nil
+		}
+	}
+	return "", apierr.NotFound("PR_SOURCE_REPOSITORY_NOT_FOUND", "No registered workspace repository matches the selected pull request")
 }
 
 // ensurePRRevisionObjects fetches provider-owned review refs only when the

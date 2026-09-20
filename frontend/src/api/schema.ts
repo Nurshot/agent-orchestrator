@@ -11004,6 +11004,8 @@ export interface operations {
                 expectedRevision?: string;
                 /** @description Exact commit SHA for a committed-scope comparison. */
                 commitSha?: string;
+                /** @description Stable URL of the selected associated pull request. */
+                sourceUrl?: string;
             };
             header?: never;
             path: {
@@ -12866,6 +12868,8 @@ export interface operations {
                 expectedRevision?: string;
                 /** @description Exact commit SHA for a committed-scope comparison. */
                 commitSha?: string;
+                /** @description Stable URL of the selected associated pull request. */
+                sourceUrl?: string;
             };
             header?: never;
             path: {

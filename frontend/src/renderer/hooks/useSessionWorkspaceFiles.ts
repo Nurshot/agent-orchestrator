@@ -41,7 +41,7 @@ export type WorkspaceDiffScope = components["schemas"]["WorkspaceDiffRequest"]["
 export type WorkspaceDiffsResponse = components["schemas"]["WorkspaceDiffsResponse"];
 export type WorkspaceFileRevision = components["schemas"]["WorkspaceFileRevisionResponse"];
 export type WorkspaceFileSearchResponse = components["schemas"]["WorkspaceFileSearchResponse"];
-export type FilesSource = { kind: "workspace" } | { kind: "pull_request"; number: number; label: string };
+export type FilesSource = { kind: "workspace" } | { kind: "pull_request"; number: number; url: string; label: string };
 
 export const sessionWorkspaceFilesQueryKey = (sessionId: string) => ["session-workspace-files", sessionId] as const;
 export const sessionPRFilesQueryKey = (sessionId: string, number: number) => ["session-pr-files", sessionId, number] as const;
@@ -68,9 +68,9 @@ async function fetchSessionWorkspaceFiles(sessionId: string, errorMessage: strin
 	};
 }
 
-async function fetchSessionPRFiles(sessionId: string, number: number, errorMessage: string): Promise<WorkspaceFilesResponse> {
+async function fetchSessionPRFiles(sessionId: string, number: number, sourceUrl: string, errorMessage: string): Promise<WorkspaceFilesResponse> {
 	const { data, error } = await apiClient.GET("/api/v1/sessions/{sessionId}/pr/{prNumber}/files", {
-		params: { path: { sessionId, prNumber: number } },
+		params: { path: { sessionId, prNumber: number }, query: { sourceUrl } },
 	});
 	if (error) throw new Error(apiErrorMessage(error, errorMessage));
 	return { ...data, sections: { staged: [], unstaged: [], untracked: [], committed: data?.files ?? [] }, commits: [] } as WorkspaceFilesResponse;
@@ -88,9 +88,9 @@ async function fetchSessionWorkspaceFile(sessionId: string, path: string, scope:
 	return data as WorkspaceFileDetail;
 }
 
-async function fetchSessionPRFile(sessionId: string, number: number, path: string, errorMessage: string): Promise<WorkspaceFileDetail> {
+async function fetchSessionPRFile(sessionId: string, number: number, sourceUrl: string, path: string, errorMessage: string): Promise<WorkspaceFileDetail> {
 	const { data, error } = await apiClient.GET("/api/v1/sessions/{sessionId}/pr/{prNumber}/file", {
-		params: { path: { sessionId, prNumber: number }, query: { path } },
+		params: { path: { sessionId, prNumber: number }, query: { path, sourceUrl } },
 	});
 	if (error) throw new Error(apiErrorMessage(error, errorMessage));
 	if (!data) throw new Error(errorMessage);
@@ -109,7 +109,7 @@ export function sessionWorkspaceFileQueryOptions(sessionId: string, path: string
 export function sessionSourceFileQueryOptions(sessionId: string, source: FilesSource, path: string, errorMessage = "Unable to load file", scope: WorkspaceDiffScope = "combined", commitSha?: string): UseQueryOptions<WorkspaceFileDetail> {
 	return source.kind === "workspace"
 		? sessionWorkspaceFileQueryOptions(sessionId, path, errorMessage, scope, commitSha)
-		: { queryKey: ["session-source-file", sessionId, "pull_request", source.number, path], queryFn: () => fetchSessionPRFile(sessionId, source.number, path, errorMessage) };
+		: { queryKey: ["session-source-file", sessionId, "pull_request", source.url, path], queryFn: () => fetchSessionPRFile(sessionId, source.number, source.url, path, errorMessage) };
 }
 
 export const sessionWorkspaceDiffsQueryKey = (
@@ -182,9 +182,9 @@ export async function fetchWorkspaceFileRevision({
 	return data;
 }
 
-export async function fetchPRFileRevision(sessionId: string, number: number, path: string, side: "before" | "after"): Promise<WorkspaceFileRevision> {
+export async function fetchPRFileRevision(sessionId: string, number: number, sourceUrl: string, path: string, side: "before" | "after"): Promise<WorkspaceFileRevision> {
 	const { data, error } = await apiClient.GET("/api/v1/sessions/{sessionId}/pr/{prNumber}/file/revision", {
-		params: { path: { sessionId, prNumber: number }, query: { path, side } },
+		params: { path: { sessionId, prNumber: number }, query: { path, side, sourceUrl } },
 	});
 	if (error || !data) throw new Error(apiErrorMessage(error, "Unable to load pull request file revision"));
 	return data as WorkspaceFileRevision;
@@ -257,7 +257,7 @@ export function sessionWorkspaceFilesQueryOptions(sessionId: string, errorMessag
 export function sessionSourceFilesQueryOptions(sessionId: string, source: FilesSource, errorMessage = "Unable to load files"): UseQueryOptions<WorkspaceFilesResponse> {
 	return source.kind === "workspace"
 		? sessionWorkspaceFilesQueryOptions(sessionId, errorMessage)
-		: { queryKey: ["session-source-files", sessionId, "pull_request", source.number], queryFn: () => fetchSessionPRFiles(sessionId, source.number, errorMessage) };
+		: { queryKey: ["session-source-files", sessionId, "pull_request", source.url], queryFn: () => fetchSessionPRFiles(sessionId, source.number, source.url, errorMessage) };
 }
 
 export function workspaceFilesRefetchInterval(state: WorkspaceFileConnectionState): false | number {

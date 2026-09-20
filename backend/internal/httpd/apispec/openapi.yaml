@@ -5061,6 +5061,12 @@ paths:
         schema:
           description: Exact commit SHA for a committed-scope comparison.
           type: string
+      - description: Stable URL of the selected associated pull request.
+        in: query
+        name: sourceUrl
+        schema:
+          description: Stable URL of the selected associated pull request.
+          type: string
       responses:
         "200":
           content:
@@ -6611,6 +6617,12 @@ paths:
         name: commitSha
         schema:
           description: Exact commit SHA for a committed-scope comparison.
+          type: string
+      - description: Stable URL of the selected associated pull request.
+        in: query
+        name: sourceUrl
+        schema:
+          description: Stable URL of the selected associated pull request.
           type: string
       responses:
         "200":

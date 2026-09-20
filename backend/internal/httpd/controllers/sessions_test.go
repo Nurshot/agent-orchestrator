@@ -584,14 +584,14 @@ func (f *fakeSessionService) ListWorkspaceFiles(_ context.Context, id domain.Ses
 	return sessionsvc.WorkspaceFiles{SessionID: id}, nil
 }
 
-func (f *fakeSessionService) ListPRFiles(_ context.Context, id domain.SessionID, number int) (sessionsvc.PRFiles, error) {
+func (f *fakeSessionService) ListPRFiles(_ context.Context, id domain.SessionID, number int, _ string) (sessionsvc.PRFiles, error) {
 	if _, ok := f.sessions[id]; !ok {
 		return sessionsvc.PRFiles{}, apierr.NotFound("SESSION_NOT_FOUND", "Unknown session")
 	}
 	return sessionsvc.PRFiles{SessionID: id, Source: sessionsvc.PRFileSource{Number: number}}, nil
 }
 
-func (f *fakeSessionService) GetPRFile(_ context.Context, id domain.SessionID, _ int, path string) (sessionsvc.WorkspaceFileDetail, error) {
+func (f *fakeSessionService) GetPRFile(_ context.Context, id domain.SessionID, _ int, _ string, path string) (sessionsvc.WorkspaceFileDetail, error) {
 	if _, ok := f.sessions[id]; !ok {
 		return sessionsvc.WorkspaceFileDetail{}, apierr.NotFound("SESSION_NOT_FOUND", "Unknown session")
 	}
@@ -687,7 +687,7 @@ func (f *fakeSessionService) GetWorkspaceFileRevision(_ context.Context, id doma
 	return sessionsvc.WorkspaceFileRevision{SessionID: id, Path: path, Side: side, Revision: expectedRevision, Exists: true}, nil
 }
 
-func (f *fakeSessionService) GetPRFileRevision(ctx context.Context, id domain.SessionID, number int, path string, side sessionsvc.WorkspaceFileBlobSide) (sessionsvc.WorkspaceFileRevision, error) {
+func (f *fakeSessionService) GetPRFileRevision(ctx context.Context, id domain.SessionID, number int, _ string, path string, side sessionsvc.WorkspaceFileBlobSide) (sessionsvc.WorkspaceFileRevision, error) {
 	return f.GetWorkspaceFileRevision(ctx, id, path, sessionsvc.WorkspaceDiffCommitted, side, "", "")
 }
 

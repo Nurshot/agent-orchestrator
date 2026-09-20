@@ -83,7 +83,7 @@ export function SessionFileExplorer({
 
 	useEffect(() => {
 		if (source.kind !== "pull_request" || !scmQuery.data) return;
-		if (scmQuery.data.some((pr) => pr.number === source.number)) return;
+		if (scmQuery.data.some((pr) => pr.url === source.url)) return;
 		setSource({ kind: "workspace" });
 		setSelectedPath(null);
 		setSourceNotice(t("files.explorer.sourceUnavailable"));
@@ -126,7 +126,7 @@ export function SessionFileExplorer({
 		}
 		const number = Number(value.slice(3));
 		const pr = scmQuery.data?.find((candidate) => candidate.number === number);
-		if (pr) setSource({ kind: "pull_request", number, label: `PR #${number} · ${pr.sourceBranch || pr.title}` });
+		if (pr) setSource({ kind: "pull_request", number, url: pr.url, label: `PR #${number} · ${pr.sourceBranch || pr.title}` });
 	};
 
 	return (

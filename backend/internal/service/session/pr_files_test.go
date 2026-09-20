@@ -25,7 +25,7 @@ func TestPRFilesUsePersistedBaseAndHeadWithoutReadingWorkspaceChanges(t *testing
 	st.prs["ao-1"] = []domain.PullRequest{{Number: 42, URL: "https://example.test/pr/42", SourceBranch: "feature", TargetBranch: "main", BaseSHA: base, HeadSHA: head}}
 	svc := &Service{store: st}
 
-	files, err := svc.ListPRFiles(context.Background(), "ao-1", 42)
+	files, err := svc.ListPRFiles(context.Background(), "ao-1", 42, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func TestPRFilesUsePersistedBaseAndHeadWithoutReadingWorkspaceChanges(t *testing
 	if _, err := os.Stat(filepath.Join(repo, "notes.txt")); err != nil {
 		t.Fatalf("workspace was unexpectedly changed: %v", err)
 	}
-	detail, err := svc.GetPRFile(context.Background(), "ao-1", 42, "README.md")
+	detail, err := svc.GetPRFile(context.Background(), "ao-1", 42, "", "README.md")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestPRFilesRejectUnassociatedPR(t *testing.T) {
 	repo := newWorkspaceRepo(t)
 	st := newFakeStore()
 	st.sessions["ao-1"] = domain.SessionRecord{ID: "ao-1", Metadata: domain.SessionMetadata{WorkspacePath: repo}}
-	_, err := (&Service{store: st}).ListPRFiles(context.Background(), "ao-1", 99)
+	_, err := (&Service{store: st}).ListPRFiles(context.Background(), "ao-1", 99, "")
 	if err == nil {
 		t.Fatal("ListPRFiles succeeded for an unassociated PR")
 	}
@@ -66,9 +66,15 @@ func TestPRFileRevisionReadsPRSidesInsteadOfWorkspace(t *testing.T) {
 	st.sessions["ao-1"] = domain.SessionRecord{ID: "ao-1", Metadata: domain.SessionMetadata{WorkspacePath: repo}}
 	st.prs["ao-1"] = []domain.PullRequest{{Number: 42, URL: "https://example.test/pr/42", BaseSHA: base, HeadSHA: head}}
 	svc := &Service{store: st}
-	after, err := svc.GetPRFileRevision(context.Background(), "ao-1", 42, "README.md", WorkspaceBlobAfter)
-	if err != nil || after.Content != "pull request\n" { t.Fatalf("after = %#v, %v", after, err) }
-	before, err := svc.GetPRFileRevision(context.Background(), "ao-1", 42, "README.md", WorkspaceBlobBefore)
-	if err != nil { t.Fatal(err) }
-	if !before.Exists || before.Content == "workspace only\n" { t.Fatalf("before leaked worktree: %#v", before) }
+	after, err := svc.GetPRFileRevision(context.Background(), "ao-1", 42, "", "README.md", WorkspaceBlobAfter)
+	if err != nil || after.Content != "pull request\n" {
+		t.Fatalf("after = %#v, %v", after, err)
+	}
+	before, err := svc.GetPRFileRevision(context.Background(), "ao-1", 42, "", "README.md", WorkspaceBlobBefore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !before.Exists || before.Content == "workspace only\n" {
+		t.Fatalf("before leaked worktree: %#v", before)
+	}
 }
