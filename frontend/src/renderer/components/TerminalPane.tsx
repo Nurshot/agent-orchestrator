@@ -1156,7 +1156,7 @@ function AttachedTerminal({
 	// never reports "exited" there, so without this the strip — and the resume
 	// action on it — stays hidden in exactly the state that needs it (#3875).
 	const showEndedState =
-		(state === "exited" || canRestoreSession || sessionAgentExited(session)) && !isBoxComingUp;
+		(state === "exited" || canRestoreSession || (terminalTarget?.kind === "worker" && sessionAgentExited(session))) && !isBoxComingUp;
 	const emptyStateTitle = session ? t("terminal.startingSession") : "Agent Orchestrator";
 	const emptyStateMessage = session
 		? session.kind === "orchestrator"

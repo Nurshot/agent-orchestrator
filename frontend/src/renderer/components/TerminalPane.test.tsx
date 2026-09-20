@@ -250,6 +250,7 @@ function renderPane(
 	session?: WorkspaceSession,
 	inputRequest?: { id: number; data: string },
 	onInputRequestResult?: (id: number, accepted: boolean) => void,
+	terminalTarget?: TerminalTarget,
 ) {
 	const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 	const previousAO = window.ao;
@@ -263,6 +264,7 @@ function renderPane(
 					inputRequest={inputRequest}
 					onInputRequestResult={onInputRequestResult}
 					session={session}
+					terminalTarget={terminalTarget}
 					theme="dark"
 				/>
 			</TooltipProvider>
@@ -922,6 +924,23 @@ describe("terminal restore", () => {
 				view.restore();
 			}
 		});
+
+		it.each([
+			["shell", { kind: "shell", handleId: "shell-1", generation: "2026-06-10T00:00:00Z", sessionId: worker.id, title: "Terminal 1" }],
+			["reviewer", { kind: "reviewer", handleId: "reviewer-1", harness: "codex", sessionId: worker.id }],
+		] satisfies Array<[string, TerminalTarget]>)(
+			"does not show the ended strip over an attached %s terminal",
+			(_kind, terminalTarget) => {
+				terminalState.value = "attached";
+				const view = renderPane({ ...worker, ...exited }, undefined, undefined, terminalTarget);
+				try {
+					expect(screen.getByTestId("xterm")).toBeInTheDocument();
+					expect(screen.queryByText("Terminal ended")).not.toBeInTheDocument();
+				} finally {
+					view.restore();
+				}
+			},
+		);
 
 		// Cloud sessions recover through the control plane; the local daemon has
 		// never heard of them, so this button must not appear for one.
