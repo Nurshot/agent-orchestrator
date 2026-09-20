@@ -65,9 +65,14 @@ export function SessionFileExplorer({
 	const setFilesChangedOnly = useUiStore((state) => state.setFilesChangedOnly);
 	const setFilesSource = useUiStore((state) => state.setFilesSource);
 	const annotation = useFileAnnotation(sessionId, source.kind === "workspace" ? "Workspace" : `${source.label} (${source.url})`);
+	const snapshot = source.kind === "pull_request" ? scmQuery.data?.find((pr) => pr.url === source.url)?.headSha ?? "" : "";
+	const querySource = useMemo<FilesSource>(
+		() => source.kind === "pull_request" ? { ...source, snapshot } : source,
+		[source, snapshot],
+	);
 
 	const filesQuery = useQuery({
-		...sessionSourceFilesQueryOptions(sessionId, source, t("files.error.loadWorkspace")),
+		...sessionSourceFilesQueryOptions(sessionId, querySource, t("files.error.loadWorkspace")),
 		refetchInterval: workspaceFilesRefetchInterval(connectionState),
 	});
 	const changedOnlyData = useMemo(
@@ -265,7 +270,7 @@ export function SessionFileExplorer({
 					<ResizableHandle />
 					<ResizablePanel defaultSize="74%" minSize="40%">
 						<ContentScrollArea>
-							<FileContentPane annotation={annotation} path={selectedPath} sessionId={sessionId} source={source} split={split} />
+							<FileContentPane annotation={annotation} path={selectedPath} sessionId={sessionId} source={querySource} split={split} />
 						</ContentScrollArea>
 					</ResizablePanel>
 				</ResizablePanelGroup>

@@ -2390,6 +2390,7 @@ func gitWorkspaceOutput(ctx context.Context, root string, args ...string) (strin
 	globalArgs := make([]string, 0, 10+len(args))
 	globalArgs = append(globalArgs, "--no-pager", "--no-optional-locks", "-c", "core.hooksPath="+os.DevNull, "-c", "diff.external=", "-c", "core.fsmonitor=false", "-C", root)
 	cmd := aoprocess.CommandContext(ctx, "git", append(globalArgs, args...)...)
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=Never")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()

@@ -663,6 +663,10 @@ func (c *SessionsController) getPRFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *SessionsController) getPRFileRevision(w http.ResponseWriter, r *http.Request) {
+	if c.Svc == nil {
+		apispec.NotImplemented(w, r, "GET", "/api/v1/sessions/{sessionId}/pr/{prNumber}/file/revision")
+		return
+	}
 	number, err := strconv.Atoi(chi.URLParam(r, "prNumber"))
 	if err != nil || number <= 0 {
 		envelope.WriteAPIError(w, r, http.StatusBadRequest, "bad_request", "INVALID_PR_NUMBER", "prNumber must be a positive integer", nil)

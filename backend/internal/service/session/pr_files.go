@@ -250,7 +250,9 @@ func ensurePRRevisionObjects(ctx context.Context, root, remote string, pr domain
 		refspecs = append(refspecs, "+"+providerRef+":"+refPrefix+"/head")
 	}
 	if strings.TrimSpace(remote) != "" && len(refspecs) > 0 {
-		_, _ = gitWorkspaceOutput(ctx, root, append([]string{"fetch", "--no-tags", remote}, refspecs...)...)
+		fetchCtx, cancel := context.WithTimeout(ctx, workspaceReviewTimeout)
+		_, _ = gitWorkspaceOutput(fetchCtx, root, append([]string{"fetch", "--no-tags", remote}, refspecs...)...)
+		cancel()
 	}
 	if !gitCommitExists(ctx, root, pr.BaseSHA) || !gitCommitExists(ctx, root, pr.HeadSHA) {
 		return unavailablePRSource()

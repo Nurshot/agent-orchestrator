@@ -41,7 +41,7 @@ export type WorkspaceDiffScope = components["schemas"]["WorkspaceDiffRequest"]["
 export type WorkspaceDiffsResponse = components["schemas"]["WorkspaceDiffsResponse"];
 export type WorkspaceFileRevision = components["schemas"]["WorkspaceFileRevisionResponse"];
 export type WorkspaceFileSearchResponse = components["schemas"]["WorkspaceFileSearchResponse"];
-export type FilesSource = { kind: "workspace" } | { kind: "pull_request"; number: number; url: string; label: string };
+export type FilesSource = { kind: "workspace" } | { kind: "pull_request"; number: number; url: string; label: string; snapshot?: string };
 
 export const sessionWorkspaceFilesQueryKey = (sessionId: string) => ["session-workspace-files", sessionId] as const;
 const WORKSPACE_FILES_DEGRADED_REFETCH_MS = 30_000;
@@ -108,7 +108,7 @@ export function sessionWorkspaceFileQueryOptions(sessionId: string, path: string
 export function sessionSourceFileQueryOptions(sessionId: string, source: FilesSource, path: string, errorMessage = "Unable to load file", scope: WorkspaceDiffScope = "combined", commitSha?: string): UseQueryOptions<WorkspaceFileDetail> {
 	return source.kind === "workspace"
 		? sessionWorkspaceFileQueryOptions(sessionId, path, errorMessage, scope, commitSha)
-		: { queryKey: ["session-source-file", sessionId, "pull_request", source.url, path], queryFn: () => fetchSessionPRFile(sessionId, source.number, source.url, path, errorMessage) };
+		: { queryKey: ["session-source-file", sessionId, "pull_request", source.url, source.snapshot ?? "", path], queryFn: () => fetchSessionPRFile(sessionId, source.number, source.url, path, errorMessage) };
 }
 
 export const sessionWorkspaceDiffsQueryKey = (
@@ -230,7 +230,7 @@ export function sessionSourceFileRevisionQueryOptions({
 	return source.kind === "workspace"
 		? sessionWorkspaceFileRevisionQueryOptions({ path, scope, sessionId, side, workspaceVersion, commitSha })
 		: {
-			queryKey: ["session-source-file-revision", sessionId, "pull_request", source.url, side, path] as const,
+			queryKey: ["session-source-file-revision", sessionId, "pull_request", source.url, source.snapshot ?? "", side, path] as const,
 			queryFn: () => fetchPRFileRevision(sessionId, source.number, source.url, path, side),
 		};
 }
@@ -281,7 +281,7 @@ export function sessionWorkspaceFilesQueryOptions(sessionId: string, errorMessag
 export function sessionSourceFilesQueryOptions(sessionId: string, source: FilesSource, errorMessage = "Unable to load files"): UseQueryOptions<WorkspaceFilesResponse> {
 	return source.kind === "workspace"
 		? sessionWorkspaceFilesQueryOptions(sessionId, errorMessage)
-		: { queryKey: ["session-source-files", sessionId, "pull_request", source.url], queryFn: () => fetchSessionPRFiles(sessionId, source.number, source.url, errorMessage) };
+		: { queryKey: ["session-source-files", sessionId, "pull_request", source.url, source.snapshot ?? ""], queryFn: () => fetchSessionPRFiles(sessionId, source.number, source.url, errorMessage) };
 }
 
 export function workspaceFilesRefetchInterval(state: WorkspaceFileConnectionState): false | number {

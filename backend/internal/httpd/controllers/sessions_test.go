@@ -1034,6 +1034,10 @@ func TestSessionsRoutes_DefaultToStubsWithoutService(t *testing.T) {
 	body, status, headers := doRequest(t, srv, "GET", "/api/v1/sessions", "")
 	assertJSON(t, headers)
 	assertErrorCode(t, body, status, http.StatusNotImplemented, "NOT_IMPLEMENTED")
+
+	body, status, headers = doRequest(t, srv, "GET", "/api/v1/sessions/ao-1/pr/42/file/revision?path=README.md", "")
+	assertJSON(t, headers)
+	assertErrorCode(t, body, status, http.StatusNotImplemented, "NOT_IMPLEMENTED")
 }
 
 func TestSessionsAPI_AcknowledgeInterfaceTransitionNotice(t *testing.T) {

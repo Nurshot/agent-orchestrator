@@ -230,6 +230,23 @@ describe("SessionFileExplorer", () => {
 		);
 	});
 
+	it("refreshes PR files when the observed head changes", async () => {
+		const sessionId = "sess-pr-refresh";
+		const url = "https://example.test/pr/42";
+		useUiStore.getState().setFilesSource(sessionId, { kind: "pull_request", number: 42, url, label: "PR #42 · files" });
+		getMock.mockImplementation(async (path: string) => {
+			if (path === "/api/v1/sessions/{sessionId}/pr") {
+				return { data: { sessionId, prs: [{ headSha: "head-1", number: 42, url, sourceBranch: "files", title: "Files" }] } };
+			}
+			return { data: { sessionId, files: [], truncated: false } };
+		});
+		const { client } = renderWithQuery(<SessionFileExplorer sessionId={sessionId} />);
+
+		await waitFor(() => expect(client.getQueryData(["session-source-files", sessionId, "pull_request", url, "head-1"])).toBeDefined());
+		client.setQueryData(["session-scm-summary", sessionId], [{ headSha: "head-2", number: 42, url, sourceBranch: "files", title: "Files" }]);
+		await waitFor(() => expect(client.getQueryData(["session-source-files", sessionId, "pull_request", url, "head-2"])).toBeDefined());
+	});
+
 	it("selects duplicate PR numbers by URL and preserves the source across remounts", async () => {
 		getMock.mockImplementation(async (path: string) => {
 			if (path === "/api/v1/sessions/{sessionId}/pr") {
