@@ -88,6 +88,9 @@ func NewManagementClient(source EndpointSource, client *http.Client) *Management
 	if bounded.Timeout <= 0 || bounded.Timeout > managementClientTimeout {
 		bounded.Timeout = managementClientTimeout
 	}
+	bounded.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
 	return &ManagementClient{source: source, client: &bounded}
 }
 

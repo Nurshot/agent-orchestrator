@@ -80,6 +80,31 @@ func TestManagementClientRejectsNonLoopbackEndpoint(t *testing.T) {
 	}
 }
 
+func TestManagementClientRejectsRedirectWithoutForwardingManagementToken(t *testing.T) {
+	t.Parallel()
+
+	var redirectedCalls atomic.Int32
+	redirectTarget := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		redirectedCalls.Add(1)
+		_, _ = io.WriteString(w, `{"strategy":"round-robin"}`)
+	}))
+	defer redirectTarget.Close()
+	redirectSource := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, redirectTarget.URL+"/stolen", http.StatusFound)
+	}))
+	defer redirectSource.Close()
+
+	client := NewManagementClient(staticEndpointSource{endpoint: Endpoint{BaseURL: redirectSource.URL, ManagementToken: "management-secret"}, ready: true}, redirectSource.Client())
+	_, err := client.RoutingStrategy(context.Background())
+	var statusErr *ManagementStatusError
+	if !errors.As(err, &statusErr) || statusErr.StatusCode != http.StatusFound {
+		t.Fatalf("RoutingStrategy() error = %v, want redirect status error", err)
+	}
+	if redirectedCalls.Load() != 0 {
+		t.Fatalf("redirect target calls = %d, want 0", redirectedCalls.Load())
+	}
+}
+
 func TestManagementClientStatusErrorDoesNotExposeBody(t *testing.T) {
 	t.Parallel()
 
