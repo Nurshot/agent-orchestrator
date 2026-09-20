@@ -9,15 +9,17 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 )
 
 const (
-	oauthSessionDuration = 5 * time.Minute
-	oauthQueryLimit      = 16 << 10
-	oauthResponseLimit   = 1 << 20
+	oauthSessionDuration   = 5 * time.Minute
+	oauthTerminalRetention = time.Minute
+	oauthQueryLimit        = 16 << 10
+	oauthResponseLimit     = 1 << 20
 )
 
 type oauthProviderConfig struct {
@@ -45,7 +47,16 @@ type oauthRunnerSession struct {
 	authorizationURL string
 	expiresAt        time.Time
 	status           string
+	failureCode      string
 	listener         net.Listener
+}
+
+type oauthSessionEvent struct {
+	Provider    string    `json:"provider"`
+	State       string    `json:"state"`
+	Status      string    `json:"status"`
+	FailureCode string    `json:"failureCode,omitempty"`
+	ExpiresAt   time.Time `json:"expiresAt"`
 }
 
 type oauthCoordinator struct {
@@ -54,10 +65,14 @@ type oauthCoordinator struct {
 	client        *http.Client
 	listen        func(string, string) (net.Listener, error)
 
-	mu        sync.Mutex
-	sessions  map[string]*oauthRunnerSession
-	providers map[string]string
-	closed    bool
+	mu          sync.Mutex
+	sessions    map[string]*oauthRunnerSession
+	providers   map[string]string
+	subscribers map[chan oauthSessionEvent]struct{}
+	closed      bool
+
+	observeInterval        time.Duration
+	eventHeartbeatInterval time.Duration
 }
 
 func newOAuthCoordinator(baseURL, managementKey string, client *http.Client, listen func(string, string) (net.Listener, error)) *oauthCoordinator {
@@ -68,12 +83,15 @@ func newOAuthCoordinator(baseURL, managementKey string, client *http.Client, lis
 		listen = net.Listen
 	}
 	return &oauthCoordinator{
-		baseURL:       strings.TrimRight(baseURL, "/"),
-		managementKey: managementKey,
-		client:        client,
-		listen:        listen,
-		sessions:      make(map[string]*oauthRunnerSession),
-		providers:     make(map[string]string),
+		baseURL:                strings.TrimRight(baseURL, "/"),
+		managementKey:          managementKey,
+		client:                 client,
+		listen:                 listen,
+		sessions:               make(map[string]*oauthRunnerSession),
+		providers:              make(map[string]string),
+		subscribers:            make(map[chan oauthSessionEvent]struct{}),
+		observeInterval:        250 * time.Millisecond,
+		eventHeartbeatInterval: 15 * time.Second,
 	}
 }
 
@@ -87,6 +105,8 @@ func (c *oauthCoordinator) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		c.handleStart(w, r)
 	case r.Method == http.MethodGet && r.URL.Path == "/ao/internal/oauth/status":
 		c.handleStatus(w, r)
+	case r.Method == http.MethodGet && r.URL.Path == "/ao/internal/oauth/events":
+		c.handleEvents(w, r)
 	case r.Method == http.MethodDelete && r.URL.Path == "/ao/internal/oauth/session":
 		c.handleCancel(w, r)
 	default:
@@ -162,6 +182,7 @@ func (c *oauthCoordinator) handleStart(w http.ResponseWriter, r *http.Request) {
 	}
 	c.sessions[state] = session
 	c.providers[provider] = state
+	c.publishLocked(session)
 
 	server := &http.Server{
 		Handler:           c.callbackHandler(session),
@@ -172,6 +193,7 @@ func (c *oauthCoordinator) handleStart(w http.ResponseWriter, r *http.Request) {
 		_ = server.Serve(listener)
 	}()
 	go c.expireSession(state, session.expiresAt)
+	go c.observeSession(state, session.expiresAt)
 	writeOAuthSession(w, session)
 }
 
@@ -223,9 +245,7 @@ func (c *oauthCoordinator) handleStatus(w http.ResponseWriter, r *http.Request) 
 	if status != "pending" {
 		c.mu.Lock()
 		if current := c.sessions[state]; current == session {
-			current.status = status
-			c.closeListenerLocked(current)
-			delete(c.providers, current.provider)
+			c.finishSessionLocked(current, status, failureCodeForOAuthStatus(status))
 		}
 		c.mu.Unlock()
 	}
@@ -240,7 +260,7 @@ func (c *oauthCoordinator) handleCancel(w http.ResponseWriter, r *http.Request) 
 	}
 	c.mu.Lock()
 	session := c.sessions[state]
-	if session == nil {
+	if session == nil || session.status != "pending" {
 		c.mu.Unlock()
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -254,13 +274,176 @@ func (c *oauthCoordinator) handleCancel(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	c.mu.Lock()
-	if current := c.sessions[state]; current == session {
-		c.closeListenerLocked(current)
-		delete(c.sessions, state)
-		delete(c.providers, current.provider)
+	if current := c.sessions[state]; current == session && current.status == "pending" {
+		c.finishSessionLocked(current, "expired", "cancelled")
 	}
 	c.mu.Unlock()
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (c *oauthCoordinator) handleEvents(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeOAuthError(w, http.StatusInternalServerError, "streaming_unsupported")
+		return
+	}
+	updates := make(chan oauthSessionEvent, 16)
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		writeOAuthError(w, http.StatusServiceUnavailable, "unavailable")
+		return
+	}
+	states := make([]string, 0, len(c.sessions))
+	for state := range c.sessions {
+		states = append(states, state)
+	}
+	sort.Strings(states)
+	replay := make([]oauthSessionEvent, 0, len(states))
+	for _, state := range states {
+		replay = append(replay, eventFromSession(c.sessions[state]))
+	}
+	c.subscribers[updates] = struct{}{}
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		delete(c.subscribers, updates)
+		c.mu.Unlock()
+	}()
+
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+	for _, event := range replay {
+		if !writeOAuthEvent(w, flusher, event) {
+			return
+		}
+	}
+	interval := c.eventHeartbeatInterval
+	if interval <= 0 {
+		interval = 15 * time.Second
+	}
+	heartbeat := time.NewTicker(interval)
+	defer heartbeat.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case event, open := <-updates:
+			if !open || !writeOAuthEvent(w, flusher, event) {
+				return
+			}
+		case <-heartbeat.C:
+			if _, err := io.WriteString(w, ": heartbeat\n\n"); err != nil {
+				return
+			}
+			flusher.Flush()
+		}
+	}
+}
+
+func writeOAuthEvent(w http.ResponseWriter, flusher http.Flusher, event oauthSessionEvent) bool {
+	data, err := json.Marshal(event)
+	if err != nil {
+		return false
+	}
+	if _, err = io.WriteString(w, "event: oauth_session\ndata: "+string(data)+"\n\n"); err != nil {
+		return false
+	}
+	flusher.Flush()
+	return true
+}
+
+func eventFromSession(session *oauthRunnerSession) oauthSessionEvent {
+	if session == nil {
+		return oauthSessionEvent{}
+	}
+	return oauthSessionEvent{
+		Provider: session.provider, State: session.state, Status: session.status,
+		FailureCode: session.failureCode, ExpiresAt: session.expiresAt,
+	}
+}
+
+func (c *oauthCoordinator) publishLocked(session *oauthRunnerSession) {
+	event := eventFromSession(session)
+	for subscriber := range c.subscribers {
+		select {
+		case subscriber <- event:
+		default:
+		}
+	}
+}
+
+func (c *oauthCoordinator) observeSession(state string, expiresAt time.Time) {
+	interval := c.observeInterval
+	if interval <= 0 {
+		interval = 250 * time.Millisecond
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for range ticker.C {
+		c.mu.Lock()
+		session := c.sessions[state]
+		pending := !c.closed && session != nil && session.status == "pending" && session.expiresAt.Equal(expiresAt)
+		c.mu.Unlock()
+		if !pending {
+			return
+		}
+		query := url.Values{"state": []string{state}}
+		var upstream struct {
+			Status string `json:"status"`
+		}
+		if err := c.upstreamJSON(context.Background(), http.MethodGet, "/v0/management/get-auth-status?"+query.Encode(), nil, &upstream); err != nil {
+			continue
+		}
+		status := "pending"
+		switch upstream.Status {
+		case "ok":
+			status = "completed"
+		case "error":
+			status = "failed"
+		}
+		if status == "pending" {
+			continue
+		}
+		c.mu.Lock()
+		if current := c.sessions[state]; current != nil && current.status == "pending" && current.expiresAt.Equal(expiresAt) {
+			c.finishSessionLocked(current, status, failureCodeForOAuthStatus(status))
+		}
+		c.mu.Unlock()
+		return
+	}
+}
+
+func failureCodeForOAuthStatus(status string) string {
+	if status == "failed" {
+		return "authentication_failed"
+	}
+	return ""
+}
+
+func (c *oauthCoordinator) finishSessionLocked(session *oauthRunnerSession, status, failureCode string) {
+	if session == nil || session.status != "pending" {
+		return
+	}
+	session.status = status
+	session.failureCode = failureCode
+	c.closeListenerLocked(session)
+	delete(c.providers, session.provider)
+	c.publishLocked(session)
+	state := session.state
+	go func() {
+		timer := time.NewTimer(oauthTerminalRetention)
+		defer timer.Stop()
+		<-timer.C
+		c.mu.Lock()
+		if current := c.sessions[state]; current == session && current.status != "pending" {
+			delete(c.sessions, state)
+		}
+		c.mu.Unlock()
+	}()
 }
 
 func (c *oauthCoordinator) callbackHandler(session *oauthRunnerSession) http.Handler {
@@ -359,9 +542,7 @@ func (c *oauthCoordinator) expireSession(state string, expiresAt time.Time) {
 }
 
 func (c *oauthCoordinator) expireSessionLocked(session *oauthRunnerSession) {
-	session.status = "expired"
-	c.closeListenerLocked(session)
-	delete(c.providers, session.provider)
+	c.finishSessionLocked(session, "expired", "expired")
 }
 
 func (c *oauthCoordinator) closeListenerLocked(session *oauthRunnerSession) {
@@ -377,6 +558,10 @@ func (c *oauthCoordinator) Close() {
 	c.closed = true
 	for _, session := range c.sessions {
 		c.closeListenerLocked(session)
+	}
+	for subscriber := range c.subscribers {
+		close(subscriber)
+		delete(c.subscribers, subscriber)
 	}
 }
 

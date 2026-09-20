@@ -8,6 +8,333 @@ servers:
 - description: Local daemon (loopback only)
   url: http://127.0.0.1:3001
 paths:
+  /api/v1/accounts-manager/accounts:
+    get:
+      operationId: getAccountsManagerAccounts
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountsManagerAccountsResponse'
+          description: OK
+        "501":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Not Implemented
+      summary: List safe Accounts Manager account state
+      tags:
+      - system
+  /api/v1/accounts-manager/accounts/{accountId}:
+    delete:
+      operationId: removeAccountsManagerAccount
+      parameters:
+      - in: path
+        name: accountId
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountsManagerAccountsResponse'
+          description: OK
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Not Found
+      summary: Remove an account
+      tags:
+      - system
+    patch:
+      operationId: updateAccountsManagerAccount
+      parameters:
+      - in: path
+        name: accountId
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAccountsManagerAccountRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountsManagerAccountsResponse'
+          description: OK
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Not Found
+      summary: Enable or disable an account
+      tags:
+      - system
+  /api/v1/accounts-manager/accounts/{accountId}/models:
+    get:
+      operationId: getAccountsManagerAccountModels
+      parameters:
+      - in: path
+        name: accountId
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountsManagerModelsResponse'
+          description: OK
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Unprocessable Entity
+      summary: List account models
+      tags:
+      - system
+  /api/v1/accounts-manager/accounts/{accountId}/quota:
+    get:
+      operationId: getAccountsManagerAccountQuota
+      parameters:
+      - in: path
+        name: accountId
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountsManagerQuotaResponse'
+          description: OK
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Unprocessable Entity
+      summary: Get account quota
+      tags:
+      - system
+  /api/v1/accounts-manager/accounts/{accountId}/quota/reset:
+    post:
+      operationId: resetAccountsManagerAccountQuota
+      parameters:
+      - in: path
+        name: accountId
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: No Content
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Not Found
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Unprocessable Entity
+      summary: Reset account quota
+      tags:
+      - system
+  /api/v1/accounts-manager/accounts/{accountId}/refresh:
+    post:
+      operationId: refreshAccountsManagerAccount
+      parameters:
+      - in: path
+        name: accountId
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountsManagerAccountsResponse'
+          description: OK
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Not Found
+      summary: Refresh an account
+      tags:
+      - system
+  /api/v1/accounts-manager/accounts/api-key:
+    post:
+      operationId: addAccountsManagerAPIKey
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountsManagerAPIKeyRequest'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountsManagerAccountsResponse'
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Bad Request
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Request Entity Too Large
+      summary: Add provider API key
+      tags:
+      - system
+  /api/v1/accounts-manager/accounts/events:
+    get:
+      operationId: streamAccountsManagerAccounts
+      responses:
+        "200":
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/AccountsManagerAccountsResponse'
+          description: OK
+      summary: Stream Accounts Manager account snapshots
+      tags:
+      - system
+  /api/v1/accounts-manager/accounts/import:
+    post:
+      operationId: importAccountsManagerCredential
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountsManagerImportRequest'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountsManagerAccountsResponse'
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Bad Request
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Conflict
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Request Entity Too Large
+      summary: Import provider credential JSON
+      tags:
+      - system
+  /api/v1/accounts-manager/oauth-sessions:
+    post:
+      operationId: startAccountsManagerOAuth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartAccountsManagerOAuthRequest'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountsManagerOAuthSessionResponse'
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Bad Request
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Conflict
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Service Unavailable
+      summary: Start browser sign-in
+      tags:
+      - system
+  /api/v1/accounts-manager/oauth-sessions/{operationId}:
+    delete:
+      operationId: cancelAccountsManagerOAuth
+      parameters:
+      - in: path
+        name: operationId
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: No Content
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Service Unavailable
+      summary: Cancel browser sign-in
+      tags:
+      - system
   /api/v1/accounts-manager/status:
     get:
       operationId: getAccountsManagerStatus
@@ -7136,6 +7463,274 @@ components:
       - code
       - message
       type: object
+    AccountsManagerAPIKeyRequest:
+      properties:
+        baseUrl:
+          type: string
+        key:
+          type: string
+        provider:
+          enum:
+          - codex
+          - claude
+          type: string
+      required:
+      - provider
+      - key
+      type: object
+    AccountsManagerAccountResponse:
+      properties:
+        cooldowns:
+          items:
+            $ref: '#/components/schemas/AccountsManagerCooldownResponse'
+          type: array
+        createdAt:
+          format: date-time
+          type: string
+        disabled:
+          type: boolean
+        email:
+          type: string
+        id:
+          type: string
+        kind:
+          enum:
+          - oauth
+          - api_key
+          - unknown
+          type: string
+        lastRefreshedAt:
+          format: date-time
+          type: string
+        provider:
+          enum:
+          - codex
+          - claude
+          type: string
+        quotaSupported:
+          type: boolean
+        status:
+          enum:
+          - active
+          - pending
+          - refreshing
+          - error
+          - disabled
+          - unknown
+          type: string
+        unavailable:
+          type: boolean
+        updatedAt:
+          format: date-time
+          type: string
+      required:
+      - id
+      - provider
+      - kind
+      - status
+      - disabled
+      - unavailable
+      - quotaSupported
+      - cooldowns
+      type: object
+    AccountsManagerAccountsResponse:
+      properties:
+        accounts:
+          items:
+            $ref: '#/components/schemas/AccountsManagerAccountResponse'
+          type: array
+        availability:
+          enum:
+          - starting
+          - ready
+          - degraded
+          type: string
+        oauthSessions:
+          items:
+            $ref: '#/components/schemas/AccountsManagerOAuthSessionResponse'
+          type: array
+        revision:
+          format: int64
+          type: integer
+        stale:
+          type: boolean
+      required:
+      - revision
+      - availability
+      - stale
+      - accounts
+      - oauthSessions
+      type: object
+    AccountsManagerCooldownResponse:
+      properties:
+        httpStatus:
+          type: integer
+        model:
+          type: string
+        reason:
+          type: string
+        remainingSeconds:
+          format: int64
+          type: integer
+        retryAt:
+          format: date-time
+          type: string
+        scope:
+          type: string
+      required:
+      - scope
+      type: object
+    AccountsManagerImportRequest:
+      properties:
+        credential: {}
+        filename:
+          type: string
+        provider:
+          enum:
+          - codex
+          - claude
+          type: string
+      required:
+      - provider
+      - filename
+      - credential
+      type: object
+    AccountsManagerModelResponse:
+      properties:
+        displayName:
+          type: string
+        id:
+          type: string
+        owner:
+          type: string
+        type:
+          type: string
+      required:
+      - id
+      type: object
+    AccountsManagerModelsResponse:
+      properties:
+        models:
+          items:
+            $ref: '#/components/schemas/AccountsManagerModelResponse'
+          type: array
+      required:
+      - models
+      type: object
+    AccountsManagerOAuthSessionResponse:
+      properties:
+        authorizationUrl:
+          type: string
+        expiresAt:
+          format: date-time
+          type: string
+        failureCode:
+          type: string
+        id:
+          type: string
+        provider:
+          enum:
+          - codex
+          - claude
+          type: string
+        status:
+          enum:
+          - pending
+          - completed
+          - failed
+          - expired
+          type: string
+      required:
+      - id
+      - provider
+      - status
+      - expiresAt
+      type: object
+    AccountsManagerQuotaBucket:
+      properties:
+        description:
+          type: string
+        remainingFraction:
+          format: double
+          type: number
+        resetTime:
+          type: string
+        window:
+          type: string
+      required:
+      - window
+      - remainingFraction
+      - resetTime
+      - description
+      type: object
+    AccountsManagerQuotaGroup:
+      properties:
+        buckets:
+          items:
+            $ref: '#/components/schemas/AccountsManagerQuotaBucket'
+          type: array
+        displayName:
+          type: string
+      required:
+      - displayName
+      - buckets
+      type: object
+    AccountsManagerQuotaMetric:
+      properties:
+        currency:
+          type: string
+        format:
+          type: string
+        key:
+          type: string
+        label:
+          type: string
+        unit:
+          type: string
+        value:
+          format: double
+          type: number
+      required:
+      - key
+      - label
+      - value
+      - unit
+      - format
+      - currency
+      type: object
+    AccountsManagerQuotaResponse:
+      properties:
+        groups:
+          items:
+            $ref: '#/components/schemas/AccountsManagerQuotaGroup'
+          type: array
+        serverTimeOffsetMs:
+          format: int64
+          type: integer
+        subscription:
+          $ref: '#/components/schemas/AccountsManagerQuotaSubscription'
+        summary:
+          items:
+            $ref: '#/components/schemas/AccountsManagerQuotaMetric'
+          type: array
+      required:
+      - summary
+      - serverTimeOffsetMs
+      - groups
+      type: object
+    AccountsManagerQuotaSubscription:
+      properties:
+        plan:
+          type: string
+        tierId:
+          type: string
+        tierName:
+          type: string
+      required:
+      - plan
+      - tierName
+      - tierId
+      type: object
     AccountsManagerStatusResponse:
       properties:
         engineVersion:
@@ -11881,6 +12476,16 @@ components:
       - sessionId
       - paths
       type: object
+    StartAccountsManagerOAuthRequest:
+      properties:
+        provider:
+          enum:
+          - codex
+          - claude
+          type: string
+      required:
+      - provider
+      type: object
     StartAgentAuthResponse:
       properties:
         action:
@@ -12211,6 +12816,13 @@ components:
       required:
       - token
       - deleted
+      type: object
+    UpdateAccountsManagerAccountRequest:
+      properties:
+        disabled:
+          type: boolean
+      required:
+      - disabled
       type: object
     UpdateProjectSettingsInput:
       properties:

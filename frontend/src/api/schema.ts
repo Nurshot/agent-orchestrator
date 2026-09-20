@@ -4,6 +4,194 @@
  */
 
 export interface paths {
+    "/api/v1/accounts-manager/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List safe Accounts Manager account state */
+        get: operations["getAccountsManagerAccounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/accounts-manager/accounts/{accountId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove an account */
+        delete: operations["removeAccountsManagerAccount"];
+        options?: never;
+        head?: never;
+        /** Enable or disable an account */
+        patch: operations["updateAccountsManagerAccount"];
+        trace?: never;
+    };
+    "/api/v1/accounts-manager/accounts/{accountId}/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List account models */
+        get: operations["getAccountsManagerAccountModels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/accounts-manager/accounts/{accountId}/quota": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get account quota */
+        get: operations["getAccountsManagerAccountQuota"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/accounts-manager/accounts/{accountId}/quota/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reset account quota */
+        post: operations["resetAccountsManagerAccountQuota"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/accounts-manager/accounts/{accountId}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh an account */
+        post: operations["refreshAccountsManagerAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/accounts-manager/accounts/api-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add provider API key */
+        post: operations["addAccountsManagerAPIKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/accounts-manager/accounts/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stream Accounts Manager account snapshots */
+        get: operations["streamAccountsManagerAccounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/accounts-manager/accounts/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import provider credential JSON */
+        post: operations["importAccountsManagerCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/accounts-manager/oauth-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start browser sign-in */
+        post: operations["startAccountsManagerOAuth"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/accounts-manager/oauth-sessions/{operationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Cancel browser sign-in */
+        delete: operations["cancelAccountsManagerOAuth"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/accounts-manager/status": {
         parameters: {
             query?: never;
@@ -2487,6 +2675,109 @@ export interface components {
             reporting_owner?: "http" | "agent_switch_saga";
             requestId?: string;
         };
+        AccountsManagerAPIKeyRequest: {
+            baseUrl?: string;
+            key: string;
+            /** @enum {string} */
+            provider: "codex" | "claude";
+        };
+        AccountsManagerAccountResponse: {
+            cooldowns: components["schemas"]["AccountsManagerCooldownResponse"][];
+            /** Format: date-time */
+            createdAt?: string;
+            disabled: boolean;
+            email?: string;
+            id: string;
+            /** @enum {string} */
+            kind: "oauth" | "api_key" | "unknown";
+            /** Format: date-time */
+            lastRefreshedAt?: string;
+            /** @enum {string} */
+            provider: "codex" | "claude";
+            quotaSupported: boolean;
+            /** @enum {string} */
+            status: "active" | "pending" | "refreshing" | "error" | "disabled" | "unknown";
+            unavailable: boolean;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        AccountsManagerAccountsResponse: {
+            accounts: components["schemas"]["AccountsManagerAccountResponse"][];
+            /** @enum {string} */
+            availability: "starting" | "ready" | "degraded";
+            oauthSessions: components["schemas"]["AccountsManagerOAuthSessionResponse"][];
+            /** Format: int64 */
+            revision: number;
+            stale: boolean;
+        };
+        AccountsManagerCooldownResponse: {
+            httpStatus?: number;
+            model?: string;
+            reason?: string;
+            /** Format: int64 */
+            remainingSeconds?: number;
+            /** Format: date-time */
+            retryAt?: string;
+            scope: string;
+        };
+        AccountsManagerImportRequest: {
+            credential: unknown;
+            filename: string;
+            /** @enum {string} */
+            provider: "codex" | "claude";
+        };
+        AccountsManagerModelResponse: {
+            displayName?: string;
+            id: string;
+            owner?: string;
+            type?: string;
+        };
+        AccountsManagerModelsResponse: {
+            models: components["schemas"]["AccountsManagerModelResponse"][];
+        };
+        AccountsManagerOAuthSessionResponse: {
+            authorizationUrl?: string;
+            /** Format: date-time */
+            expiresAt: string;
+            failureCode?: string;
+            id: string;
+            /** @enum {string} */
+            provider: "codex" | "claude";
+            /** @enum {string} */
+            status: "pending" | "completed" | "failed" | "expired";
+        };
+        AccountsManagerQuotaBucket: {
+            description: string;
+            /** Format: double */
+            remainingFraction: number;
+            resetTime: string;
+            window: string;
+        };
+        AccountsManagerQuotaGroup: {
+            buckets: components["schemas"]["AccountsManagerQuotaBucket"][];
+            displayName: string;
+        };
+        AccountsManagerQuotaMetric: {
+            currency: string;
+            format: string;
+            key: string;
+            label: string;
+            unit: string;
+            /** Format: double */
+            value: number;
+        };
+        AccountsManagerQuotaResponse: {
+            groups: components["schemas"]["AccountsManagerQuotaGroup"][];
+            /** Format: int64 */
+            serverTimeOffsetMs: number;
+            subscription?: components["schemas"]["AccountsManagerQuotaSubscription"];
+            summary: components["schemas"]["AccountsManagerQuotaMetric"][];
+        };
+        AccountsManagerQuotaSubscription: {
+            plan: string;
+            tierId: string;
+            tierName: string;
+        };
         AccountsManagerStatusResponse: {
             engineVersion?: string;
             /** @enum {null|string} */
@@ -4238,6 +4529,10 @@ export interface components {
             paths: string[];
             sessionId: string;
         };
+        StartAccountsManagerOAuthRequest: {
+            /** @enum {string} */
+            provider: "codex" | "claude";
+        };
         StartAgentAuthResponse: {
             action: string;
             agentId: string;
@@ -4379,6 +4674,9 @@ export interface components {
         UnregisterPushDeviceResponse: {
             deleted: boolean;
             token: string;
+        };
+        UpdateAccountsManagerAccountRequest: {
+            disabled: boolean;
         };
         UpdateProjectSettingsInput: {
             config: components["schemas"]["ProjectConfig"];
@@ -4579,6 +4877,443 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getAccountsManagerAccounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountsManagerAccountsResponse"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    removeAccountsManagerAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                accountId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountsManagerAccountsResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    updateAccountsManagerAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                accountId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAccountsManagerAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountsManagerAccountsResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    getAccountsManagerAccountModels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                accountId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountsManagerModelsResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    getAccountsManagerAccountQuota: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                accountId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountsManagerQuotaResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    resetAccountsManagerAccountQuota: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                accountId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    refreshAccountsManagerAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                accountId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountsManagerAccountsResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    addAccountsManagerAPIKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountsManagerAPIKeyRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountsManagerAccountsResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    streamAccountsManagerAccounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["AccountsManagerAccountsResponse"];
+                };
+            };
+        };
+    };
+    importAccountsManagerCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountsManagerImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountsManagerAccountsResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    startAccountsManagerOAuth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartAccountsManagerOAuthRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountsManagerOAuthSessionResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    cancelAccountsManagerOAuth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
     getAccountsManagerStatus: {
         parameters: {
             query?: never;

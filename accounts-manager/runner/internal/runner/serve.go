@@ -75,6 +75,7 @@ func Serve(ctx context.Context, stateDir string) error {
 			router.POST("/ao/internal/lease", gin.WrapH(control))
 			router.POST("/ao/internal/oauth/start", gin.WrapH(oauth))
 			router.GET("/ao/internal/oauth/status", gin.WrapH(oauth))
+			router.GET("/ao/internal/oauth/events", gin.WrapH(oauth))
 			router.DELETE("/ao/internal/oauth/session", gin.WrapH(oauth))
 		})).
 		Build()

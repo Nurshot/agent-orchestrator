@@ -15,6 +15,7 @@ import (
 	"github.com/aoagents/agent-orchestrator/backend/internal/httpd/envelope"
 	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
 	"github.com/aoagents/agent-orchestrator/backend/internal/presence"
+	accountsvc "github.com/aoagents/agent-orchestrator/backend/internal/service/accountsmanager"
 	prsvc "github.com/aoagents/agent-orchestrator/backend/internal/service/pr"
 	projectsvc "github.com/aoagents/agent-orchestrator/backend/internal/service/project"
 	reviewsvc "github.com/aoagents/agent-orchestrator/backend/internal/service/review"
@@ -22,22 +23,23 @@ import (
 
 // APIDeps bundles every service the API layer's controllers depend on.
 type APIDeps struct {
-	AccountsManagerStatus controllers.AccountsManagerStatusSource
-	Agents                controllers.AgentCatalog
-	CodexAccounts         controllers.CodexAccountService
-	Projects              projectsvc.Manager
-	Sessions              controllers.SessionService
-	DesktopWorkspaces     controllers.DesktopWorkspaceService
-	Activity              controllers.ActivityRecorder
-	UsageHooks            controllers.UsageHookRecorder
-	UsageSummary          controllers.UsageSummaryService
-	PRs                   prsvc.ActionManager
-	Reviews               reviewsvc.Manager
-	Notifications         controllers.NotificationService
-	NotificationStream    controllers.NotificationStream
-	Push                  controllers.PushRegistry
-	Import                controllers.ImportService
-	ShellTerminals        controllers.ShellTerminalService
+	AccountsManagerStatus  controllers.AccountsManagerStatusSource
+	AccountsManagerService *accountsvc.Service
+	Agents                 controllers.AgentCatalog
+	CodexAccounts          controllers.CodexAccountService
+	Projects               projectsvc.Manager
+	Sessions               controllers.SessionService
+	DesktopWorkspaces      controllers.DesktopWorkspaceService
+	Activity               controllers.ActivityRecorder
+	UsageHooks             controllers.UsageHookRecorder
+	UsageSummary           controllers.UsageSummaryService
+	PRs                    prsvc.ActionManager
+	Reviews                reviewsvc.Manager
+	Notifications          controllers.NotificationService
+	NotificationStream     controllers.NotificationStream
+	Push                   controllers.PushRegistry
+	Import                 controllers.ImportService
+	ShellTerminals         controllers.ShellTerminalService
 	// Conversations is nil until a Chat driver is wired; the controller then
 	// answers 501 rather than panicking, matching the other optional surfaces.
 	Conversations controllers.ConversationService
@@ -136,7 +138,7 @@ func NewAPI(cfg config.Config, deps APIDeps) *API {
 	return &API{
 		cfg:             cfg,
 		deps:            deps,
-		accountsManager: &controllers.AccountsManagerController{Status: deps.AccountsManagerStatus},
+		accountsManager: &controllers.AccountsManagerController{Status: deps.AccountsManagerStatus, Service: deps.AccountsManagerService},
 		agents: &controllers.AgentsController{
 			Catalog: deps.Agents,
 		},
@@ -213,6 +215,7 @@ func (a *API) Register(root chi.Router) {
 		})
 		// Long-lived streams intentionally bypass the REST timeout middleware.
 		a.notifications.RegisterStream(r)
+		a.accountsManager.RegisterStreams(r)
 		a.codexAccounts.RegisterStreams(r)
 		a.sessions.RegisterStreams(r)
 		a.events.Register(r)

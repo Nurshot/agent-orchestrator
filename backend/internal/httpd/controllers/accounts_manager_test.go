@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,11 +11,24 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/accountsmanager"
+	accountsvc "github.com/aoagents/agent-orchestrator/backend/internal/service/accountsmanager"
 )
 
 type fakeAccountsManagerStatus struct {
 	status   accountsmanager.Status
 	endpoint accountsmanager.Endpoint
+}
+
+type fakeAccountsManagerCatalog struct{}
+
+func (fakeAccountsManagerCatalog) ListCredentials(context.Context) ([]accountsmanager.CredentialSummary, error) {
+	return []accountsmanager.CredentialSummary{{Ref: "raw-auth-index", Provider: accountsmanager.ProviderCodex, Kind: accountsmanager.CredentialOAuth, Email: "safe@example.com", Status: accountsmanager.CredentialActive}}, nil
+}
+func (fakeAccountsManagerCatalog) CredentialPublicID(string) (string, error) { return "amc_safe", nil }
+func (fakeAccountsManagerCatalog) OAuthPublicID(string) (string, error)      { return "amo_safe", nil }
+func (fakeAccountsManagerCatalog) StreamOAuthEvents(ctx context.Context, _ func(accountsmanager.OAuthEvent) error) error {
+	<-ctx.Done()
+	return ctx.Err()
 }
 
 func (f fakeAccountsManagerStatus) Status() accountsmanager.Status { return f.status }
@@ -76,5 +90,22 @@ func TestAccountsManagerStatusResponseIsRedacted(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestAccountsManagerAccountsResponseNeverExposesPrivateReference(t *testing.T) {
+	t.Parallel()
+	router := chi.NewRouter()
+	controller := AccountsManagerController{Service: accountsvc.New(fakeAccountsManagerCatalog{})}
+	controller.Register(router)
+	request := httptest.NewRequest(http.MethodGet, "/accounts-manager/accounts", nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	if strings.Contains(body, "raw-auth-index") || !strings.Contains(body, "amc_safe") || !strings.Contains(body, "safe@example.com") {
+		t.Fatalf("unsafe response: %s", body)
 	}
 }

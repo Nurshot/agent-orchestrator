@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	accountsmanager "github.com/aoagents/agent-orchestrator/backend/internal/accountsmanager"
 	"github.com/aoagents/agent-orchestrator/backend/internal/devimport"
 	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
 	"github.com/aoagents/agent-orchestrator/backend/internal/legacyimport"
@@ -671,6 +672,85 @@ type AccountsManagerStatusResponse struct {
 	State         string  `json:"state" enum:"starting,ready,degraded"`
 	Reason        *string `json:"reason" enum:"binary_missing,configuration_invalid,start_failed,health_timeout,process_exited"`
 	EngineVersion string  `json:"engineVersion,omitempty"`
+}
+
+type AccountsManagerCooldownResponse struct {
+	Scope            string    `json:"scope"`
+	Model            string    `json:"model,omitempty"`
+	Reason           string    `json:"reason,omitempty"`
+	RetryAt          time.Time `json:"retryAt,omitempty"`
+	RemainingSeconds int64     `json:"remainingSeconds,omitempty"`
+	HTTPStatus       int       `json:"httpStatus,omitempty"`
+}
+
+type AccountsManagerAccountResponse struct {
+	ID              string                            `json:"id"`
+	Provider        string                            `json:"provider" enum:"codex,claude"`
+	Kind            string                            `json:"kind" enum:"oauth,api_key,unknown"`
+	Email           string                            `json:"email,omitempty"`
+	Status          string                            `json:"status" enum:"active,pending,refreshing,error,disabled,unknown"`
+	Disabled        bool                              `json:"disabled"`
+	Unavailable     bool                              `json:"unavailable"`
+	CreatedAt       time.Time                         `json:"createdAt,omitempty"`
+	UpdatedAt       time.Time                         `json:"updatedAt,omitempty"`
+	LastRefreshedAt time.Time                         `json:"lastRefreshedAt,omitempty"`
+	QuotaSupported  bool                              `json:"quotaSupported"`
+	Cooldowns       []AccountsManagerCooldownResponse `json:"cooldowns"`
+}
+
+type AccountsManagerOAuthSessionResponse struct {
+	ID               string    `json:"id"`
+	Provider         string    `json:"provider" enum:"codex,claude"`
+	Status           string    `json:"status" enum:"pending,completed,failed,expired"`
+	FailureCode      string    `json:"failureCode,omitempty"`
+	AuthorizationURL string    `json:"authorizationUrl,omitempty"`
+	ExpiresAt        time.Time `json:"expiresAt"`
+}
+
+type AccountsManagerAccountsResponse struct {
+	Revision      int64                                 `json:"revision"`
+	Availability  string                                `json:"availability" enum:"starting,ready,degraded"`
+	Stale         bool                                  `json:"stale"`
+	Accounts      []AccountsManagerAccountResponse      `json:"accounts"`
+	OAuthSessions []AccountsManagerOAuthSessionResponse `json:"oauthSessions"`
+}
+
+type StartAccountsManagerOAuthRequest struct {
+	Provider string `json:"provider" enum:"codex,claude"`
+}
+type AccountsManagerAccountIDParam struct {
+	AccountID string `path:"accountId"`
+}
+type AccountsManagerOAuthOperationIDParam struct {
+	OperationID string `path:"operationId"`
+}
+type AccountsManagerAPIKeyRequest struct {
+	Provider string `json:"provider" enum:"codex,claude"`
+	Key      string `json:"key"`
+	BaseURL  string `json:"baseUrl,omitempty"`
+}
+type AccountsManagerImportRequest struct {
+	Provider   string          `json:"provider" enum:"codex,claude"`
+	Filename   string          `json:"filename"`
+	Credential json.RawMessage `json:"credential"`
+}
+type UpdateAccountsManagerAccountRequest struct {
+	Disabled bool `json:"disabled"`
+}
+type AccountsManagerModelResponse struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"displayName,omitempty"`
+	Type        string `json:"type,omitempty"`
+	Owner       string `json:"owner,omitempty"`
+}
+type AccountsManagerModelsResponse struct {
+	Models []AccountsManagerModelResponse `json:"models"`
+}
+type AccountsManagerQuotaResponse struct {
+	Subscription       *accountsmanager.QuotaSubscription `json:"subscription,omitempty"`
+	Summary            []accountsmanager.QuotaMetric      `json:"summary"`
+	ServerTimeOffsetMS int64                              `json:"serverTimeOffsetMs"`
+	Groups             []accountsmanager.QuotaGroup       `json:"groups"`
 }
 
 // BrowserCommandRequest is the stable daemon-facing command envelope. Action

@@ -1,7 +1,10 @@
 package runner
 
 import (
+	"bufio"
 	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
@@ -46,6 +49,7 @@ func TestOAuthCoordinatorRequiresManagementKey(t *testing.T) {
 		for _, request := range []*http.Request{
 			httptest.NewRequest(http.MethodPost, "/ao/internal/oauth/start", strings.NewReader(`{"provider":"codex"}`)),
 			httptest.NewRequest(http.MethodGet, "/ao/internal/oauth/status?state=opaque", nil),
+			httptest.NewRequest(http.MethodGet, "/ao/internal/oauth/events", nil),
 			httptest.NewRequest(http.MethodDelete, "/ao/internal/oauth/session?state=opaque", nil),
 		} {
 			if token != "" {
@@ -57,6 +61,180 @@ func TestOAuthCoordinatorRequiresManagementKey(t *testing.T) {
 				t.Fatalf("token=%q %s %s status = %d, want 401", token, request.Method, request.URL.Path, response.Code)
 			}
 		}
+	}
+}
+
+func TestOAuthEventsReplayPendingThenPublishCompletionWithoutSecrets(t *testing.T) {
+	t.Parallel()
+
+	var complete atomic.Bool
+	client := &http.Client{Transport: runnerRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		switch req.URL.Path {
+		case "/v0/management/codex-auth-url":
+			return jsonHTTPResponse(req, http.StatusOK, `{"status":"ok","url":"https://auth.example.test/private-start","state":"opaque-state"}`), nil
+		case "/v0/management/get-auth-status":
+			if complete.Load() {
+				return jsonHTTPResponse(req, http.StatusOK, `{"status":"ok"}`), nil
+			}
+			return jsonHTTPResponse(req, http.StatusOK, `{"status":"wait"}`), nil
+		default:
+			return nil, errors.New("unexpected upstream request")
+		}
+	})}
+	coordinator := newOAuthCoordinator("http://127.0.0.1:12345", "management-key", client, func(_, address string) (net.Listener, error) {
+		return newInertListener(address), nil
+	})
+	coordinator.observeInterval = 5 * time.Millisecond
+	coordinator.eventHeartbeatInterval = time.Second
+	defer coordinator.Close()
+	server := httptest.NewServer(coordinator)
+	defer server.Close()
+
+	startRequest, _ := http.NewRequest(http.MethodPost, server.URL+"/ao/internal/oauth/start", strings.NewReader(`{"provider":"codex"}`))
+	startRequest.Header.Set("Authorization", "Bearer management-key")
+	startRequest.Header.Set("Content-Type", "application/json")
+	startResponse, err := server.Client().Do(startRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	startResponse.Body.Close()
+	if startResponse.StatusCode != http.StatusOK {
+		t.Fatalf("start status = %d, want 200", startResponse.StatusCode)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	eventsRequest, _ := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/ao/internal/oauth/events", nil)
+	eventsRequest.Header.Set("Authorization", "Bearer management-key")
+	eventsResponse, err := server.Client().Do(eventsRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer eventsResponse.Body.Close()
+	if eventsResponse.StatusCode != http.StatusOK {
+		t.Fatalf("events status = %d, want 200", eventsResponse.StatusCode)
+	}
+	reader := bufio.NewReader(eventsResponse.Body)
+	pending := readOAuthEventFrame(t, reader, time.Second)
+	if pending.Status != "pending" || pending.Provider != "codex" || pending.State != "opaque-state" {
+		t.Fatalf("pending event = %+v", pending)
+	}
+
+	complete.Store(true)
+	completed := readOAuthEventFrame(t, reader, time.Second)
+	if completed.Status != "completed" || completed.State != "opaque-state" {
+		t.Fatalf("completed event = %+v", completed)
+	}
+	encoded, _ := json.Marshal(completed)
+	for _, secret := range []string{"private-start", "management-key"} {
+		if bytes.Contains(encoded, []byte(secret)) {
+			t.Fatalf("event exposed %q", secret)
+		}
+	}
+}
+
+func TestOAuthEventsPublishCancellationAndExpiryAndHeartbeat(t *testing.T) {
+	t.Parallel()
+
+	client := &http.Client{Transport: runnerRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.Method == http.MethodDelete && req.URL.Path == "/v0/management/oauth-session" {
+			return jsonHTTPResponse(req, http.StatusOK, `{"status":"ok","cancelled":true}`), nil
+		}
+		return jsonHTTPResponse(req, http.StatusOK, `{"status":"wait"}`), nil
+	})}
+	coordinator := newOAuthCoordinator("http://127.0.0.1:12345", "management-key", client, nil)
+	coordinator.eventHeartbeatInterval = 10 * time.Millisecond
+	defer coordinator.Close()
+	now := time.Now()
+	coordinator.sessions["cancel-state"] = &oauthRunnerSession{provider: "codex", state: "cancel-state", status: "pending", expiresAt: now.Add(time.Minute)}
+	coordinator.providers["codex"] = "cancel-state"
+	coordinator.sessions["expire-state"] = &oauthRunnerSession{provider: "claude", state: "expire-state", status: "pending", expiresAt: now.Add(25 * time.Millisecond)}
+	coordinator.providers["claude"] = "expire-state"
+	go coordinator.expireSession("expire-state", now.Add(25*time.Millisecond))
+
+	server := httptest.NewServer(coordinator)
+	defer server.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	request, _ := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/ao/internal/oauth/events", nil)
+	request.Header.Set("Authorization", "Bearer management-key")
+	response, err := server.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	reader := bufio.NewReader(response.Body)
+
+	replayed := map[string]string{}
+	for len(replayed) < 2 {
+		event := readOAuthEventFrame(t, reader, time.Second)
+		replayed[event.State] = event.Status
+	}
+	if replayed["cancel-state"] != "pending" || replayed["expire-state"] != "pending" {
+		t.Fatalf("initial replay = %#v", replayed)
+	}
+
+	cancelRequest, _ := http.NewRequest(http.MethodDelete, server.URL+"/ao/internal/oauth/session?state=cancel-state", nil)
+	cancelRequest.Header.Set("Authorization", "Bearer management-key")
+	cancelResponse, err := server.Client().Do(cancelRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancelResponse.Body.Close()
+
+	terminal := map[string]oauthEvent{}
+	deadline := time.Now().Add(time.Second)
+	for len(terminal) < 2 && time.Now().Before(deadline) {
+		event := readOAuthEventFrame(t, reader, time.Until(deadline))
+		if event.Status != "pending" {
+			terminal[event.State] = event
+		}
+	}
+	if terminal["cancel-state"].FailureCode != "cancelled" || terminal["expire-state"].Status != "expired" {
+		t.Fatalf("terminal events = %#v", terminal)
+	}
+}
+
+type oauthEvent struct {
+	Provider    string    `json:"provider"`
+	State       string    `json:"state"`
+	Status      string    `json:"status"`
+	FailureCode string    `json:"failureCode"`
+	ExpiresAt   time.Time `json:"expiresAt"`
+}
+
+func readOAuthEventFrame(t *testing.T, reader *bufio.Reader, timeout time.Duration) oauthEvent {
+	t.Helper()
+	type result struct {
+		event oauthEvent
+		err   error
+	}
+	resultCh := make(chan result, 1)
+	go func() {
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				resultCh <- result{err: err}
+				return
+			}
+			if !strings.HasPrefix(line, "data: ") {
+				continue
+			}
+			var event oauthEvent
+			err = json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data: "))), &event)
+			resultCh <- result{event: event, err: err}
+			return
+		}
+	}()
+	select {
+	case got := <-resultCh:
+		if got.err != nil {
+			t.Fatal(got.err)
+		}
+		return got.event
+	case <-time.After(timeout):
+		t.Fatal("timed out waiting for OAuth event")
+		return oauthEvent{}
 	}
 }
 
