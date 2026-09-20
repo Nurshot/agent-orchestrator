@@ -758,10 +758,13 @@ func TestReviewerChatUsesItsOwnProviderHost(t *testing.T) {
 		t.Fatalf("UpsertReview: %v", err)
 	}
 
+	provider := newFakeConversation()
+	var closed atomic.Bool
+	provider.onClose = func() { closed.Store(true) }
 	var started ports.ChatStartConfig
 	svc := chatsvc.New(chatsvc.Options{
 		Store: st, Sessions: st,
-		Drivers: fakeRegistry{driver: fakeDriver{conv: newFakeConversation(), startCfg: &started}},
+		Drivers: fakeRegistry{driver: fakeDriver{conv: provider, startCfg: &started}},
 		Log:     slog.New(slog.DiscardHandler),
 		NewID:   func() string { return "review-conversation" },
 	})
@@ -777,6 +780,13 @@ func TestReviewerChatUsesItsOwnProviderHost(t *testing.T) {
 	}
 	if started.SessionID != "review-review-1" {
 		t.Fatalf("reviewer provider host = %q, want review-review-1", started.SessionID)
+	}
+	if !started.ReadOnly {
+		t.Fatal("reviewer provider was not launched read-only")
+	}
+	svc.StopAll(context.Background())
+	if !closed.Load() {
+		t.Fatal("StopAll did not close the review-owned controller")
 	}
 }
 

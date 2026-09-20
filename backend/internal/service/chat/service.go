@@ -51,9 +51,9 @@ type Service struct {
 	mu               sync.RWMutex
 	controllers      map[domain.SessionID]*Controller
 	ownerControllers map[domain.ConversationOwner]*Controller
-	startConfigs     map[domain.SessionID]StartConfig
+	startConfigs     map[domain.ConversationOwner]StartConfig
 	gateMu           sync.Mutex
-	gates            map[domain.SessionID]controllerGate
+	gates            map[domain.ConversationOwner]controllerGate
 	probeMu          sync.Mutex
 	probed           map[domain.AgentHarness]ports.ChatCapabilities
 }
@@ -133,19 +133,19 @@ func New(opts Options) *Service {
 		stopProviderHost:       opts.StopProviderHost,
 		controllers:            make(map[domain.SessionID]*Controller),
 		ownerControllers:       make(map[domain.ConversationOwner]*Controller),
-		startConfigs:           make(map[domain.SessionID]StartConfig),
-		gates:                  make(map[domain.SessionID]controllerGate),
+		startConfigs:           make(map[domain.ConversationOwner]StartConfig),
+		gates:                  make(map[domain.ConversationOwner]controllerGate),
 		probed:                 make(map[domain.AgentHarness]ports.ChatCapabilities),
 	}
 }
 
-func (s *Service) controllerGate(id domain.SessionID) controllerGate {
+func (s *Service) controllerGate(owner domain.ConversationOwner) controllerGate {
 	s.gateMu.Lock()
 	defer s.gateMu.Unlock()
-	gate := s.gates[id]
+	gate := s.gates[owner]
 	if gate == nil {
 		gate = make(controllerGate, 1)
-		s.gates[id] = gate
+		s.gates[owner] = gate
 	}
 	return gate
 }
@@ -264,7 +264,11 @@ func (s *Service) settleOrphanedWork(ctx context.Context, session domain.Session
 // conversation: presenting unrelated history as continuous is worse than an error
 // the user can act on.
 func (s *Service) Start(ctx context.Context, cfg StartConfig) (*Controller, error) {
-	gate := s.controllerGate(cfg.SessionID)
+	owner := conversationOwner(cfg)
+	if owner.Kind == domain.ConversationOwnerReview {
+		cfg.ReadOnly = true
+	}
+	gate := s.controllerGate(owner)
 	if err := gate.lock(ctx); err != nil {
 		return nil, err
 	}
@@ -346,7 +350,6 @@ func (s *Service) Start(ctx context.Context, cfg StartConfig) (*Controller, erro
 		}
 	}
 
-	owner := conversationOwner(cfg)
 	s.mu.RLock()
 	existing := s.ownerControllers[owner]
 	s.mu.RUnlock()
@@ -576,6 +579,7 @@ func (s *Service) Start(ctx context.Context, cfg StartConfig) (*Controller, erro
 			Model:                  cfg.Model,
 			Effort:                 cfg.Effort,
 			Permissions:            cfg.Permissions,
+			ReadOnly:               cfg.ReadOnly,
 			SystemPrompt:           cfg.SystemPrompt,
 			ProviderScopeID:        providerScopeID,
 			ProviderIDsScoped:      providerBoundaryID != "" || activeBranch.ProviderIDsScoped,
@@ -593,6 +597,7 @@ func (s *Service) Start(ctx context.Context, cfg StartConfig) (*Controller, erro
 			Model:                 cfg.Model,
 			Effort:                cfg.Effort,
 			Permissions:           cfg.Permissions,
+			ReadOnly:              cfg.ReadOnly,
 			SystemPrompt:          cfg.SystemPrompt,
 			ProviderScopeID:       providerScopeID,
 			AdditionalDirectories: cfg.AdditionalDirectories,
@@ -883,9 +888,7 @@ func (s *Service) Start(ctx context.Context, cfg StartConfig) (*Controller, erro
 	cfg.ProviderHandoff = nil
 	cfg.ProviderScopeID = ""
 	cfg.HistoryMode = ports.ChatHistoryImport
-	if owner.Kind == domain.ConversationOwnerSession {
-		s.startConfigs[cfg.SessionID] = cloneStartConfig(cfg)
-	}
+	s.startConfigs[owner] = cloneStartConfig(cfg)
 	controller.start()
 	s.mu.Unlock()
 
@@ -1142,7 +1145,8 @@ func (s *Service) AbortChatHandoff(id domain.SessionID) {
 
 // Stop closes a session's controller. Safe to call for a session that has none.
 func (s *Service) Stop(ctx context.Context, id domain.SessionID) error {
-	gate := s.controllerGate(id)
+	owner := domain.SessionConversationOwner(id)
+	gate := s.controllerGate(owner)
 	if err := gate.lock(ctx); err != nil {
 		return err
 	}
@@ -1153,7 +1157,7 @@ func (s *Service) Stop(ctx context.Context, id domain.SessionID) error {
 	s.mu.RUnlock()
 	if !ok {
 		s.mu.Lock()
-		delete(s.startConfigs, id)
+		delete(s.startConfigs, owner)
 		s.mu.Unlock()
 		if s.stopProviderHost != nil {
 			return s.stopProviderHost(ctx, id)
@@ -1181,7 +1185,7 @@ func (s *Service) Stop(ctx context.Context, id domain.SessionID) error {
 		if current, found := s.controllers[id]; found && current == controller {
 			delete(s.controllers, id)
 		}
-		delete(s.startConfigs, id)
+		delete(s.startConfigs, owner)
 		s.mu.Unlock()
 	default:
 	}
@@ -1191,8 +1195,17 @@ func (s *Service) Stop(ctx context.Context, id domain.SessionID) error {
 // StopForOwner closes a typed-owner controller without touching its parent
 // worker's Chat controller.
 func (s *Service) StopForOwner(ctx context.Context, owner domain.ConversationOwner) error {
+	gate := s.controllerGate(owner)
+	if err := gate.lock(ctx); err != nil {
+		return err
+	}
+	defer gate.unlock()
+
 	controller, err := s.ControllerForOwner(owner)
 	if errors.Is(err, ErrNoController) {
+		s.mu.Lock()
+		delete(s.startConfigs, owner)
+		s.mu.Unlock()
 		return nil
 	}
 	if err != nil {
@@ -1204,6 +1217,10 @@ func (s *Service) StopForOwner(ctx context.Context, owner domain.ConversationOwn
 		s.mu.Lock()
 		if s.ownerControllers[owner] == controller {
 			delete(s.ownerControllers, owner)
+			delete(s.startConfigs, owner)
+			if owner.Kind == domain.ConversationOwnerSession {
+				delete(s.controllers, controller.sessionID)
+			}
 		}
 		s.mu.Unlock()
 	default:
@@ -1215,20 +1232,21 @@ func (s *Service) StopForOwner(ctx context.Context, owner domain.ConversationOwn
 func (s *Service) StopAll(ctx context.Context) {
 	s.mu.Lock()
 	type shutdownTarget struct {
+		owner      domain.ConversationOwner
 		id         domain.SessionID
 		controller *Controller
 	}
-	targets := make([]shutdownTarget, 0, len(s.controllers))
-	for id, controller := range s.controllers {
-		targets = append(targets, shutdownTarget{id: id, controller: controller})
+	targets := make([]shutdownTarget, 0, len(s.ownerControllers))
+	for owner, controller := range s.ownerControllers {
+		targets = append(targets, shutdownTarget{owner: owner, id: controller.sessionID, controller: controller})
 	}
 	s.mu.Unlock()
 	slices.SortFunc(targets, func(a, b shutdownTarget) int {
-		return strings.Compare(string(a.id), string(b.id))
+		return strings.Compare(string(a.owner.Kind)+":"+a.owner.ID, string(b.owner.Kind)+":"+b.owner.ID)
 	})
 
 	for _, target := range targets {
-		gate := s.controllerGate(target.id)
+		gate := s.controllerGate(target.owner)
 		// Take an uncontended gate immediately so an expired shared shutdown
 		// context cannot skip Close. If Start/Stop/edit/branch already holds it,
 		// wait only until the original deadline — never past ShutdownTimeout.
@@ -1239,7 +1257,7 @@ func (s *Service) StopAll(ctx context.Context) {
 			}
 		}
 		s.mu.RLock()
-		current, ok := s.controllers[target.id]
+		current, ok := s.ownerControllers[target.owner]
 		s.mu.RUnlock()
 		if !ok || current != target.controller {
 			gate.unlock()
@@ -1251,9 +1269,12 @@ func (s *Service) StopAll(ctx context.Context) {
 		select {
 		case <-target.controller.stopped:
 			s.mu.Lock()
-			if current, ok := s.controllers[target.id]; ok && current == target.controller {
-				delete(s.controllers, target.id)
-				delete(s.startConfigs, target.id)
+			if current, ok := s.ownerControllers[target.owner]; ok && current == target.controller {
+				delete(s.ownerControllers, target.owner)
+				delete(s.startConfigs, target.owner)
+				if target.owner.Kind == domain.ConversationOwnerSession {
+					delete(s.controllers, target.id)
+				}
 			}
 			s.mu.Unlock()
 		default:

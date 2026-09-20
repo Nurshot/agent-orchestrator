@@ -165,7 +165,7 @@ func (s *Service) EditMessage(
 	turnID string,
 	msg ports.ChatUserMessage,
 ) (EditMessageResult, error) {
-	gate := s.controllerGate(id)
+	gate := s.controllerGate(domain.SessionConversationOwner(id))
 	if err := gate.lock(ctx); err != nil {
 		return EditMessageResult{}, err
 	}
@@ -828,7 +828,7 @@ func (s *Service) persistRejectedEditDelivery(
 // ActivateBranch resumes a durable provider branch in the same worktree and
 // swaps controllers without sending a new prompt.
 func (s *Service) ActivateBranch(ctx context.Context, id domain.SessionID, branchID string) (string, error) {
-	gate := s.controllerGate(id)
+	gate := s.controllerGate(domain.SessionConversationOwner(id))
 	if err := gate.lock(ctx); err != nil {
 		return "", err
 	}
@@ -946,7 +946,7 @@ func (s *Service) branchLaunchConfig(
 	source *Controller,
 ) (StartConfig, ports.ChatDriver, error) {
 	s.mu.RLock()
-	cfg, ok := s.startConfigs[id]
+	cfg, ok := s.startConfigs[source.owner()]
 	// Controllers are registered by typed owner. Session history operations still
 	// address the worker by session id, so use the source's owner here rather
 	// than treating the legacy session index as the authority. In particular, a
@@ -1072,14 +1072,14 @@ func (s *Service) installStartedBranchController(
 	if owner.Kind == domain.ConversationOwnerSession {
 		s.controllers[id] = replacement
 	}
-	if cfg, ok := s.startConfigs[id]; ok {
+	if cfg, ok := s.startConfigs[owner]; ok {
 		cfg.ExpectedControllerOwner.Harness = cfg.Harness
 		cfg.ExpectedControllerOwner.Mode = domain.SessionModeChat
 		cfg.ExpectedControllerOwner.IsTerminated = false
 		cfg.ExpectedControllerOwner.RuntimeLaunchID = ""
 		cfg.ExpectedControllerOwner.ProviderConversationID = replacement.ProviderConversationID()
 		cfg.ExpectedControllerOwner.ControllerGeneration = replacement.Generation()
-		s.startConfigs[id] = cfg
+		s.startConfigs[owner] = cfg
 	}
 	s.mu.Unlock()
 
