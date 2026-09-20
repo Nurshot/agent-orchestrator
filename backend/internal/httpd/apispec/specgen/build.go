@@ -2476,6 +2476,17 @@ func sessionOperations() []operation {
 			},
 		},
 		{
+			method: http.MethodPost, path: "/api/v1/projects/{id}/git/fetch", id: "prefetchProjectDefaultBranches", tag: "projects",
+			summary:    "Start a best-effort fetch of a project's default branches",
+			pathParams: []any{controllers.ProjectIDParam{}},
+			resps: []respUnit{
+				{http.StatusAccepted, nil},
+				{http.StatusNotFound, envelope.APIError{}},
+				{http.StatusInternalServerError, envelope.APIError{}},
+				{http.StatusNotImplemented, envelope.APIError{}},
+			},
+		},
+		{
 			method: http.MethodGet, path: "/api/v1/orchestrators/{id}", id: "getOrchestrator", tag: "sessions",
 			summary:    "Fetch one orchestrator session",
 			pathParams: []any{controllers.OrchestratorIDParam{}},

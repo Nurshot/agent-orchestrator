@@ -4401,6 +4401,21 @@ func TestRefreshDefaultBranchesUsesOneOverallFetchBudget(t *testing.T) {
 	}
 }
 
+func TestPrefetchDefaultBranchesIsReusedByNextSpawn(t *testing.T) {
+	m, st, _, ws := newManager()
+	project := domain.ProjectRecord{ID: "mer", Path: "/repo/mer", Config: testRoleAgents()}
+	st.projects["mer"] = project
+	m.runBackground = func(work func()) { work() }
+
+	m.PrefetchDefaultBranches(project)
+	if _, _, _, err := m.Spawn(ctx, ports.SpawnConfig{ProjectID: "mer", Kind: domain.KindWorker}); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(ws.fetches); got != 1 {
+		t.Fatalf("fetch calls = %d, want one shared prefetch", got)
+	}
+}
+
 func TestSpawn_FetchesQualifiedDefaultBranchRemote(t *testing.T) {
 	m, st, _, ws := newManager()
 	cfg := testRoleAgents()

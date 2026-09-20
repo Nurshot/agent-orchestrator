@@ -42,6 +42,23 @@ type DelegateTaskOutcome struct {
 	WorkerID       domain.SessionID
 }
 
+type defaultBranchPrefetcher interface {
+	PrefetchDefaultBranches(domain.ProjectRecord)
+}
+
+// PrefetchDefaultBranches moves the task's best-effort Git refresh ahead of
+// submission. Older focused fakes simply have nothing to warm.
+func (s *Service) PrefetchDefaultBranches(ctx context.Context, projectID domain.ProjectID) error {
+	project, err := s.requireProject(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	if prefetcher, ok := s.manager.(defaultBranchPrefetcher); ok {
+		prefetcher.PrefetchDefaultBranches(project)
+	}
+	return nil
+}
+
 // DelegateTask spawns the worker directly, matching `ao spawn`, with a
 // provisional display name derived from the task brief. AO then best-effort
 // refines that title in the background through the project orchestrator,

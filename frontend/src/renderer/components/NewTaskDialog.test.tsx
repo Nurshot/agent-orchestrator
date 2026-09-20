@@ -106,6 +106,11 @@ describe("NewTaskDialog", () => {
 	it("renders one continuous composer surface with a visible settings-style title", async () => {
 		renderDialog();
 		await waitForAgentCatalog();
+		await waitFor(() =>
+			expect(postMock).toHaveBeenCalledWith("/api/v1/projects/{id}/git/fetch", {
+				params: { path: { id: "proj-1" } },
+			}),
+		);
 
 		const dialog = screen.getByRole("dialog", { name: "Create a new task" });
 		expect(dialog.querySelector(".composer-prompt-surface")).not.toBeNull();
@@ -165,6 +170,7 @@ describe("NewTaskDialog", () => {
 		let delegateAttempts = 0;
 		postMock.mockImplementation(async (path: string) => {
 			if (path === "/api/v1/agents/readiness/ensure") return { data: agentInventory, error: undefined };
+			if (path === "/api/v1/projects/{id}/git/fetch") return { data: undefined, error: undefined };
 			delegateAttempts += 1;
 			if (delegateAttempts === 1) {
 				return {
@@ -315,7 +321,7 @@ describe("NewTaskDialog", () => {
 
 		// Plain Enter submits the task.
 		await user.keyboard("{Enter}");
-		await waitFor(() => expect(postMock).toHaveBeenCalledTimes(1));
+		await waitFor(() => expect(delegateCalls()).toHaveLength(1));
 	});
 
 	it.each([
@@ -328,9 +334,12 @@ describe("NewTaskDialog", () => {
 			message: "task start failed",
 		},
 	])("displays daemon start errors for $code", async ({ code, message }) => {
-		postMock.mockResolvedValueOnce({
-			data: undefined,
-			error: { code, message },
+		postMock.mockImplementation(async (path: string) => {
+			if (path === "/api/v1/projects/{id}/git/fetch") return { data: undefined, error: undefined };
+			return {
+				data: undefined,
+				error: { code, message },
+			};
 		});
 		renderDialog();
 		const user = userEvent.setup();

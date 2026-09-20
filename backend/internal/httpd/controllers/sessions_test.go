@@ -39,6 +39,7 @@ type fakeSessionService struct {
 	sentAttachment             *ports.SpawnAttachment
 	delegationInput            sessionsvc.DelegateTaskInput
 	delegationErr              error
+	prefetchedProject          domain.ProjectID
 	cleanupProjects            []domain.ProjectID
 	cleanupResult              []domain.SessionID
 	cleanupSkipped             []sessionsvc.CleanupSkipped
@@ -487,6 +488,11 @@ func (f *fakeSessionService) DelegateTask(_ context.Context, in sessionsvc.Deleg
 		return sessionsvc.DelegateTaskOutcome{}, f.delegationErr
 	}
 	return sessionsvc.DelegateTaskOutcome{WorkerID: "ao-worker", OrchestratorID: "ao-orch"}, nil
+}
+
+func (f *fakeSessionService) PrefetchDefaultBranches(_ context.Context, projectID domain.ProjectID) error {
+	f.prefetchedProject = projectID
+	return nil
 }
 
 func (f *fakeSessionService) ListPRs(_ context.Context, id domain.SessionID) ([]domain.PRFacts, error) {
@@ -2957,6 +2963,19 @@ func TestSessionsAPI_DelegateTask(t *testing.T) {
 	}
 	if got := svc.delegationInput.Attachments[0]; got.Ext != ".png" || string(got.Data) != "\x01\x02\x03" {
 		t.Fatalf("attachment = %#v, want decoded png", got)
+	}
+}
+
+func TestSessionsAPI_PrefetchesProjectDefaultBranches(t *testing.T) {
+	svc := newFakeSessionService()
+	srv := newSessionTestServer(t, svc)
+
+	_, status, _ := doRequest(t, srv, http.MethodPost, "/api/v1/projects/ao/git/fetch", "")
+	if status != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", status, http.StatusAccepted)
+	}
+	if svc.prefetchedProject != "ao" {
+		t.Fatalf("prefetched project = %q, want ao", svc.prefetchedProject)
 	}
 }
 

@@ -252,6 +252,13 @@ export function TaskComposer({
 			return data.project as Project;
 		},
 	});
+	useEffect(() => {
+		const id = projectQuery.data?.id;
+		if (!id) return;
+		void apiClient.POST("/api/v1/projects/{id}/git/fetch", {
+			params: { path: { id } },
+		});
+	}, [projectQuery.data?.id]);
 	const agentsQuery = useAgentReadinessQuery();
 	const { settings } = useSettings();
 	// The composer preselects the agent and model a spawn would actually use

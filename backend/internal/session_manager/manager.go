@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/agent/modelcatalog"
 	"github.com/aoagents/agent-orchestrator/backend/internal/agentlaunch"
@@ -406,6 +407,9 @@ type Manager struct {
 	clock                       func() time.Time
 	reconcileWorkers            int
 	defaultBranchRefreshTimeout time.Duration
+	defaultBranchRefreshGroup   singleflight.Group
+	defaultBranchRefreshMu      sync.Mutex
+	defaultBranchRefreshes      map[string]defaultBranchRefresh
 	// runBackground runs an asynchronous spawn's remaining work. Nil means a
 	// plain goroutine; tests substitute a synchronous runner.
 	runBackground    func(func())
@@ -682,6 +686,7 @@ const (
 	sendConfirmAttemptDeadline    = 2 * time.Second
 	sendConfirmMaxAttempts        = 3
 	defaultBranchRefreshTimeout   = 5 * time.Second
+	defaultBranchPrefetchLifetime = 5 * time.Minute
 	promptDeliveryDeadlineReserve = 5 * time.Second
 )
 
@@ -760,6 +765,7 @@ func New(d Deps) *Manager {
 		clock:                          d.Clock,
 		reconcileWorkers:               d.ReconcileWorkers,
 		defaultBranchRefreshTimeout:    defaultBranchRefreshTimeout,
+		defaultBranchRefreshes:         make(map[string]defaultBranchRefresh),
 		openTranscriptFile:             os.Open,
 		lookPath:                       d.LookPath,
 		executable:                     d.Executable,
@@ -1271,7 +1277,58 @@ type defaultBranchRefreshTarget struct {
 	resolved         ports.WorkspaceDefaultBranch
 }
 
+type defaultBranchRefresh struct {
+	baseRefs    map[string]string
+	completedAt time.Time
+}
+
+// PrefetchDefaultBranches starts the same best-effort refresh a spawn needs,
+// but under the daemon lifetime so closing the New Task dialog cannot cancel it.
+func (m *Manager) PrefetchDefaultBranches(project domain.ProjectRecord) {
+	m.runInBackground(func() {
+		m.cachedDefaultBranchRefresh(m.backgroundContext, project)
+	})
+}
+
 func (m *Manager) refreshDefaultBranchesBestEffort(ctx context.Context, project domain.ProjectRecord) map[string]string {
+	baseRefs := m.cachedDefaultBranchRefresh(ctx, project)
+	// A prefetch is for the next task, not a general Git cache. Consume it so a
+	// later task refreshes again instead of silently inheriting an old remote ref.
+	m.defaultBranchRefreshMu.Lock()
+	delete(m.defaultBranchRefreshes, project.ID)
+	m.defaultBranchRefreshMu.Unlock()
+	return baseRefs
+}
+
+func (m *Manager) cachedDefaultBranchRefresh(ctx context.Context, project domain.ProjectRecord) map[string]string {
+	if project.ID == "" {
+		return m.fetchDefaultBranchesBestEffort(ctx, project)
+	}
+	m.defaultBranchRefreshMu.Lock()
+	cached, ok := m.defaultBranchRefreshes[project.ID]
+	m.defaultBranchRefreshMu.Unlock()
+	if ok && m.clock().Sub(cached.completedAt) < defaultBranchPrefetchLifetime {
+		return cached.baseRefs
+	}
+
+	value, _, _ := m.defaultBranchRefreshGroup.Do(project.ID, func() (any, error) {
+		m.defaultBranchRefreshMu.Lock()
+		cached, ok := m.defaultBranchRefreshes[project.ID]
+		m.defaultBranchRefreshMu.Unlock()
+		if ok && m.clock().Sub(cached.completedAt) < defaultBranchPrefetchLifetime {
+			return cached.baseRefs, nil
+		}
+		baseRefs := m.fetchDefaultBranchesBestEffort(ctx, project)
+		m.defaultBranchRefreshMu.Lock()
+		m.defaultBranchRefreshes[project.ID] = defaultBranchRefresh{baseRefs: baseRefs, completedAt: m.clock()}
+		m.defaultBranchRefreshMu.Unlock()
+		return baseRefs, nil
+	})
+	baseRefs, _ := value.(map[string]string)
+	return baseRefs
+}
+
+func (m *Manager) fetchDefaultBranchesBestEffort(ctx context.Context, project domain.ProjectRecord) map[string]string {
 	if project.Kind.WithDefault() == domain.ProjectKindScratch {
 		return nil
 	}
