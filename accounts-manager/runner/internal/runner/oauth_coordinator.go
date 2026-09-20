@@ -146,6 +146,11 @@ func (c *oauthCoordinator) handleStart(w http.ResponseWriter, r *http.Request) {
 		writeOAuthError(w, http.StatusBadGateway, "invalid_upstream_response")
 		return
 	}
+	if _, exists := c.sessions[state]; exists {
+		_ = listener.Close()
+		writeOAuthError(w, http.StatusBadGateway, "invalid_upstream_response")
+		return
+	}
 
 	session := &oauthRunnerSession{
 		provider:         provider,
@@ -276,6 +281,14 @@ func (c *oauthCoordinator) callbackHandler(session *oauthRunnerSession) http.Han
 			writeOAuthBrowserPage(w, http.StatusBadRequest, false)
 			return
 		}
+		c.mu.Lock()
+		current := c.sessions[state]
+		active := current == session && current.status == "pending" && time.Now().Before(current.expiresAt)
+		c.mu.Unlock()
+		if !active {
+			writeOAuthBrowserPage(w, http.StatusGone, false)
+			return
+		}
 		payload := map[string]string{"state": state}
 		if code != "" {
 			payload["code"] = code
@@ -319,6 +332,10 @@ func (c *oauthCoordinator) upstreamJSON(ctx context.Context, method, path string
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return errors.New("upstream request failed")
+	}
+	contentType := strings.ToLower(strings.TrimSpace(strings.Split(response.Header.Get("Content-Type"), ";")[0]))
+	if contentType != "application/json" {
+		return errors.New("invalid upstream response")
 	}
 	limited, err := io.ReadAll(io.LimitReader(response.Body, oauthResponseLimit+1))
 	if err != nil || len(limited) > oauthResponseLimit {

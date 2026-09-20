@@ -60,7 +60,7 @@ func (c *ManagementClient) AddAPIKey(ctx context.Context, input APIKeyInput) (Cr
 	if key == "" {
 		return CredentialSummary{}, ErrInvalidCredential
 	}
-	if len(key) > managementAPIKeyLimit {
+	if len(key)+len(input.BaseURL) > managementAPIKeyLimit {
 		return CredentialSummary{}, ErrRequestTooLarge
 	}
 	baseURL, err := normalizeProviderBaseURL(input.Provider, input.BaseURL)
@@ -75,8 +75,8 @@ func (c *ManagementClient) AddAPIKey(ctx context.Context, input APIKeyInput) (Cr
 	if err != nil {
 		return CredentialSummary{}, err
 	}
-	if existing, ok := findRawAPIKey(items, input.Provider, key, baseURL); ok {
-		return existing, nil
+	if existing, found, findErr := findRawAPIKey(items, input.Provider, key, baseURL); found || findErr != nil {
+		return existing, findErr
 	}
 	entry, err := json.Marshal(map[string]string{"api-key": key, "base-url": baseURL})
 	if err != nil {
@@ -89,14 +89,14 @@ func (c *ManagementClient) AddAPIKey(ctx context.Context, input APIKeyInput) (Cr
 	}
 	var result map[string]any
 	if err = c.doJSON(ctx, "add API key", http.MethodPut, endpoint, json.RawMessage(payload), &result); err != nil {
-		return CredentialSummary{}, err
+		return CredentialSummary{}, mapCredentialOperationError(err)
 	}
 	items, err = c.readRawKeyList(ctx, endpoint, field)
 	if err != nil {
 		return CredentialSummary{}, err
 	}
-	if created, ok := findRawAPIKey(items, input.Provider, key, baseURL); ok {
-		return created, nil
+	if created, found, findErr := findRawAPIKey(items, input.Provider, key, baseURL); found || findErr != nil {
+		return created, findErr
 	}
 	return CredentialSummary{}, ErrInvalidResponse
 }
@@ -131,7 +131,7 @@ func (c *ManagementClient) ImportCredential(ctx context.Context, input Credentia
 	query := url.Values{"name": []string{name}}
 	var upload map[string]any
 	if err = c.doJSON(ctx, "import credential", http.MethodPost, "/v0/management/auth-files?"+query.Encode(), input.JSON, &upload); err != nil {
-		return CredentialSummary{}, err
+		return CredentialSummary{}, mapCredentialOperationError(err)
 	}
 	records, verifyErr := c.listRawCredentials(ctx)
 	if verifyErr == nil {
@@ -166,7 +166,7 @@ func (c *ManagementClient) readRawKeyList(ctx context.Context, endpoint, field s
 	return items, nil
 }
 
-func findRawAPIKey(items []json.RawMessage, provider Provider, key, baseURL string) (CredentialSummary, bool) {
+func findRawAPIKey(items []json.RawMessage, provider Provider, key, baseURL string) (CredentialSummary, bool, error) {
 	for _, item := range items {
 		var identity struct {
 			Key       string `json:"api-key"`
@@ -182,11 +182,11 @@ func findRawAPIKey(items []json.RawMessage, provider Provider, key, baseURL stri
 		}
 		ref := strings.TrimSpace(identity.AuthIndex)
 		if ref == "" {
-			return CredentialSummary{}, false
+			return CredentialSummary{}, true, ErrInvalidResponse
 		}
-		return CredentialSummary{Ref: ref, Provider: provider, Kind: CredentialAPIKey, Status: CredentialActive}, true
+		return CredentialSummary{Ref: ref, Provider: provider, Kind: CredentialAPIKey, Status: CredentialActive}, true, nil
 	}
-	return CredentialSummary{}, false
+	return CredentialSummary{}, false, nil
 }
 
 func providerKeyEndpoint(provider Provider) (string, string) {
@@ -227,7 +227,7 @@ func normalizeProviderBaseURL(provider Provider, raw string) (string, error) {
 func validateCredentialImport(input CredentialImport) (string, error) {
 	name := strings.TrimSpace(input.Name)
 	lower := strings.ToLower(name)
-	if name == "" || filepath.Base(name) != name || strings.HasPrefix(name, ".") || !strings.HasSuffix(lower, ".json") || strings.Contains(lower, "quota_probe") || strings.HasPrefix(lower, ".oauth-") {
+	if name == "" || len(name) > 255 || filepath.Base(name) != name || strings.HasPrefix(name, ".") || !strings.HasSuffix(lower, ".json") || strings.Contains(lower, "quota_probe") || strings.HasPrefix(lower, ".oauth-") {
 		return "", ErrInvalidCredential
 	}
 	for _, character := range name {
@@ -298,6 +298,9 @@ func summaryFromRawCredential(record rawCredentialRecord) CredentialSummary {
 }
 
 func projectQuotaObservation(raw rawQuotaObservation) CredentialQuotaObservation {
+	if len(raw.Signals) == 0 {
+		return CredentialQuotaObservation{ObservedAt: raw.ObservedAt}
+	}
 	signals := make(map[string]string, len(raw.Signals))
 	for key, value := range raw.Signals {
 		signals[key] = value

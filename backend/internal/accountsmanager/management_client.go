@@ -246,17 +246,16 @@ func (c *ManagementClient) doJSON(ctx context.Context, operation, method, path s
 	if dst == nil || res.StatusCode == http.StatusNoContent {
 		return nil
 	}
-	mediaType, _, parseErr := mime.ParseMediaType(res.Header.Get("Content-Type"))
-	if parseErr != nil || mediaType != "application/json" {
-		return ErrInvalidResponse
-	}
-
 	body, err := io.ReadAll(io.LimitReader(res.Body, managementResponseLimit+1))
 	if err != nil {
 		return &managementTransportError{operation: operation, cause: err}
 	}
 	if len(body) > managementResponseLimit {
 		return ErrResponseTooLarge
+	}
+	mediaType, _, parseErr := mime.ParseMediaType(res.Header.Get("Content-Type"))
+	if parseErr != nil || mediaType != "application/json" {
+		return ErrInvalidResponse
 	}
 	if err = json.Unmarshal(body, dst); err != nil {
 		return ErrInvalidResponse

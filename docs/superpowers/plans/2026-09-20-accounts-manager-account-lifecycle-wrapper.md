@@ -9,17 +9,17 @@ injection, database migration, or legacy Subscriptions cleanup.
 
 ## Tasks
 
-- [ ] Harden the private management transport for bounded JSON requests across
+- [x] Harden the private management transport for bounded JSON requests across
   GET, POST, PUT, PATCH, and DELETE, with safe typed errors and serialized
   mutations.
-- [ ] Add runner-owned, management-authenticated OAuth start/status/cancel
+- [x] Add runner-owned, management-authenticated OAuth start/status/cancel
   routes and loopback-only callback listeners for Codex and Claude.
-- [ ] Add OAuth lifecycle methods to the daemon's private ManagementClient.
-- [ ] Add Codex/Claude API-key creation and validated credential JSON import.
-- [ ] Add safe credential listing, enable/disable, refresh, and removal by
+- [x] Add OAuth lifecycle methods to the daemon's private ManagementClient.
+- [x] Add Codex/Claude API-key creation and validated credential JSON import.
+- [x] Add safe credential listing, enable/disable, refresh, and removal by
   unique auth_index.
-- [ ] Add safe model, cooldown, and quota projections.
-- [ ] Run only the focused runner and backend account-manager tests described
+- [x] Add safe model, cooldown, and quota projections.
+- [x] Run only the focused runner and backend account-manager tests described
   in the approved plan, then perform a final diff/security review.
 
 ## Constraints

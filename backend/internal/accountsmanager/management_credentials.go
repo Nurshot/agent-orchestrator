@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 )
 
@@ -25,7 +26,7 @@ func (c *ManagementClient) SetCredentialDisabled(ctx context.Context, ref string
 		Disabled  bool   `json:"disabled"`
 	}{Name: record.Name, AuthIndex: record.AuthIndex, Disabled: disabled}
 	var response map[string]any
-	return c.doJSON(ctx, "set credential status", http.MethodPatch, "/v0/management/auth-files/status", request, &response)
+	return mapCredentialOperationError(c.doJSON(ctx, "set credential status", http.MethodPatch, "/v0/management/auth-files/status", request, &response))
 }
 
 func (c *ManagementClient) RefreshCredential(ctx context.Context, ref string) (CredentialSummary, error) {
@@ -40,7 +41,7 @@ func (c *ManagementClient) RefreshCredential(ctx context.Context, ref string) (C
 	}
 	var response map[string]any
 	if err = c.doJSON(ctx, "refresh credential", http.MethodPost, "/v0/management/auth-files/refresh", map[string]string{"name": record.Name}, &response); err != nil {
-		return CredentialSummary{}, err
+		return CredentialSummary{}, mapCredentialOperationError(err)
 	}
 	updated, err := c.resolveCredential(ctx, ref)
 	if err != nil {
@@ -63,7 +64,7 @@ func (c *ManagementClient) RemoveCredential(ctx context.Context, ref string) err
 		return c.removeAPIKeyCredential(ctx, record)
 	}
 	name := strings.TrimSpace(record.Name)
-	if name == "" || !strings.HasSuffix(strings.ToLower(name), ".json") {
+	if name == "" || len(name) > 255 || filepath.Base(name) != name || strings.HasPrefix(name, ".") || !strings.HasSuffix(strings.ToLower(name), ".json") {
 		return ErrOperationUnsupported
 	}
 	query := url.Values{"name": []string{name}}
@@ -145,5 +146,25 @@ func (c *ManagementClient) removeAPIKeyCredential(ctx context.Context, record ra
 		return ErrInvalidResponse
 	}
 	var response map[string]any
-	return c.doJSON(ctx, "remove API key", http.MethodPut, endpoint, json.RawMessage(payload), &response)
+	return mapCredentialOperationError(c.doJSON(ctx, "remove API key", http.MethodPut, endpoint, json.RawMessage(payload), &response))
+}
+
+func mapCredentialOperationError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var statusErr *ManagementStatusError
+	if !errors.As(err, &statusErr) {
+		return err
+	}
+	switch statusErr.StatusCode {
+	case http.StatusNotFound:
+		return ErrCredentialNotFound
+	case http.StatusConflict:
+		return ErrCredentialConflict
+	case http.StatusNotImplemented:
+		return ErrOperationUnsupported
+	default:
+		return err
+	}
 }

@@ -86,6 +86,25 @@ func TestAddAPIKeyValidatesProviderKeyAndBaseURL(t *testing.T) {
 	}
 }
 
+func TestAddAPIKeyDoesNotDuplicateMatchingEntryBeforeAuthIndexAppears(t *testing.T) {
+	t.Parallel()
+
+	var puts atomic.Int32
+	client := managementTestClient(func(req *http.Request) (*http.Response, error) {
+		if req.Method == http.MethodPut {
+			puts.Add(1)
+		}
+		return managementJSONResponse(req, http.StatusOK, `{"codex-api-key":[{"api-key":"same-key","base-url":"https://api.openai.com/v1"}]}`), nil
+	})
+	_, err := client.AddAPIKey(context.Background(), APIKeyInput{Provider: ProviderCodex, Key: "same-key"})
+	if !errors.Is(err, ErrInvalidResponse) {
+		t.Fatalf("AddAPIKey() error = %v, want ErrInvalidResponse", err)
+	}
+	if puts.Load() != 0 {
+		t.Fatalf("PUT calls = %d, want 0", puts.Load())
+	}
+}
+
 func TestImportCredentialValidatesUploadsAndVerifiesCatalog(t *testing.T) {
 	t.Parallel()
 

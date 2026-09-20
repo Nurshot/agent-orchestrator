@@ -42,15 +42,20 @@ func TestOAuthCoordinatorRequiresManagementKey(t *testing.T) {
 
 	coordinator := newOAuthCoordinator("http://127.0.0.1:12345", "management-key", &http.Client{}, nil)
 	defer coordinator.Close()
-	for _, request := range []*http.Request{
-		httptest.NewRequest(http.MethodPost, "/ao/internal/oauth/start", strings.NewReader(`{"provider":"codex"}`)),
-		httptest.NewRequest(http.MethodGet, "/ao/internal/oauth/status?state=opaque", nil),
-		httptest.NewRequest(http.MethodDelete, "/ao/internal/oauth/session?state=opaque", nil),
-	} {
-		response := httptest.NewRecorder()
-		coordinator.ServeHTTP(response, request)
-		if response.Code != http.StatusUnauthorized {
-			t.Fatalf("%s %s status = %d, want 401", request.Method, request.URL.Path, response.Code)
+	for _, token := range []string{"", "control-key", "data-plane-key"} {
+		for _, request := range []*http.Request{
+			httptest.NewRequest(http.MethodPost, "/ao/internal/oauth/start", strings.NewReader(`{"provider":"codex"}`)),
+			httptest.NewRequest(http.MethodGet, "/ao/internal/oauth/status?state=opaque", nil),
+			httptest.NewRequest(http.MethodDelete, "/ao/internal/oauth/session?state=opaque", nil),
+		} {
+			if token != "" {
+				request.Header.Set("Authorization", "Bearer "+token)
+			}
+			response := httptest.NewRecorder()
+			coordinator.ServeHTTP(response, request)
+			if response.Code != http.StatusUnauthorized {
+				t.Fatalf("token=%q %s %s status = %d, want 401", token, request.Method, request.URL.Path, response.Code)
+			}
 		}
 	}
 }
@@ -163,7 +168,9 @@ func TestOAuthCallbackValidatesStateAndForwardsWithManagementAuthentication(t *t
 	})}
 	coordinator := newOAuthCoordinator("http://127.0.0.1:12345", "management-key", client, nil)
 	defer coordinator.Close()
-	session := &oauthRunnerSession{provider: "codex", state: "opaque-state", expiresAt: time.Now().Add(time.Minute)}
+	session := &oauthRunnerSession{provider: "codex", state: "opaque-state", status: "pending", expiresAt: time.Now().Add(time.Minute)}
+	coordinator.sessions[session.state] = session
+	coordinator.providers[session.provider] = session.state
 
 	wrong := httptest.NewRecorder()
 	coordinator.callbackHandler(session).ServeHTTP(wrong, httptest.NewRequest(http.MethodGet, "/auth/callback?state=wrong&code=private-code", nil))
@@ -180,6 +187,15 @@ func TestOAuthCallbackValidatesStateAndForwardsWithManagementAuthentication(t *t
 		if strings.Contains(valid.Body.String(), secret) {
 			t.Fatalf("browser response exposed %q", secret)
 		}
+	}
+
+	coordinator.mu.Lock()
+	delete(coordinator.sessions, session.state)
+	coordinator.mu.Unlock()
+	late := httptest.NewRecorder()
+	coordinator.callbackHandler(session).ServeHTTP(late, httptest.NewRequest(http.MethodGet, "/auth/callback?state=opaque-state&code=late-code", nil))
+	if late.Code != http.StatusGone || forwarded.Load() != 1 {
+		t.Fatalf("late callback status=%d forwarded=%d", late.Code, forwarded.Load())
 	}
 }
 

@@ -41,6 +41,7 @@ func TestManagementClientRoutingUsesManagementAuthentication(t *testing.T) {
 					return
 				}
 				authorized = r.Header.Get("Authorization") == "Bearer "+managementToken && r.Header.Get("Accept") == "application/json"
+				w.Header().Set("Content-Type", "application/json")
 				_ = json.NewEncoder(w).Encode(map[string]string{"strategy": string(want)})
 			}))
 			defer server.Close()
@@ -146,6 +147,7 @@ func TestManagementClientRejectsOversizedAndMalformedResponses(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
 				_, _ = io.WriteString(w, tt.body)
 			}))
 			defer server.Close()
@@ -171,6 +173,7 @@ func TestManagementClientListCredentialsFiltersAndRedacts(t *testing.T) {
 		metadataValue = "raw-metadata-secret"
 	)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{
 			"observed_at":"2026-09-20T10:11:12Z",
 			"files":[
@@ -190,7 +193,7 @@ func TestManagementClientListCredentialsFiltersAndRedacts(t *testing.T) {
 	wantObservedAt := time.Date(2026, 9, 20, 10, 11, 12, 0, time.UTC)
 	want := []CredentialSummary{
 		{Ref: "codex-ref", Provider: ProviderCodex, Kind: "oauth", Email: "codex@example.com", Status: "active", ObservedAt: wantObservedAt},
-		{Ref: "claude-ref", Provider: ProviderClaude, Kind: "api_key", Email: "claude@example.com", Status: "error", Disabled: true, ObservedAt: wantObservedAt},
+		{Ref: "claude-ref", Provider: ProviderClaude, Kind: "api_key", Email: "claude@example.com", Status: "disabled", Disabled: true, ObservedAt: wantObservedAt},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("ListCredentials() count = %d, want %d", len(got), len(want))
@@ -215,6 +218,7 @@ func TestManagementClientRejectsUnknownRoutingStrategy(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"strategy":"random"}`)
 	}))
 	defer server.Close()

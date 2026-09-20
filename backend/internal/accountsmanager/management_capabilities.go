@@ -68,7 +68,7 @@ func (c *ManagementClient) ListCredentialModels(ctx context.Context, ref string)
 		} `json:"models"`
 	}
 	if err = c.doJSON(ctx, "list credential models", http.MethodGet, "/v0/management/auth-files/models?"+query.Encode(), nil, &response); err != nil {
-		return nil, err
+		return nil, mapCredentialOperationError(err)
 	}
 	if len(response.Models) > 4096 {
 		return nil, ErrInvalidResponse
@@ -97,7 +97,7 @@ func (c *ManagementClient) ListCredentialModels(ctx context.Context, ref string)
 func (c *ManagementClient) FetchCredentialQuota(ctx context.Context, ref string) (CredentialQuota, error) {
 	record, err := c.resolveCredential(ctx, ref)
 	if err != nil {
-		return CredentialQuota{}, err
+		return CredentialQuota{}, mapCredentialOperationError(err)
 	}
 	if !record.SupportsQuota {
 		return CredentialQuota{}, ErrOperationUnsupported

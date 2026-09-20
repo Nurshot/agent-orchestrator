@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -304,6 +305,132 @@ routing:
 		t.Fatalf("empty credential inventory status=%d count=%d", authFilesResponse.StatusCode, len(authFilesPayload.Files))
 	}
 
+	const importedCredentialSecret = "runner-import-secret-do-not-log"
+	for _, fixture := range []struct {
+		name     string
+		provider string
+	}{
+		{name: "fake-codex.json", provider: "codex"},
+		{name: "fake-claude.json", provider: "claude"},
+	} {
+		body := fmt.Sprintf(`{"type":%q,"email":%q,"access_token":%q}`, fixture.provider, fixture.provider+"@example.test", importedCredentialSecret+"-"+fixture.provider)
+		request, requestErr := http.NewRequest(http.MethodPost, baseURL+"/v0/management/auth-files?name="+url.QueryEscape(fixture.name), strings.NewReader(body))
+		if requestErr != nil {
+			t.Fatal(requestErr)
+		}
+		request.Header.Set("Authorization", "Bearer "+managementKey)
+		request.Header.Set("Content-Type", "application/json")
+		response, requestErr := http.DefaultClient.Do(request)
+		if requestErr != nil {
+			t.Fatal(requestErr)
+		}
+		_ = response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("upload %s status = %d", fixture.provider, response.StatusCode)
+		}
+	}
+
+	type listedCredential struct {
+		AuthIndex string `json:"auth_index"`
+		Name      string `json:"name"`
+		Provider  string `json:"provider"`
+		Disabled  bool   `json:"disabled"`
+	}
+	listCredentials := func() []listedCredential {
+		t.Helper()
+		request, requestErr := http.NewRequest(http.MethodGet, baseURL+"/v0/management/auth-files", nil)
+		if requestErr != nil {
+			t.Fatal(requestErr)
+		}
+		request.Header.Set("Authorization", "Bearer "+managementKey)
+		response, requestErr := http.DefaultClient.Do(request)
+		if requestErr != nil {
+			t.Fatal(requestErr)
+		}
+		defer response.Body.Close()
+		var payload struct {
+			Files []listedCredential `json:"files"`
+		}
+		if response.StatusCode != http.StatusOK || json.NewDecoder(response.Body).Decode(&payload) != nil {
+			t.Fatalf("list credentials status = %d", response.StatusCode)
+		}
+		return payload.Files
+	}
+	var imported []listedCredential
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		imported = listCredentials()
+		if len(imported) == 2 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if len(imported) != 2 {
+		t.Fatalf("imported credential count = %d, want 2", len(imported))
+	}
+	for _, credential := range imported {
+		if credential.AuthIndex == "" || (credential.Provider != "codex" && credential.Provider != "claude") {
+			t.Fatalf("unsafe imported credential projection: %+v", credential)
+		}
+	}
+
+	target := imported[0]
+	for _, disabled := range []bool{true, false} {
+		body, _ := json.Marshal(map[string]any{"name": target.Name, "auth_index": target.AuthIndex, "disabled": disabled})
+		request, _ := http.NewRequest(http.MethodPatch, baseURL+"/v0/management/auth-files/status", bytes.NewReader(body))
+		request.Header.Set("Authorization", "Bearer "+managementKey)
+		request.Header.Set("Content-Type", "application/json")
+		response, requestErr := http.DefaultClient.Do(request)
+		if requestErr != nil {
+			t.Fatal(requestErr)
+		}
+		_ = response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("set disabled=%t status = %d", disabled, response.StatusCode)
+		}
+		found := false
+		for _, credential := range listCredentials() {
+			if credential.AuthIndex == target.AuthIndex {
+				found = true
+				if credential.Disabled != disabled {
+					t.Fatalf("disabled projection = %t, want %t", credential.Disabled, disabled)
+				}
+			}
+		}
+		if !found {
+			t.Fatal("updated credential disappeared")
+		}
+	}
+
+	refreshBody, _ := json.Marshal(map[string]string{"name": target.Name})
+	refreshRequest, _ := http.NewRequest(http.MethodPost, baseURL+"/v0/management/auth-files/refresh", bytes.NewReader(refreshBody))
+	refreshRequest.Header.Set("Authorization", "Bearer "+managementKey)
+	refreshRequest.Header.Set("Content-Type", "application/json")
+	refreshResponse, err := http.DefaultClient.Do(refreshRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = refreshResponse.Body.Close()
+	if refreshResponse.StatusCode != http.StatusOK {
+		t.Fatalf("refresh status = %d", refreshResponse.StatusCode)
+	}
+
+	for _, credential := range imported {
+		request, _ := http.NewRequest(http.MethodDelete, baseURL+"/v0/management/auth-files?name="+url.QueryEscape(credential.Name), nil)
+		request.Header.Set("Authorization", "Bearer "+managementKey)
+		response, requestErr := http.DefaultClient.Do(request)
+		if requestErr != nil {
+			t.Fatal(requestErr)
+		}
+		_ = response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("delete %s status = %d", credential.Provider, response.StatusCode)
+		}
+	}
+	if remaining := listCredentials(); len(remaining) != 0 {
+		t.Fatalf("credentials after removal = %+v", remaining)
+	}
+
 	renewCtx, stopRenewing := context.WithCancel(context.Background())
 	renewed := make(chan struct{}, 1)
 	go func() {
@@ -355,7 +482,7 @@ routing:
 	if response.StatusCode != http.StatusNotFound {
 		t.Fatalf("management panel status = %d, want %d", response.StatusCode, http.StatusNotFound)
 	}
-	if logsText := logs.String(); strings.Contains(logsText, controlKey) || strings.Contains(logsText, clientKey) || strings.Contains(logsText, managementKey) {
+	if logsText := logs.String(); strings.Contains(logsText, controlKey) || strings.Contains(logsText, clientKey) || strings.Contains(logsText, managementKey) || strings.Contains(logsText, importedCredentialSecret) {
 		t.Fatal("runner logs exposed a private key")
 	}
 }

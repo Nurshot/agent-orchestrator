@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 )
 
 func TestListCredentialsProjectsSafeLifecycleAndCooldowns(t *testing.T) {
@@ -180,5 +179,3 @@ func boolJSON(value bool) string {
 	}
 	return "false"
 }
-
-var _ = time.Time{}

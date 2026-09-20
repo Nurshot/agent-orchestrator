@@ -391,6 +391,7 @@ func TestAccountsManagerSupervisorEndpointFeedsManagementClient(t *testing.T) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
+		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"observed_at":"2026-09-20T10:11:12Z","files":[]}`)
 	})
 	mux.HandleFunc("/v0/management/routing/strategy", func(w http.ResponseWriter, r *http.Request) {
@@ -398,6 +399,7 @@ func TestAccountsManagerSupervisorEndpointFeedsManagementClient(t *testing.T) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
+		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"strategy":"round-robin"}`)
 	})
 	server := httptest.NewServer(mux)
