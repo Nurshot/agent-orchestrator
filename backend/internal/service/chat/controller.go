@@ -1440,18 +1440,11 @@ func (c *Controller) Settings() domain.ConversationSettings {
 	return c.constrainSettings(c.settings)
 }
 
-// SetSettings records the provider choices for the next turn.
+// setSettingsLocked keeps a provider-owned config change and its durable AO
+// projection inside the same handoff fence. The caller holds configMu.
 //
 // The row is written first: if that fails, the in-memory copy must not move, or a
 // restart would silently revert a choice the user watched take effect.
-func (c *Controller) SetSettings(ctx context.Context, settings domain.ConversationSettings) error {
-	c.configMu.Lock()
-	defer c.configMu.Unlock()
-	return c.setSettingsLocked(ctx, settings)
-}
-
-// setSettingsLocked keeps a provider-owned config change and its durable AO
-// projection inside the same handoff fence. The caller holds configMu.
 func (c *Controller) setSettingsLocked(ctx context.Context, settings domain.ConversationSettings) error {
 	if c.permissionFloor == ports.PermissionModeReadOnly && settings.ApprovalMode != ports.PermissionModeReadOnly {
 		return fmt.Errorf("%w: a read-only session cannot grant write access", ports.ErrChatPermissionModeUnsupported)

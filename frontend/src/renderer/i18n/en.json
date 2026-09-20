@@ -1138,6 +1138,7 @@
 	"settings.project.permissionAuto": "Auto",
 	"settings.project.permissionBypass": "Bypass permissions",
 	"settings.project.permissionDefault": "Default",
+	"settings.project.permissionReadOnly": "Read-only (Chat only)",
 	"settings.project.permissionMode": "Permission mode",
 	"settings.project.refresh": "Refresh",
 	"settings.project.repo": "repo",

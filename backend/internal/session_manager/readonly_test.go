@@ -57,3 +57,21 @@ func TestReadOnlySpawnOverrideIsDurableAndDoesNotChangeProject(t *testing.T) {
 		t.Fatalf("spawn changed project: %q -> %q", before, after)
 	}
 }
+
+// A Chat session whose conversation row was never created must still be able to
+// transition to TUI: there is no next-turn selection to enforce, so the launch
+// policy stands rather than failing the preflight and trapping the session.
+func TestInterfaceTransitionPermissionsWithoutConversation(t *testing.T) {
+	manager, store, _, _, _ := newTransitionManager(t, domain.SessionModeChat)
+	store.conversation = domain.ConversationRecord{}
+	rec := store.sessions["session-1"]
+	rec.Metadata.Permissions = ports.PermissionModeAcceptEdits
+
+	permissions, err := manager.interfaceTransitionPermissions(context.Background(), rec, domain.ProjectConfig{})
+	if err != nil {
+		t.Fatalf("interfaceTransitionPermissions() error = %v, want nil", err)
+	}
+	if permissions != ports.PermissionModeAcceptEdits {
+		t.Fatalf("permissions = %q, want %q", permissions, ports.PermissionModeAcceptEdits)
+	}
+}

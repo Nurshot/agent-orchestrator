@@ -745,7 +745,7 @@ function PermissionModeSelect({ value, onChange, supportsReadOnly }: { value: st
 		...PERMISSION_MODE_VALUES.filter((mode) => mode !== "read-only" || supportsReadOnly || value === "read-only").map((value) => ({
 			value,
 			label:
-				value === "read-only" ? "Read-only (Chat only)" : value === "default"
+				value === "read-only" ? t("settings.project.permissionReadOnly") : value === "default"
 					? t("settings.project.permissionDefault")
 					: value === "accept-edits"
 						? t("settings.project.permissionAcceptEdits")

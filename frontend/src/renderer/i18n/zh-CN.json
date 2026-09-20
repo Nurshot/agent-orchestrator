@@ -1006,6 +1006,7 @@
 	"settings.project.permissionAuto": "自动",
 	"settings.project.permissionBypass": "绕过权限",
 	"settings.project.permissionDefault": "默认",
+	"settings.project.permissionReadOnly": "只读（仅聊天）",
 	"settings.project.permissionMode": "权限模式",
 	"settings.project.refresh": "刷新",
 	"settings.project.repo": "仓库",

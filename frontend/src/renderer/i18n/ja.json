@@ -1024,6 +1024,7 @@
 	"settings.project.permissionAuto": "自動",
 	"settings.project.permissionBypass": "権限をバイパス",
 	"settings.project.permissionDefault": "デフォルト",
+	"settings.project.permissionReadOnly": "読み取り専用（チャットのみ）",
 	"settings.project.permissionMode": "権限モード",
 	"settings.project.refresh": "更新",
 	"settings.project.repo": "repo",

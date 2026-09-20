@@ -1043,6 +1043,7 @@
 	"settings.project.permissionAuto": "Automatique",
 	"settings.project.permissionBypass": "Contourner les permissions",
 	"settings.project.permissionDefault": "Par défaut",
+	"settings.project.permissionReadOnly": "Lecture seule (Chat uniquement)",
 	"settings.project.permissionMode": "Mode de permission",
 	"settings.project.refresh": "Actualiser",
 	"settings.project.repo": "dépôt",

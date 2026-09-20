@@ -857,6 +857,11 @@ func (m *Manager) interfaceTransitionPermissions(
 		return "", fmt.Errorf("%w: current Chat permissions cannot be verified", ErrInterfaceHandoffUnsupported)
 	}
 	conversation, err := settingsStore.ConversationForSession(ctx, rec.ID)
+	if errors.Is(err, domain.ErrNoConversation) {
+		// A Chat session that was never opened has no next-turn selection to
+		// enforce, so the launch policy stands and the escape hatch to TUI stays open.
+		return permissions, nil
+	}
 	if err != nil {
 		return "", fmt.Errorf("load current Chat permissions: %w", err)
 	}

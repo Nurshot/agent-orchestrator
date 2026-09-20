@@ -1087,6 +1087,8 @@ function ChatWorkspaceContent({
 	const stableSettings = useStableValue(snapshot.settings);
 	const stableModelReroute = useStableValue(snapshot.modelReroute);
 	const stablePendingApproval = useStableValue(pendingApproval);
+	// snapshot.capabilities is a fresh array on every refresh; depend on the boolean.
+	const supportsReadOnly = snapshot.capabilities?.includes("preventive_read_only") ?? false;
 	const composerSettings = useMemo(
 		() =>
 			onChooseSettings || onChooseConfigOption ? (
@@ -1099,7 +1101,7 @@ function ChatWorkspaceContent({
 					rememberedPermissionMode={rememberedPermissionMode}
 					harness={snapshot.harness}
 					permissions={snapshot.permissions}
-					supportsReadOnly={snapshot.capabilities?.includes("preventive_read_only")}
+					supportsReadOnly={supportsReadOnly}
 					reroute={stableModelReroute}
 					onChange={newWorkDisabled ? undefined : onChooseSettings}
 					configOptions={configOptions ?? []}
@@ -1125,10 +1127,10 @@ function ChatWorkspaceContent({
 			rememberPermissionsError,
 			rememberedPermissionMode,
 			snapshot.permissions,
-			snapshot.capabilities,
 			snapshot.controller.state,
 			stableModelReroute,
 			stableSettings,
+			supportsReadOnly,
 		],
 	);
 	const composerApproval = useMemo(

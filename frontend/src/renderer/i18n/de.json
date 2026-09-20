@@ -1024,6 +1024,7 @@
 	"settings.project.permissionAuto": "Auto",
 	"settings.project.permissionBypass": "Berechtigungen umgehen",
 	"settings.project.permissionDefault": "Standard",
+	"settings.project.permissionReadOnly": "Schreibgeschützt (nur Chat)",
 	"settings.project.permissionMode": "Berechtigungsmodus",
 	"settings.project.refresh": "Aktualisieren",
 	"settings.project.repo": "Repo",
