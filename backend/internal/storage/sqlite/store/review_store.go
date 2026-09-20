@@ -42,6 +42,21 @@ func (s *Store) UpsertReview(ctx context.Context, r domain.Review) error {
 	})
 }
 
+// SetReviewInterfaceMode persists the surface before its controller starts.
+func (s *Store) SetReviewInterfaceMode(ctx context.Context, id string, mode domain.ReviewerInterfaceMode, now time.Time) (bool, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	n, err := s.qw.SetReviewInterfaceMode(ctx, gen.SetReviewInterfaceModeParams{
+		InterfaceMode: string(mode),
+		Column2:       string(mode),
+		Column3:       string(mode),
+		Column4:       string(mode),
+		UpdatedAt:     now,
+		ID:            id,
+	})
+	return n > 0, err
+}
+
 // GetReviewBySession returns the latest review row for a worker session,
 // ok=false if none.
 func (s *Store) GetReviewBySession(ctx context.Context, id domain.SessionID) (domain.Review, bool, error) {

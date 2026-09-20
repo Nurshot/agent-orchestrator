@@ -34,6 +34,8 @@ const EnvAOCommandWarning = "AO_REVIEW_AO_COMMAND_WARNING"
 // It is the side of the engine that talks to the reviewer registry and runtime;
 // the engine owns the orchestration and persistence.
 type Launcher interface {
+	// InterfaceMode reports the durable surface Spawn and RestoreTerminal will use.
+	InterfaceMode(harness domain.ReviewerHarness) domain.ReviewerInterfaceMode
 	// Preflight checks whether the reviewer for the given harness is available
 	// to run (binary on PATH, etc.) without starting a runtime pane. It runs
 	// only when a reviewer launch is actually required, after ReviewRun rows
@@ -260,6 +262,18 @@ func (l *agentLauncher) Preflight(ctx context.Context, harness domain.ReviewerHa
 
 func (l *agentLauncher) reviewChatSupported(profile ports.ReviewerChatProfile) bool {
 	return l.chat != nil && l.chat.SupportsReviewChat(profile.ReviewChatHarness())
+}
+
+func (l *agentLauncher) InterfaceMode(harness domain.ReviewerHarness) domain.ReviewerInterfaceMode {
+	reviewer, ok := l.reviewers.Reviewer(harness)
+	if !ok {
+		return domain.ReviewerInterfaceTUI
+	}
+	profile, ok := reviewer.(ports.ReviewerChatProfile)
+	if ok && l.reviewChatSupported(profile) {
+		return domain.ReviewerInterfaceChat
+	}
+	return domain.ReviewerInterfaceTUI
 }
 
 func (l *agentLauncher) agentAuthStatus(ctx context.Context, harness domain.ReviewerHarness) (ports.AgentAuthStatus, bool, error) {

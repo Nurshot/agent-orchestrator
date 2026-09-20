@@ -32,6 +32,7 @@ var (
 // in production; tests use a fake.
 type Store interface {
 	UpsertReview(ctx stdctx.Context, r domain.Review) error
+	SetReviewInterfaceMode(ctx stdctx.Context, id string, mode domain.ReviewerInterfaceMode, updatedAt time.Time) (bool, error)
 	SetSessionReviewerConfig(ctx stdctx.Context, id domain.SessionID, harness domain.ReviewerHarness, config domain.AgentConfig, updatedAt time.Time) (bool, error)
 	GetReviewBySession(ctx stdctx.Context, id domain.SessionID) (domain.Review, bool, error)
 	ClearReviewerHandle(ctx stdctx.Context, id domain.SessionID) error
@@ -435,6 +436,9 @@ func (e *Engine) TriggerWithSource(ctx stdctx.Context, workerID domain.SessionID
 		if err != nil {
 			return TriggerResult{}, failRuns(0, err)
 		}
+		if err := e.persistReviewerInterfaceMode(ctx, reviewRow.ID, harness, now); err != nil {
+			return TriggerResult{}, failRuns(0, err)
+		}
 		launch, err := e.launcher.Spawn(ctx, reviewLaunchSpec(worker, harness, config, launchRun, queue, 0, launchAgentSessionID, launchID))
 		if err != nil {
 			return TriggerResult{}, failRuns(0, fmt.Errorf("launch reviewer: %w", err))
@@ -709,6 +713,9 @@ func (e *Engine) restorePersistedChatReviewerLocked(ctx stdctx.Context, worker d
 		}
 	}
 	launchID := e.newID()
+	if err := e.persistReviewerInterfaceMode(ctx, review.ID, review.Harness, e.clock()); err != nil {
+		return RestoreReviewerResult{}, err
+	}
 	launch, err := e.launcher.RestoreTerminal(ctx, LaunchSpec{ReviewSessionID: review.ID, LaunchID: launchID, WorkerID: worker.ID, ProjectID: worker.ProjectID, Harness: review.Harness, WorkspacePath: worker.Metadata.WorkspacePath, AgentSessionID: review.AgentSessionID, ProviderConversationID: review.ProviderConversationID, PreviousRuns: previousRuns})
 	if err != nil {
 		return RestoreReviewerResult{}, fmt.Errorf("restore reviewer: %w", err)
@@ -771,6 +778,9 @@ func (e *Engine) restoreReviewerLocked(
 	launchID := e.newID()
 	reviewRow, err = e.upsertReview(ctx, worker, harness, reviewRow.ReviewerHandleID, agentSessionID, launchID, "", e.clock())
 	if err != nil {
+		return RestoreReviewerResult{}, err
+	}
+	if err := e.persistReviewerInterfaceMode(ctx, reviewRow.ID, harness, e.clock()); err != nil {
 		return RestoreReviewerResult{}, err
 	}
 	launch, err := e.launcher.RestoreTerminal(ctx, LaunchSpec{
@@ -1316,6 +1326,7 @@ func (e *Engine) upsertReview(ctx stdctx.Context, worker domain.SessionRecord, h
 		AgentSessionID:        agentSessionID,
 		ReviewerLaunchID:      strings.TrimSpace(reviewerLaunchID),
 		ReviewerActivityState: activityState,
+		InterfaceMode:         domain.ReviewerInterfaceTUI,
 		CreatedAt:             now,
 		UpdatedAt:             now,
 	}
@@ -1330,9 +1341,22 @@ func (e *Engine) upsertReview(ctx stdctx.Context, worker domain.SessionRecord, h
 		if review.ReviewerActivityState == "" {
 			review.ReviewerActivityState = existing.ReviewerActivityState
 		}
+		review.InterfaceMode = existing.InterfaceMode
 	}
 	if err := e.store.UpsertReview(ctx, review); err != nil {
 		return domain.Review{}, err
 	}
 	return review, nil
+}
+
+func (e *Engine) persistReviewerInterfaceMode(ctx stdctx.Context, reviewID string, harness domain.ReviewerHarness, now time.Time) error {
+	mode := e.launcher.InterfaceMode(harness)
+	ok, err := e.store.SetReviewInterfaceMode(ctx, reviewID, mode, now)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("%w: reviewer %q", ErrNotFound, reviewID)
+	}
+	return nil
 }
