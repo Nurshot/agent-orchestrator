@@ -1000,9 +1000,8 @@ button.settings-row-bar {
 	opacity: 0.75;
 }
 
-/* The composer is one continuous surface. Agent and model sit as separate
-   equal-width dropdowns in a horizontal row so changing provider names never
-   moves the model or the primary action. */
+/* The composer keeps provider controls in stable tracks so changing labels
+   never moves the model or primary action. */
 .composer-toolbar {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) auto auto;
@@ -1026,6 +1025,11 @@ button.settings-row-bar {
 	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 	align-items: center;
 	column-gap: var(--space-2);
+}
+
+.composer-run-controls-with-effort {
+	/* Capability-driven Agent / Model / Effort sizing: 2 / 2 / 1. */
+	grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(5.5rem, 1fr);
 }
 
 .composer-toolbar-slot {
@@ -5060,7 +5064,8 @@ body:has(#root .platform-linux) > .browser-popout-overlay {
 	outline: none;
 }
 
-.browser-panel__url-external {
+.browser-panel__url-external,
+.browser-panel__url-copy {
 	position: absolute;
 	top: 3px;
 	right: 3px;
@@ -5075,8 +5080,16 @@ body:has(#root .platform-linux) > .browser-popout-overlay {
 	pointer-events: none;
 }
 
-.browser-panel__url-wrap:hover:not(:has(.browser-panel__url-input:focus)) .browser-panel__url-external,
-.browser-panel__url-external:focus-visible {
+.browser-panel__url-copy {
+	right: 30px;
+}
+
+.browser-panel__url-copy--only {
+	right: 3px;
+}
+
+.browser-panel__url-wrap:hover:not(:has(.browser-panel__url-input:focus)) :is(.browser-panel__url-external, .browser-panel__url-copy),
+:is(.browser-panel__url-external, .browser-panel__url-copy):focus-visible {
 	opacity: 1;
 	pointer-events: auto;
 }
