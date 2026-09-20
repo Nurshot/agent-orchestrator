@@ -46,7 +46,7 @@ export function ConfirmDialog({
 	// frame (575px, 38px footer pills) reads oversized around one question, so
 	// the confirm narrows the dialog and compacts the buttons while keeping the
 	// settings family's colors, borders, and typography.
-	const compactButtonClass = "h-8 rounded-[10px] px-4 text-sm";
+	const compactButtonClass = "h-8 rounded-lg px-4 text-sm";
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent

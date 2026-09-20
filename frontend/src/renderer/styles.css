@@ -492,12 +492,11 @@
 	flex: 1 1 0%;
 	flex-direction: column;
 	overflow: hidden;
+	/* Deliberately no outline: the pane reads as a surface by its tonal shift
+	 * against the shell background, not by a hairline. */
 	border-radius: var(--radius-center-panel);
-	border: 1px solid var(--color-border-strong);
 	background-color: var(--color-bg-primary);
-	transition:
-		border-color 280ms cubic-bezier(0.25, 0.46, 0.45, 0.94),
-		border-radius 280ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+	transition: border-radius 280ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
 /* A fully hidden sidebar no longer contributes a left layout gutter. Restore
@@ -523,27 +522,38 @@
  * or Linux drag target without introducing a seam inside session content. */
 .center-panel-shell--draggable-session-frame {
 	flex-direction: column;
+	/* Containing block for the absolutely positioned drag strip below. */
+	position: relative;
 }
 
+/* The strip is a window-drag target, never layout: it overlays the shell's own
+ * top inset instead of adding height. The gap above the card is therefore the
+ * shell's inset on every route — identical across page transitions, and outside
+ * the shell's 280ms padding transition, so navigating cannot slide the card.
+ * Where the shell has no top inset (sidebar hidden, Linux) it sits over the
+ * card's top edge, which is the only drag target left in that flush layout. */
 .center-panel-session-drag-strip {
-	flex: 0 0 var(--space-2);
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline: 0;
+	height: var(--size-center-panel-inset-mac);
 	-webkit-app-region: drag;
+	z-index: 1;
 }
 
 /* Sidebar closed on mac: content panel expands to fill the full window.
- * Remove all padding and strip the surface border + radius so it's flush. */
+ * Remove all padding and strip the surface radius so it's flush. */
 .sidebar-hidden .center-panel-shell.center-panel-shell--mac {
 	padding: 0;
 }
 
 .sidebar-hidden .center-panel-shell--mac .center-panel-surface {
-	border-color: transparent;
 	border-radius: 0;
 }
 
 /* Session topbar now lives inside .center-panel-surface. When it's rendered
- * there, drop the outer border and radius (the surface provides both) and keep
- * only a bottom divider separating the tabs from the terminal below.
+ * there, drop the outer border and radius (the surface provides the radius) and
+ * keep only a bottom divider separating the tabs from the terminal below.
  * When it's rendered in-place (native fullscreen), keep the legacy surface
  * treatment so the topbar still looks like a standalone panel header. */
 .session-topbar-surface {
@@ -1490,7 +1500,7 @@ textarea,
 	right: 1px;
 	left: 1px;
 	min-height: 24px;
-	border-radius: 999px;
+	border-radius: var(--radius-full);
 	background-color: color-mix(in srgb, var(--color-text-terminal) 30%, transparent);
 	will-change: height, transform;
 }
@@ -1529,7 +1539,7 @@ textarea,
 
 .board-scrollbar::-webkit-scrollbar-thumb {
 	min-height: 8px;
-	border-radius: 999px;
+	border-radius: var(--radius-full);
 	background-color: color-mix(in srgb, var(--color-scrollbar) 24%, transparent);
 }
 
@@ -1561,7 +1571,7 @@ textarea,
 }
 
 .settings-thin-scrollbar::-webkit-scrollbar-thumb {
-	border-radius: 999px;
+	border-radius: var(--radius-full);
 	background-color: color-mix(in srgb, var(--color-scrollbar) 16%, transparent);
 }
 
@@ -1589,7 +1599,7 @@ textarea,
 
 .platform-linux .board-horizontal-scrollbar::-webkit-scrollbar-thumb {
 	min-width: 24px;
-	border-radius: 999px;
+	border-radius: var(--radius-full);
 	background-color: color-mix(in srgb, var(--color-scrollbar) 42%, transparent);
 }
 
@@ -1614,7 +1624,7 @@ textarea,
 
 .project-sidebar-scrollbar::-webkit-scrollbar-thumb {
 	min-height: 24px;
-	border-radius: 999px;
+	border-radius: var(--radius-full);
 	background-color: color-mix(in srgb, var(--color-scrollbar) 28%, transparent);
 }
 
@@ -1639,7 +1649,7 @@ textarea,
 
 .platform-linux .project-sidebar-scrollbar::-webkit-scrollbar-thumb {
 	min-height: 24px;
-	border-radius: 999px;
+	border-radius: var(--radius-full);
 	background-color: color-mix(in srgb, var(--color-scrollbar) 42%, transparent);
 }
 
@@ -2566,7 +2576,7 @@ html.sidebar-reordering * {
 }
 
 .queue-dock-scroll::-webkit-scrollbar-thumb {
-	border-radius: 999px;
+	border-radius: var(--radius-full);
 	background: var(--color-scrollbar-board);
 }
 
@@ -2802,7 +2812,7 @@ html.sidebar-reordering * {
 	width: 7px;
 	height: 2px;
 	transform: translateY(-50%);
-	border-radius: 999px;
+	border-radius: var(--radius-full);
 	background: color-mix(in srgb, var(--color-text-muted) 54%, transparent);
 	opacity: 0.76;
 	transition:
@@ -3151,7 +3161,7 @@ html.sidebar-reordering * {
 	width: 34px;
 	height: 34px;
 	place-items: center;
-	border-radius: 7px;
+	border-radius: var(--radius-md);
 	color: var(--fg-muted);
 	transition:
 		background 0.12s ease,
@@ -3168,7 +3178,7 @@ html.sidebar-reordering * {
 	height: 30px;
 	align-items: center;
 	gap: 5px;
-	border-radius: 6px;
+	border-radius: var(--radius-sm);
 	border: 1px solid color-mix(in srgb, var(--red) 58%, transparent);
 	background: color-mix(in srgb, var(--red) 5%, transparent);
 	padding: 0 10px;
@@ -3197,7 +3207,7 @@ html.sidebar-reordering * {
 	height: 34px;
 	align-items: center;
 	gap: 6px;
-	border-radius: 7px;
+	border-radius: var(--radius-md);
 	border: 1px solid color-mix(in srgb, var(--red) 40%, transparent);
 	padding: 0 12px;
 	font-size: 13px;
@@ -3220,7 +3230,7 @@ html.sidebar-reordering * {
 	display: inline-flex;
 	height: 34px;
 	align-items: center;
-	border-radius: 7px;
+	border-radius: var(--radius-md);
 	padding: 0 10px;
 	font-size: 13px;
 	font-weight: 600;
@@ -3243,7 +3253,7 @@ html.sidebar-reordering * {
 	height: 34px;
 	align-items: center;
 	gap: 6px;
-	border-radius: 7px;
+	border-radius: var(--radius-md);
 	padding: 0 15px;
 	font-size: 13px;
 	font-weight: 600;
@@ -3263,7 +3273,7 @@ html.sidebar-reordering * {
 
 .dashboard-app-header__primary-btn--compact {
 	height: 32px;
-	border-radius: 7px;
+	border-radius: var(--radius-md);
 	padding: 0 14px;
 	font-size: 13px;
 }
@@ -3273,7 +3283,7 @@ html.sidebar-reordering * {
 	height: 34px;
 	align-items: center;
 	gap: 6px;
-	border-radius: 7px;
+	border-radius: var(--radius-md);
 	border: 1px solid var(--border);
 	padding: 0 15px;
 	font-size: 13px;
@@ -3318,7 +3328,7 @@ html.sidebar-reordering * {
 	place-items: center;
 	width: 28px;
 	height: 28px;
-	border-radius: 6px;
+	border-radius: var(--radius-sm);
 	color: var(--fg-muted);
 	-webkit-app-region: no-drag;
 	transition:
@@ -3356,7 +3366,7 @@ html.sidebar-reordering * {
 .window-titlebar__menu-btn {
 	height: 24px;
 	padding: 0 8px;
-	border-radius: 6px;
+	border-radius: var(--radius-sm);
 	font-size: 12.5px;
 	line-height: 1;
 	color: var(--fg-muted);
@@ -3448,7 +3458,7 @@ html.sidebar-reordering * {
 	align-items: center;
 	gap: 4px;
 	border: 1px solid var(--border);
-	border-radius: 6px;
+	border-radius: var(--radius-sm);
 	padding: 0 8px;
 	font-size: 10px;
 	font-weight: 600;
@@ -3508,7 +3518,7 @@ html.sidebar-reordering * {
 	gap: 6px;
 	min-width: 0;
 	padding: 7px 6px;
-	border-radius: 7px;
+	border-radius: var(--radius-md);
 	font-size: 11.5px;
 	font-weight: 600;
 	color: var(--fg-passive);
@@ -3615,7 +3625,7 @@ html.sidebar-reordering * {
 	flex-shrink: 0;
 	align-items: center;
 	gap: 5px;
-	border-radius: 6px;
+	border-radius: var(--radius-sm);
 	border: 1px solid var(--border);
 	background: var(--bg-1);
 	padding: 0 8px;
@@ -3644,7 +3654,7 @@ html.sidebar-reordering * {
 	flex-shrink: 0;
 	align-items: center;
 	gap: 6px;
-	border-radius: 6px;
+	border-radius: var(--radius-sm);
 	border: 1px solid color-mix(in srgb, var(--green) 34%, transparent);
 	background: color-mix(in srgb, var(--green) 9%, transparent);
 	padding: 0 9px;
@@ -3861,7 +3871,7 @@ html.sidebar-reordering * {
 
 .reviewer-error {
 	margin: 0;
-	border-radius: 6px;
+	border-radius: var(--radius-sm);
 	border: 1px solid color-mix(in srgb, var(--red) 28%, transparent);
 	background: color-mix(in srgb, var(--red) 8%, transparent);
 	padding: 8px 10px;
@@ -3872,7 +3882,7 @@ html.sidebar-reordering * {
 
 .reviewer-notice {
 	margin: 0;
-	border-radius: 6px;
+	border-radius: var(--radius-sm);
 	border: 1px solid color-mix(in srgb, var(--green) 28%, transparent);
 	background: color-mix(in srgb, var(--green) 8%, transparent);
 	padding: 8px 10px;
@@ -3885,7 +3895,7 @@ html.sidebar-reordering * {
 	display: flex;
 	flex-direction: column;
 	gap: 12px;
-	border-radius: 8px;
+	border-radius: var(--radius-md);
 	border: 1px solid var(--border);
 	background: var(--bg-1);
 	padding: 12px;
@@ -3957,7 +3967,7 @@ html.sidebar-reordering * {
 	align-items: center;
 	gap: 5px;
 	overflow: hidden;
-	border-radius: 6px;
+	border-radius: var(--radius-sm);
 	padding: 0 8px;
 	font-size: 10.5px;
 	font-weight: 650;
@@ -4011,7 +4021,7 @@ html.sidebar-reordering * {
 	justify-content: center;
 	gap: 7px;
 	overflow: hidden;
-	border-radius: 7px;
+	border-radius: var(--radius-md);
 	border: 1px solid var(--border);
 	background: var(--bg-2);
 	padding: 0 10px;
@@ -4063,7 +4073,7 @@ html.sidebar-reordering * {
 	flex-direction: column;
 	gap: 0;
 	overflow: hidden;
-	border-radius: 7px;
+	border-radius: var(--radius-md);
 	border: 1px solid var(--border);
 	background: color-mix(in srgb, var(--bg-0) 35%, transparent);
 }
@@ -4104,7 +4114,7 @@ html.sidebar-reordering * {
 	width: 7px;
 	height: 7px;
 	flex-shrink: 0;
-	border-radius: 999px;
+	border-radius: var(--radius-full);
 	background: var(--fg-passive);
 }
 
@@ -4933,7 +4943,7 @@ body:has(#root .platform-linux) > .browser-popout-overlay {
 	flex: none;
 	margin-right: 3px;
 	border: 0;
-	border-radius: 5px;
+	border-radius: var(--radius-sm);
 	color: var(--fg-muted);
 	background: transparent;
 	transition:
@@ -5158,7 +5168,7 @@ body:has(#root .platform-linux) > .browser-popout-overlay {
 	margin: 0;
 	padding: 8px 10px;
 	border: 1px solid color-mix(in srgb, var(--red) 35%, transparent);
-	border-radius: 7px;
+	border-radius: var(--radius-md);
 	background: color-mix(in srgb, var(--red) 8%, var(--bg));
 	color: var(--red);
 	font-size: 12px;

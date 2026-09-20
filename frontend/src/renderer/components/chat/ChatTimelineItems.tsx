@@ -556,7 +556,7 @@ export function HumanMessage({
 					   apart in CSS because it paints an enclosure only around a sent one. */
 					data-queued={queued ? "" : undefined}
 					className={cn(
-						"cursor-chat-human-message w-fit max-w-[min(78%,560px)] rounded-[10px] px-3 py-2.5 text-sm leading-[1.55]",
+						"cursor-chat-human-message w-fit max-w-[min(78%,560px)] rounded-lg px-3 py-2.5 text-sm leading-[1.55]",
 						animateIn && "chat-human-message-enter",
 						queued
 							? "border border-dashed border-border-strong bg-transparent text-muted-foreground"
@@ -2165,7 +2165,7 @@ export function SteerMessage({
 	});
 	return (
 		<div className="flex flex-col items-end gap-1">
-			<div className="w-fit max-w-[min(78%,560px)] break-words whitespace-pre-wrap rounded-[10px] border border-accent-dim bg-raised px-3 py-2.5 text-sm leading-[1.55] text-foreground">
+			<div className="w-fit max-w-[min(78%,560px)] break-words whitespace-pre-wrap rounded-lg border border-accent-dim bg-raised px-3 py-2.5 text-sm leading-[1.55] text-foreground">
 				{body ? <p>{body}</p> : null}
 				<StagedAttachmentItems
 					paths={attachments}

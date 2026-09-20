@@ -72,7 +72,7 @@ export function ModelMenuChoices<T extends { id: string; label: string }>({
 							value={search}
 							onChange={(event) => setSearch(event.target.value)}
 							placeholder={t("settings.models.searchPlaceholder")}
-							className="menu-search-input h-control-form! rounded-[10px] pl-8!"
+							className="menu-search-input h-control-form! rounded-lg pl-8!"
 						/>
 					</div>
 				</div>

@@ -146,7 +146,13 @@
 	   TYPOGRAPHY
 	   ═══════════════════════════════════════════════════════════════ */
 
-	--font-family-base: "Geist Variable", "Geist", ui-sans-serif, system-ui, sans-serif;
+	/* macOS resolves `-apple-system` to SF Pro; on Windows/Linux that family does
+	 * not exist, so the stack falls through to the bundled Geist. Ordered rather
+	 * than branched per platform because the `platform-*` classes live on the
+	 * app-shell element, not :root — an override there would not reach the
+	 * `--font-sans` alias this token feeds. */
+	--font-family-base:
+		-apple-system, BlinkMacSystemFont, "SF Pro Text", "Geist Variable", "Geist", ui-sans-serif, system-ui, sans-serif;
 	--font-family-mono:
 		"Geist Mono Variable", "Geist Mono", "JetBrainsMono Nerd Font Mono", "JetBrainsMono Nerd Font",
 		"FiraCode Nerd Font Mono", "FiraCode Nerd Font", "MesloLGS NF", ui-monospace, SFMono-Regular, Menlo, Monaco,
@@ -246,6 +252,9 @@
 	--radius-panel: calc(var(--radius) * 1.4);
 	--radius-full: 999px; /* pills, avatars, status dots */
 	--radius-swatch: 2px; /* board lane squares: square-reading, not a dot */
+	/* Every other radius alias below must stay on this scale (DESIGN.md →
+	 * Radius and borders): controls → md, routine containers → lg, route
+	 * surfaces and large dialogs → panel, pills and dots → full. */
 
 	/* ═══════════════════════════════════════════════════════════════
 	   BREAKPOINTS — documented here; @media cannot use var()
@@ -297,7 +306,7 @@
 	--space-topbar-x: 10px;
 	--space-topbar-zone: 10px;
 	--space-topbar-group: 4px;
-	--radius-topbar-control: 7px;
+	--radius-topbar-control: var(--radius-md); /* topbar controls are buttons */
 	--size-row-md: 52px;
 	--size-browser-url: 29px;
 	--size-browser-min: 320px;
@@ -381,8 +390,8 @@
 	--color-text-command-item: var(--foreground);
 	--color-text-command-placeholder: var(--muted-foreground);
 	--color-text-command-muted: var(--muted-foreground);
-	--radius-command-palette: 12px;
-	--radius-command-item: 6px;
+	--radius-command-palette: var(--radius-panel); /* large transient dialog */
+	--radius-command-item: var(--radius-sm); /* tiny row control */
 	--shadow-command-palette: var(--elevation-xl);
 	--shadow-popover: var(--elevation-xl);
 	--size-command-palette: 720px;
@@ -431,7 +440,7 @@
 	--size-import-folder-dialog: 640px;
 	--size-composer-prompt-min: 112px;
 	--size-composer-start-button: 7.25rem;
-	--radius-chat-composer: 20px;
+	--radius-chat-composer: var(--radius-lg); /* max routine component radius */
 	/* Task composer — inline toolbar values. Quieter than a filled control at rest
 	 * so the task field stays the only thing with visual weight. */
 	--color-bg-composer-chip: color-mix(in oklab, var(--input) 55%, transparent);
@@ -458,8 +467,8 @@
 	--tracking-settings-title: -0.015em;
 	--tracking-settings-section: 0.06em;
 	--tracking-settings-mono: 0.08em;
-	--radius-settings-panel: 14px;
-	--radius-settings-row: 16px;
+	--radius-settings-panel: var(--radius-panel);
+	--radius-settings-row: var(--radius-lg); /* routine container */
 	--size-settings-row: 52px;
 	--size-settings-section-gap: 32px;
 	--size-settings-section-inner-gap: 12px;
@@ -513,8 +522,8 @@
 	--leading-settings-mobile-hint: 14px;
 	--leading-settings-mobile-warning: 15px;
 	--size-settings-action-height: 38px;
-	--radius-settings-action: 16px;
-	--radius-settings-dialog-lg: 24px;
+	--radius-settings-action: var(--radius-md); /* action button */
+	--radius-settings-dialog-lg: var(--radius-panel); /* large dialog */
 	--shadow-settings-dialog: var(--elevation-xl);
 	--shadow-settings-qr: var(--elevation-md);
 
