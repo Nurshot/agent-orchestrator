@@ -146,3 +146,47 @@ func TestStopCancelsQueueHeldByFailedTurn(t *testing.T) {
 		t.Fatalf("interrupt on an idle conversation = %v, want ErrNoActiveTurn", err)
 	}
 }
+
+type failingHeldQueueCancellationStore struct {
+	chatsvc.Store
+	err error
+}
+
+func (s *failingHeldQueueCancellationStore) CancelQueuedTurns(
+	context.Context,
+	string,
+	time.Time,
+	time.Time,
+) error {
+	return s.err
+}
+
+func TestStopReportsHeldQueueCancellationFailure(t *testing.T) {
+	cancelErr := errors.New("injected held queue cancellation failure")
+	h := newHarnessWithConversationAndStore(t, nil, func(st *store.Store) chatsvc.Store {
+		return &failingHeldQueueCancellationStore{Store: st, err: cancelErr}
+	})
+	ctx := context.Background()
+
+	if _, err := h.svc.Send(ctx, testSession, ports.ChatUserMessage{
+		Text: "root", ClientMessageID: "c1", Origin: domain.MessageOriginHuman,
+	}); err != nil {
+		t.Fatalf("send root: %v", err)
+	}
+	if _, err := h.svc.Send(ctx, testSession, ports.ChatUserMessage{
+		Text: "held", ClientMessageID: "c2", Origin: domain.MessageOriginHuman,
+	}); err != nil {
+		t.Fatalf("queue held: %v", err)
+	}
+	h.conv.emit(ports.ChatEvent{
+		Kind: ports.ChatEventTurnCompleted, ProviderTurnID: "provider-turn-1",
+		TurnState: domain.TurnStateFailed,
+	})
+	h.awaitSnapshot(t, func(s store.ConversationSnapshot) bool {
+		return turnStateByText(t, s)["root"] == domain.TurnStateFailed
+	})
+
+	if err := h.svc.Interrupt(ctx, testSession); !errors.Is(err, cancelErr) {
+		t.Fatalf("interrupt with a cancellation failure = %v, want %v", err, cancelErr)
+	}
+}

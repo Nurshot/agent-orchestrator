@@ -2102,12 +2102,15 @@ func (c *Controller) Interrupt(ctx context.Context) error {
 				}
 				return fmt.Errorf("check queued turns: %w", queuedErr)
 			}
-			c.mu.Lock()
-			c.cancelQueuedAt = cutoff
-			c.mu.Unlock()
-			// The cutoff makes this cancel the pre-Stop queue; anything sent after
-			// Stop still dispatches, exactly as it does with a turn in flight.
-			c.drainLocked(ctx, false)
+			// sendMu keeps post-Stop work out of the queue until this cancellation
+			// commits, so it can be reported synchronously instead of going through
+			// drainLocked's best-effort completion path.
+			if cancelErr := c.store.CancelQueuedTurns(
+				ctx, c.conversation.ID, cutoff, c.now(),
+			); cancelErr != nil {
+				c.sendMu.Unlock()
+				return fmt.Errorf("cancel queued turns: %w", cancelErr)
+			}
 			c.sendMu.Unlock()
 			return nil
 		}
