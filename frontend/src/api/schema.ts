@@ -1818,6 +1818,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sessions/{sessionId}/pr/{prNumber}/file/revision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one text-capable side of a pull request comparison */
+        get: operations["getSessionPRFileRevision"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sessions/{sessionId}/pr/{prNumber}/files": {
         parameters: {
             query?: never;
@@ -10941,6 +10958,71 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkspaceFileResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    getSessionPRFileRevision: {
+        parameters: {
+            query: {
+                /** @description Session-worktree-relative file path. */
+                path: string;
+                /** @description Comparison scope. Defaults to combined. */
+                scope?: "combined" | "committed" | "staged" | "unstaged" | "untracked";
+                /** @description Comparison side. Defaults to after. */
+                side?: "before" | "after";
+                /** @description Opaque workspace snapshot token used for consistency checks. */
+                workspaceVersion?: string;
+                /** @description Opaque revision token used for optimistic consistency checks. */
+                expectedRevision?: string;
+                /** @description Exact commit SHA for a committed-scope comparison. */
+                commitSha?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Session identifier, e.g. project-1. */
+                sessionId: string;
+                /** @description Associated pull request number. */
+                prNumber: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceFileRevisionResponse"];
                 };
             };
             /** @description Bad Request */

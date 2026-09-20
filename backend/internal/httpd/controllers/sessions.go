@@ -113,6 +113,7 @@ type SessionService interface {
 	UpdateWorkspaceFile(ctx context.Context, id domain.SessionID, input sessionsvc.UpdateWorkspaceFileInput) (sessionsvc.WorkspaceFileDetail, error)
 	ListPRFiles(ctx context.Context, id domain.SessionID, number int) (sessionsvc.PRFiles, error)
 	GetPRFile(ctx context.Context, id domain.SessionID, number int, path string) (sessionsvc.WorkspaceFileDetail, error)
+	GetPRFileRevision(ctx context.Context, id domain.SessionID, number int, path string, side sessionsvc.WorkspaceFileBlobSide) (sessionsvc.WorkspaceFileRevision, error)
 	GetWorkspaceFileBlob(ctx context.Context, id domain.SessionID, path string, side sessionsvc.WorkspaceFileBlobSide) (sessionsvc.WorkspaceFileBlob, error)
 	GetWorkspaceDiffs(ctx context.Context, id domain.SessionID, input sessionsvc.WorkspaceDiffInput) (sessionsvc.WorkspaceDiffs, error)
 	GetWorkspaceFileRevision(ctx context.Context, id domain.SessionID, path string, scope sessionsvc.WorkspaceDiffScope, side sessionsvc.WorkspaceFileBlobSide, workspaceVersion, expectedRevision string) (sessionsvc.WorkspaceFileRevision, error)
@@ -188,6 +189,7 @@ func (c *SessionsController) Register(r chi.Router) {
 	r.Get("/sessions/{sessionId}/workspace/tree", c.listWorkspaceTree)
 	r.Get("/sessions/{sessionId}/pr/{prNumber}/files", c.listPRFiles)
 	r.Get("/sessions/{sessionId}/pr/{prNumber}/file", c.getPRFile)
+	r.Get("/sessions/{sessionId}/pr/{prNumber}/file/revision", c.getPRFileRevision)
 	r.Get("/sessions/{sessionId}/pr", c.listPRs)
 	r.Post("/sessions/{sessionId}/pr/claim", c.claimPR)
 	r.Patch("/sessions/{sessionId}", c.rename)
@@ -658,6 +660,21 @@ func (c *SessionsController) getPRFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	envelope.WriteJSON(w, http.StatusOK, workspaceFileResponse(file))
+}
+
+func (c *SessionsController) getPRFileRevision(w http.ResponseWriter, r *http.Request) {
+	number, err := strconv.Atoi(chi.URLParam(r, "prNumber"))
+	if err != nil || number <= 0 { envelope.WriteAPIError(w, r, http.StatusBadRequest, "bad_request", "INVALID_PR_NUMBER", "prNumber must be a positive integer", nil); return }
+	query := r.URL.Query()
+	path := strings.TrimSpace(query.Get("path"))
+	if path == "" { envelope.WriteAPIError(w, r, http.StatusBadRequest, "bad_request", "WORKSPACE_PATH_REQUIRED", "path is required", nil); return }
+	side := sessionsvc.WorkspaceFileBlobSide(strings.TrimSpace(query.Get("side")))
+	if side == "" { side = sessionsvc.WorkspaceBlobAfter }
+	revision, err := c.Svc.GetPRFileRevision(r.Context(), sessionID(r), number, path, side)
+	if err != nil { envelope.WriteError(w, r, err); return }
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	envelope.WriteJSON(w, http.StatusOK, workspaceFileRevisionResponse(revision))
 }
 
 func (c *SessionsController) getWorkspaceDiffs(w http.ResponseWriter, r *http.Request) {

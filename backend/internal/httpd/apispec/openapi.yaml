@@ -4996,6 +4996,99 @@ paths:
       summary: Read one file from an associated pull request base-to-head diff
       tags:
       - sessions
+  /api/v1/sessions/{sessionId}/pr/{prNumber}/file/revision:
+    get:
+      operationId: getSessionPRFileRevision
+      parameters:
+      - description: Session identifier, e.g. project-1.
+        in: path
+        name: sessionId
+        required: true
+        schema:
+          description: Session identifier, e.g. project-1.
+          type: string
+      - description: Associated pull request number.
+        in: path
+        name: prNumber
+        required: true
+        schema:
+          description: Associated pull request number.
+          minimum: 1
+          type: integer
+      - description: Session-worktree-relative file path.
+        in: query
+        name: path
+        required: true
+        schema:
+          description: Session-worktree-relative file path.
+          type: string
+      - description: Comparison scope. Defaults to combined.
+        in: query
+        name: scope
+        schema:
+          description: Comparison scope. Defaults to combined.
+          enum:
+          - combined
+          - committed
+          - staged
+          - unstaged
+          - untracked
+          type: string
+      - description: Comparison side. Defaults to after.
+        in: query
+        name: side
+        schema:
+          description: Comparison side. Defaults to after.
+          enum:
+          - before
+          - after
+          type: string
+      - description: Opaque workspace snapshot token used for consistency checks.
+        in: query
+        name: workspaceVersion
+        schema:
+          description: Opaque workspace snapshot token used for consistency checks.
+          type: string
+      - description: Opaque revision token used for optimistic consistency checks.
+        in: query
+        name: expectedRevision
+        schema:
+          description: Opaque revision token used for optimistic consistency checks.
+          type: string
+      - description: Exact commit SHA for a committed-scope comparison.
+        in: query
+        name: commitSha
+        schema:
+          description: Exact commit SHA for a committed-scope comparison.
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceFileRevisionResponse'
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Bad Request
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Not Found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Internal Server Error
+      summary: Read one text-capable side of a pull request comparison
+      tags:
+      - sessions
   /api/v1/sessions/{sessionId}/pr/{prNumber}/files:
     get:
       operationId: listSessionPRFiles

@@ -302,6 +302,7 @@ export function FileContentPane({
 						sessionId={sessionId}
 						split={split && canSplitCompare(detail.status)}
 						commitSha={commitSha}
+						source={source}
 					/>
 				) : effectiveMode === "rendered" && renderedAvailable ? (
 					<MarkdownFileView content={detail.content} filePath={path} sessionId={sessionId} truncated={detail.contentTruncated} version={query.dataUpdatedAt} />

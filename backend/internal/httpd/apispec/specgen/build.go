@@ -2129,6 +2129,17 @@ func sessionOperations() []operation {
 			},
 		},
 		{
+			method: http.MethodGet, path: "/api/v1/sessions/{sessionId}/pr/{prNumber}/file/revision", id: "getSessionPRFileRevision", tag: "sessions",
+			summary:    "Read one text-capable side of a pull request comparison",
+			pathParams: []any{controllers.SessionIDParam{}, controllers.PRNumberParam{}, controllers.WorkspaceFileRevisionQuery{}},
+			resps: []respUnit{
+				{http.StatusOK, controllers.WorkspaceFileRevisionResponse{}},
+				{http.StatusBadRequest, envelope.APIError{}},
+				{http.StatusNotFound, envelope.APIError{}},
+				{http.StatusInternalServerError, envelope.APIError{}},
+			},
+		},
+		{
 			method: http.MethodGet, path: "/api/v1/sessions/{sessionId}/workspace/search", id: "searchSessionWorkspaceFiles", tag: "sessions",
 			summary:    "Search visible workspace file paths",
 			pathParams: []any{controllers.SessionIDParam{}, controllers.WorkspaceSearchQuery{}},

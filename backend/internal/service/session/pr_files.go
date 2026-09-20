@@ -126,6 +126,58 @@ func (s *Service) GetPRFile(ctx context.Context, id domain.SessionID, number int
 	return detail, nil
 }
 
+// GetPRFileRevision reads one immutable side of the selected PR comparison.
+// It intentionally does not delegate to workspace revision readers: a PR view
+// must never fall back to the mutable session worktree while expanding a hunk.
+func (s *Service) GetPRFileRevision(ctx context.Context, id domain.SessionID, number int, rawPath string, side WorkspaceFileBlobSide) (WorkspaceFileRevision, error) {
+	rec, pr, err := s.prFileSource(ctx, id, number)
+	if err != nil {
+		return WorkspaceFileRevision{}, err
+	}
+	if side != WorkspaceBlobBefore && side != WorkspaceBlobAfter {
+		return WorkspaceFileRevision{}, apierr.Invalid("INVALID_WORKSPACE_REVISION_SIDE", "side must be before or after", nil)
+	}
+	rel, err := cleanWorkspaceRelativePath(rawPath)
+	if err != nil {
+		return WorkspaceFileRevision{}, err
+	}
+	statuses, previous, err := workspaceDiffNameStatus(ctx, rec.Metadata.WorkspacePath, pr.BaseSHA+"..."+pr.HeadSHA)
+	if err != nil {
+		return WorkspaceFileRevision{}, unavailablePRSource()
+	}
+	status, ok := statuses[rel]
+	if !ok {
+		return WorkspaceFileRevision{}, apierr.NotFound("PR_FILE_NOT_FOUND", "File is not part of the selected pull request")
+	}
+	path, revision := rel, pr.HeadSHA
+	if side == WorkspaceBlobBefore {
+		if status == WorkspaceFileAdded {
+			return WorkspaceFileRevision{SessionID: id, Path: rel, Side: side, Encoding: "utf-8"}, nil
+		}
+		if previous[rel] != "" {
+			path = previous[rel]
+		}
+		revision = pr.BaseSHA
+	}
+	size := gitRevisionFileSize(ctx, rec.Metadata.WorkspacePath, revision, path, WorkspaceFileModified)
+	result := WorkspaceFileRevision{SessionID: id, Path: rel, Side: side, Encoding: "utf-8", Exists: true, Size: size}
+	if size > maxWorkspaceRevisionBytes {
+		result.Truncated = true
+		return result, nil
+	}
+	content, err := gitWorkspaceOutput(ctx, rec.Metadata.WorkspacePath, "show", revision+":"+path)
+	if err != nil {
+		return WorkspaceFileRevision{}, unavailablePRSource()
+	}
+	result.Revision = hashWorkspaceReviewValue(content)
+	result.Binary = !utf8.ValidString(content) || strings.IndexByte(content, 0) >= 0
+	if !result.Binary {
+		result.MediaType = "text/plain"
+		result.Content = content
+	}
+	return result, nil
+}
+
 func (s *Service) prFileSource(ctx context.Context, id domain.SessionID, number int) (domain.SessionRecord, domain.PullRequest, error) {
 	rec, err := s.sessionWorkspaceRecord(ctx, id)
 	if err != nil {

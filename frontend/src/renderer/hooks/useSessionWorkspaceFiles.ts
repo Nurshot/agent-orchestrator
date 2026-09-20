@@ -182,6 +182,14 @@ export async function fetchWorkspaceFileRevision({
 	return data;
 }
 
+export async function fetchPRFileRevision(sessionId: string, number: number, path: string, side: "before" | "after"): Promise<WorkspaceFileRevision> {
+	const { data, error } = await apiClient.GET("/api/v1/sessions/{sessionId}/pr/{prNumber}/file/revision", {
+		params: { path: { sessionId, prNumber: number }, query: { path, side } },
+	});
+	if (error || !data) throw new Error(apiErrorMessage(error, "Unable to load pull request file revision"));
+	return data as WorkspaceFileRevision;
+}
+
 export function sessionWorkspaceFileRevisionQueryOptions({
 	path,
 	scope,

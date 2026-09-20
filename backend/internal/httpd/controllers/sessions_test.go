@@ -687,6 +687,10 @@ func (f *fakeSessionService) GetWorkspaceFileRevision(_ context.Context, id doma
 	return sessionsvc.WorkspaceFileRevision{SessionID: id, Path: path, Side: side, Revision: expectedRevision, Exists: true}, nil
 }
 
+func (f *fakeSessionService) GetPRFileRevision(ctx context.Context, id domain.SessionID, number int, path string, side sessionsvc.WorkspaceFileBlobSide) (sessionsvc.WorkspaceFileRevision, error) {
+	return f.GetWorkspaceFileRevision(ctx, id, path, sessionsvc.WorkspaceDiffCommitted, side, "", "")
+}
+
 func (f *fakeSessionService) GetWorkspaceFileRevisionAtCommit(ctx context.Context, id domain.SessionID, path string, side sessionsvc.WorkspaceFileBlobSide, workspaceVersion, expectedRevision, commitSHA string) (sessionsvc.WorkspaceFileRevision, error) {
 	f.workspaceRevisionCommitSHA = commitSHA
 	return f.GetWorkspaceFileRevision(ctx, id, path, sessionsvc.WorkspaceDiffCommitted, side, workspaceVersion, expectedRevision)
