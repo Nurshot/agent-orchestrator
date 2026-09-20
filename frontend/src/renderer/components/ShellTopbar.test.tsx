@@ -446,6 +446,24 @@ describe("ShellTopbar orchestrator actions", () => {
 		expect(spawnMock).not.toHaveBeenCalled();
 	});
 
+	it("opens an exited orchestrator without resuming while its agent switch is active", async () => {
+		const switchingOrchestrator = {
+			...orchestrator,
+			activeAgentSwitch: activeAgentSwitch(),
+			activity: { state: "exited", lastActivityAt: "2026-06-10T00:00:00Z" },
+			status: "exited",
+		} satisfies WorkspaceSession;
+		renderTopbarSessions([worker, switchingOrchestrator], worker.id);
+
+		await userEvent.click(screen.getByRole("button", { name: "Open orchestrator" }));
+
+		expect(postMock).not.toHaveBeenCalled();
+		expect(navigateMock).toHaveBeenCalledWith({
+			to: "/projects/$projectId/sessions/$sessionId",
+			params: { projectId: "proj-1", sessionId: "orch-1" },
+		});
+	});
+
 	it("hides project-only orchestrator actions for ad hoc sessions", () => {
 		renderTopbarSessions(
 			[

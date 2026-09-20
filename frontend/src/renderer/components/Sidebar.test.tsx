@@ -589,6 +589,34 @@ describe("Sidebar", () => {
 		expect(spawnMock).not.toHaveBeenCalled();
 	});
 
+	it("opens an exited orchestrator without resuming while its agent switch is active", async () => {
+		const user = userEvent.setup();
+		const switchingOrchestrator: WorkspaceSession = {
+			...session,
+			id: "proj-1-orch",
+			kind: "orchestrator",
+			status: "exited",
+			activity: { state: "exited", lastActivityAt: "2026-06-30T00:00:00Z" },
+			isTerminated: false,
+			activeAgentSwitch: {
+				agentHandoffStatus: "received",
+				fromHarness: "claude-code",
+				id: "switch-1",
+				state: "starting_target",
+				targetHarness: "codex",
+			},
+		};
+		renderSidebar({ workspaces: [{ ...workspace, sessions: [switchingOrchestrator] }] });
+
+		await user.click(screen.getByRole("button", { name: "Open Project One orchestrator" }));
+
+		expect(resumeOrchestratorMock).not.toHaveBeenCalled();
+		expect(navigateMock).toHaveBeenCalledWith({
+			to: "/projects/$projectId/sessions/$sessionId",
+			params: { projectId: "proj-1", sessionId: "proj-1-orch" },
+		});
+	});
+
 	it("does not spawn from the sidebar while the orchestrator is provisioning", async () => {
 		const user = userEvent.setup();
 		useUiStore.getState().setProjectProvisioning("proj-1", true);

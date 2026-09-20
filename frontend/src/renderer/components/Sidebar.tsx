@@ -1129,7 +1129,7 @@ const ProjectItem = memo(function ProjectItem({
 		if (!expanded) toggleDisclosure();
 		if (orchestrator) {
 			// Mirrors useProjectOrchestratorAction; both launchers must stay in step.
-			if (sessionAgentExited(orchestrator) && workspace.kind !== "cloud") {
+			if (!orchestrator.activeAgentSwitch && sessionAgentExited(orchestrator) && workspace.kind !== "cloud") {
 				setIsSpawning(true);
 				try {
 					await resumeOrchestrator(orchestrator.id);

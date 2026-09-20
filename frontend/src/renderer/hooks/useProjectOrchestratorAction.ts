@@ -64,7 +64,7 @@ export function useProjectOrchestratorAction({
 		error ? (error instanceof Error ? error.message : t("shell.couldNotSpawn")) : startupError ?? "",
 	);
 	const resumableOrchestrator =
-		orchestrator && sessionAgentExited(orchestrator) && project?.kind !== CLOUD_PROJECT_KIND
+		orchestrator && !orchestrator.activeAgentSwitch && sessionAgentExited(orchestrator) && project?.kind !== CLOUD_PROJECT_KIND
 			? orchestrator
 			: undefined;
 	const mutation = useMutation({
