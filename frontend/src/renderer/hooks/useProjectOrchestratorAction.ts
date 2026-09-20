@@ -78,10 +78,7 @@ export function useProjectOrchestratorAction({
 					? await spawnCloudOrchestrator(queryClient, projectId)
 					: await spawnOrchestrator(projectId, source, false, mode);
 			await queryClient.invalidateQueries({
-				queryKey:
-					project?.kind === CLOUD_PROJECT_KIND && !resumableOrchestrator
-						? cloudSessionsQueryKey
-						: workspaceQueryKey,
+				queryKey: project?.kind === CLOUD_PROJECT_KIND ? cloudSessionsQueryKey : workspaceQueryKey,
 			});
 			setStartupError(projectId, null);
 			// A completed request belongs to its original route, even if this

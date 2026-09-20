@@ -193,6 +193,15 @@ const session: WorkspaceSession = {
 	prs: [],
 };
 
+const exitedOrchestrator: WorkspaceSession = {
+	...session,
+	id: "proj-1-orch",
+	kind: "orchestrator",
+	status: "exited",
+	activity: { state: "exited", lastActivityAt: "2026-06-30T00:00:00Z" },
+	isTerminated: false,
+};
+
 function activeAgentSwitch(
 	overrides: Partial<NonNullable<WorkspaceSession["activeAgentSwitch"]>> = {},
 ): NonNullable<WorkspaceSession["activeAgentSwitch"]> {
@@ -573,14 +582,6 @@ describe("Sidebar", () => {
 	// agent exited must resume it, not navigate to the dead terminal.
 	it("resumes an exited orchestrator instead of opening its dead terminal", async () => {
 		const user = userEvent.setup();
-		const exitedOrchestrator: WorkspaceSession = {
-			...session,
-			id: "proj-1-orch",
-			kind: "orchestrator",
-			status: "exited",
-			activity: { state: "exited", lastActivityAt: "2026-06-30T00:00:00Z" },
-			isTerminated: false,
-		};
 		renderSidebar({ workspaces: [{ ...workspace, sessions: [exitedOrchestrator] }] });
 
 		await user.click(screen.getByRole("button", { name: "Open Project One orchestrator" }));
@@ -595,14 +596,6 @@ describe("Sidebar", () => {
 		useUiStore.getState().clearGlobalToast();
 		vi.spyOn(console, "error").mockImplementation(() => {});
 		resumeOrchestratorMock.mockRejectedValueOnce(error);
-		const exitedOrchestrator: WorkspaceSession = {
-			...session,
-			id: "proj-1-orch",
-			kind: "orchestrator",
-			status: "exited",
-			activity: { state: "exited", lastActivityAt: "2026-06-30T00:00:00Z" },
-			isTerminated: false,
-		};
 		renderSidebar({ workspaces: [{ ...workspace, sessions: [exitedOrchestrator] }] });
 
 		await user.click(screen.getByRole("button", { name: "Open Project One orchestrator" }));
@@ -619,19 +612,8 @@ describe("Sidebar", () => {
 	it("opens an exited orchestrator without resuming while its agent switch is active", async () => {
 		const user = userEvent.setup();
 		const switchingOrchestrator: WorkspaceSession = {
-			...session,
-			id: "proj-1-orch",
-			kind: "orchestrator",
-			status: "exited",
-			activity: { state: "exited", lastActivityAt: "2026-06-30T00:00:00Z" },
-			isTerminated: false,
-			activeAgentSwitch: {
-				agentHandoffStatus: "received",
-				fromHarness: "claude-code",
-				id: "switch-1",
-				state: "starting_target",
-				targetHarness: "codex",
-			},
+			...exitedOrchestrator,
+			activeAgentSwitch: activeAgentSwitch(),
 		};
 		renderSidebar({ workspaces: [{ ...workspace, sessions: [switchingOrchestrator] }] });
 
