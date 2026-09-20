@@ -9787,6 +9787,23 @@ components:
       required:
       - harness
       type: object
+    DomainReviewerSurface:
+      properties:
+        controllerError:
+          type: string
+        handleId:
+          type: string
+        harness:
+          type: string
+        mode:
+          type: string
+        reviewId:
+          type: string
+      required:
+      - mode
+      - reviewId
+      - harness
+      type: object
     EditConversationMessageRequest:
       properties:
         clientMessageId:
@@ -10370,6 +10387,8 @@ components:
           type: string
         reviewerHarness:
           type: string
+        reviewerSurface:
+          $ref: '#/components/schemas/DomainReviewerSurface'
         reviews:
           items:
             $ref: '#/components/schemas/PRReviewState'
@@ -12590,6 +12609,8 @@ components:
           type: boolean
         reviewerHandleId:
           type: string
+        reviewerSurface:
+          $ref: '#/components/schemas/DomainReviewerSurface'
         reviews:
           items:
             $ref: '#/components/schemas/PRReviewState'

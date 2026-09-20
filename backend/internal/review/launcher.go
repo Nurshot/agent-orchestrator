@@ -264,6 +264,7 @@ func (l *agentLauncher) reviewChatSupported(profile ports.ReviewerChatProfile) b
 	return l.chat != nil && l.chat.SupportsReviewChat(profile.ReviewChatHarness())
 }
 
+// InterfaceMode returns the reviewer's native interaction surface.
 func (l *agentLauncher) InterfaceMode(harness domain.ReviewerHarness) domain.ReviewerInterfaceMode {
 	reviewer, ok := l.reviewers.Reviewer(harness)
 	if !ok {

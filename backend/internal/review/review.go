@@ -159,6 +159,7 @@ type TriggerResult struct {
 	Reviews          []PRReviewState
 	Runs             []domain.ReviewRun
 	CreatedRuns      []domain.ReviewRun
+	ReviewerSurface  domain.ReviewerSurface
 	// SkipReason is set only for a normal automatic-trigger policy race, such
 	// as the worker becoming active after the coordinator's initial read.
 	SkipReason string
@@ -172,6 +173,7 @@ type SessionReviews struct {
 	ReviewerActivityState domain.ActivityState
 	Runs                  []domain.ReviewRun
 	Reviews               []PRReviewState
+	ReviewerSurface       domain.ReviewerSurface
 }
 
 // CancelResult is the review state after a reviewer pane cancellation.
@@ -314,10 +316,11 @@ func (e *Engine) TriggerWithSource(ctx stdctx.Context, workerID domain.SessionID
 		if hadRunningReviewer {
 			return TriggerResult{
 				Run:              firstReusableRun(reviews),
-				ReviewerHandleID: reviewRow.ReviewerHandleID,
+				ReviewerHandleID: legacyReviewerHandle(reviewRow),
 				Created:          false,
 				Reviews:          reviews,
 				Runs:             runs,
+				ReviewerSurface:  reviewerSurface(reviewRow),
 			}, nil
 		}
 	}
@@ -392,7 +395,7 @@ func (e *Engine) TriggerWithSource(ctx stdctx.Context, workerID domain.SessionID
 		reviews = replaceReviewLatestRun(reviews, reviewState.PRURL, reviewState.TargetSHA, run)
 	}
 	if len(created) == 0 && len(restarted) == 0 {
-		return TriggerResult{Run: firstReusableRun(reviews), ReviewerHandleID: reviewRow.ReviewerHandleID, Created: false, Reviews: reviews, Runs: runs}, nil
+		return TriggerResult{Run: firstReusableRun(reviews), ReviewerHandleID: legacyReviewerHandle(reviewRow), Created: false, Reviews: reviews, Runs: runs, ReviewerSurface: reviewerSurface(reviewRow)}, nil
 	}
 
 	failRuns := func(start int, err error) error {
@@ -498,7 +501,7 @@ func (e *Engine) TriggerWithSource(ctx stdctx.Context, workerID domain.SessionID
 	triggerRuns = append(triggerRuns, runs...)
 	resultRun := launchRun
 	createdFlag := len(created) > 0 || len(restarted) > 0
-	return TriggerResult{Run: resultRun, ReviewerHandleID: handleID, Created: createdFlag, Reviews: reviews, Runs: triggerRuns, CreatedRuns: created}, nil
+	return TriggerResult{Run: resultRun, ReviewerHandleID: legacyReviewerHandle(reviewRow), Created: createdFlag, Reviews: reviews, Runs: triggerRuns, CreatedRuns: created, ReviewerSurface: reviewerSurface(reviewRow)}, nil
 }
 
 func autoReviewSessionReason(worker domain.SessionRecord, now time.Time) string {
@@ -1048,37 +1051,52 @@ func (e *Engine) listLocked(ctx stdctx.Context, workerID domain.SessionID, selec
 	if err != nil {
 		return SessionReviews{}, err
 	}
-	var handle string
+	var reviewRow domain.Review
 	reviewerHarness := selectedHarness
-	var activityState domain.ActivityState
 	if review, ok, err := e.store.GetReviewBySessionAndHarness(ctx, workerID, selectedHarness); err != nil {
 		return SessionReviews{}, err
-	} else if ok && review.ReviewerHandleID != "" {
-		handle = review.ReviewerHandleID
+	} else if ok {
+		reviewRow = review
 		reviewerHarness = review.Harness
-		activityState = review.ReviewerActivityState
 	} else if review, ok, err := e.store.GetReviewBySession(ctx, workerID); err != nil {
 		return SessionReviews{}, err
-	} else if ok && review.ReviewerHandleID != "" {
-		handle = review.ReviewerHandleID
-		reviewerHarness = review.Harness
-		activityState = review.ReviewerActivityState
-	} else if review, ok, err := e.store.GetReviewBySessionAndHarness(ctx, workerID, selectedHarness); err != nil {
-		return SessionReviews{}, err
 	} else if ok {
-		activityState = review.ReviewerActivityState
+		reviewRow = review
+		reviewerHarness = review.Harness
 	}
 	prs, err := e.prs.ListPRsBySession(ctx, workerID)
 	if err != nil {
 		return SessionReviews{}, err
 	}
 	return SessionReviews{
-		ReviewerHandleID:      handle,
+		ReviewerHandleID:      legacyReviewerHandle(reviewRow),
 		ReviewerHarness:       reviewerHarness,
-		ReviewerActivityState: activityState,
+		ReviewerActivityState: reviewRow.ReviewerActivityState,
 		Runs:                  runs,
 		Reviews:               Plan(prs, runs),
+		ReviewerSurface:       reviewerSurface(reviewRow),
 	}, nil
+}
+
+func reviewerSurface(review domain.Review) domain.ReviewerSurface {
+	if review.ID == "" {
+		return domain.ReviewerSurface{}
+	}
+	handleID := review.ReviewerHandleID
+	if review.InterfaceMode == domain.ReviewerInterfaceChat {
+		handleID = ""
+	}
+	return domain.ReviewerSurface{
+		Mode: review.InterfaceMode, ReviewID: review.ID, Harness: review.Harness,
+		HandleID: handleID, ControllerError: review.ControllerError,
+	}
+}
+
+func legacyReviewerHandle(review domain.Review) string {
+	if review.InterfaceMode == domain.ReviewerInterfaceChat {
+		return ""
+	}
+	return review.ReviewerHandleID
 }
 
 // Cancel interrupts the live reviewer pane for a worker and marks running
@@ -1342,6 +1360,9 @@ func (e *Engine) upsertReview(ctx stdctx.Context, worker domain.SessionRecord, h
 			review.ReviewerActivityState = existing.ReviewerActivityState
 		}
 		review.InterfaceMode = existing.InterfaceMode
+		review.ProviderConversationID = existing.ProviderConversationID
+		review.ControllerGeneration = existing.ControllerGeneration
+		review.ControllerError = existing.ControllerError
 	}
 	if err := e.store.UpsertReview(ctx, review); err != nil {
 		return domain.Review{}, err
