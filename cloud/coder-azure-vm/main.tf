@@ -1,12 +1,11 @@
-# AO Coder template: one dedicated Azure VM per workspace (mirrors the eleven_x
-# AWS EC2-per-workspace dev-kit model). Each workspace is its own VM that runs
-# the release-matched AO worker image + coder agent, so it has full VM isolation
-# (dedicated CPU/RAM/disk) and ~2 min boot, unlike the shared-VM Docker template
-# in ../coder/main.tf. Stop deallocates the VM; start brings it back.
-#
-# Auth: the Coder server passes Azure creds to the azurerm provider via ARM_*
-# env (a scoped service principal). Workspace VMs pull the worker image from ACR
-# using the acr_* variables.
+# AO Coder template: one dedicated Azure VM per workspace, running the AO worker
+# + harness NATIVELY on the VM (no Docker, no container) - mirroring eleven_x's
+# AWS EC2-per-workspace dev-kit with a baked AMI. The VM boots from a baked
+# managed image (ao-coder-workspace-image: Ubuntu + node + claude + ao-worker/ao
+# + a coder user with NOPASSWD sudo), and cloud-init starts the coder agent as a
+# native systemd service. The CP then bootstraps the AO worker natively over the
+# agent, exactly like the eleven_x setup. Stop deallocates the VM; start brings
+# it back (the systemd agent restarts on boot).
 
 terraform {
   required_providers {
@@ -35,23 +34,12 @@ variable "vm_size" {
   type    = string
   default = "Standard_D2s_v5" # ~2 vCPU / 8 GB, close to eleven_x t3.medium
 }
-variable "workspace_image" {
-  type    = string
-  default = "aocoderazure.azurecr.io/ao-coder-workspace:latest"
-}
-variable "acr_server" {
-  type = string
-}
-variable "acr_username" {
-  type = string
-}
-variable "acr_password" {
-  type      = string
-  sensitive = true
+variable "image_id" {
+  type = string # the baked managed image (native worker + harness)
 }
 variable "admin_username" {
   type    = string
-  default = "coder"
+  default = "azureadmin"
 }
 
 data "coder_provisioner" "me" {}
@@ -79,7 +67,7 @@ resource "coder_agent" "main" {
   }
 }
 
-# A throwaway key so azurerm is satisfied; the VM has no inbound SSH (the agent
+# Throwaway key so azurerm is satisfied; the VM has no inbound SSH (the agent
 # dials out to Coder), so this key never reaches it.
 resource "tls_private_key" "vm" {
   algorithm = "RSA"
@@ -89,10 +77,26 @@ resource "tls_private_key" "vm" {
 locals {
   name = lower("ao-${substr(data.coder_workspace.me.id, 0, 18)}")
 
-  # cloud-config: on first boot install Docker, pull the workspace image from
-  # ACR, and run it with the coder agent init as the container command (the AO
-  # worker is baked into the image; the CP bootstraps it over the agent). The
-  # agent init script is delivered base64 via write_files to avoid any quoting.
+  # Run the coder agent as the (baked) coder user via a systemd service so it
+  # survives stop/start reboots. The AO worker is baked into the image and gets
+  # bootstrapped natively by the control plane over the agent.
+  agent_unit = <<-UNIT
+    [Unit]
+    Description=Coder Agent
+    After=network-online.target
+    Wants=network-online.target
+    [Service]
+    User=coder
+    Environment=CODER_AGENT_TOKEN=${coder_agent.main.token}
+    Environment=HOME=/home/coder
+    WorkingDirectory=/home/coder
+    ExecStart=/bin/bash /opt/coder-init.sh
+    Restart=always
+    RestartSec=5
+    [Install]
+    WantedBy=multi-user.target
+  UNIT
+
   custom_data = base64encode(join("\n", [
     "#cloud-config",
     "write_files:",
@@ -100,13 +104,13 @@ locals {
     "    encoding: b64",
     "    permissions: '0755'",
     "    content: ${base64encode(coder_agent.main.init_script)}",
+    "  - path: /etc/systemd/system/coder-agent.service",
+    "    encoding: b64",
+    "    permissions: '0644'",
+    "    content: ${base64encode(local.agent_unit)}",
     "runcmd:",
-    "  - [ bash, -c, \"command -v docker >/dev/null 2>&1 || (curl -fsSL https://get.docker.com | sh)\" ]",
-    "  - [ systemctl, enable, --now, docker ]",
-    "  - [ bash, -c, \"echo '${var.acr_password}' | docker login ${var.acr_server} --username '${var.acr_username}' --password-stdin\" ]",
-    "  - [ bash, -c, \"docker pull ${var.workspace_image}\" ]",
-    "  - [ bash, -c, \"docker run -d --restart unless-stopped --name workspace -e CODER_AGENT_TOKEN='${coder_agent.main.token}' -v /opt/coder-init.sh:/opt/coder-init.sh:ro --entrypoint sh ${var.workspace_image} /opt/coder-init.sh\" ]",
-    "  - [ bash, -c, \"rm -f /root/.docker/config.json\" ]",
+    "  - [ systemctl, daemon-reload ]",
+    "  - [ systemctl, enable, --now, coder-agent ]",
   ]))
 }
 
@@ -142,6 +146,7 @@ resource "azurerm_linux_virtual_machine" "main" {
   admin_username        = var.admin_username
   network_interface_ids = [azurerm_network_interface.main[0].id]
   custom_data           = local.custom_data
+  source_image_id       = var.image_id
 
   admin_ssh_key {
     username   = var.admin_username
@@ -151,13 +156,6 @@ resource "azurerm_linux_virtual_machine" "main" {
   os_disk {
     caching              = "ReadWrite"
     storage_account_type = "StandardSSD_LRS"
-  }
-
-  source_image_reference {
-    publisher = "Canonical"
-    offer     = "0001-com-ubuntu-server-jammy"
-    sku       = "22_04-lts-gen2"
-    version   = "latest"
   }
 
   tags = {

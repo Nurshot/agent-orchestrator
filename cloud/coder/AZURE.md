@@ -126,38 +126,40 @@ Deferred (production-scale, **not** blockers for a bounded customer test):
 ## VM-per-workspace variant (mirrors eleven_x's AWS dev-kit)
 
 The default template above runs each workspace as a **container** on the shared
-Coder VM (fast, cheap). To instead mirror eleven_x's AWS EC2-per-workspace model
-- **one dedicated Azure VM per workspace** (full VM isolation, ~2 min boot,
-stop/start) - use `cloud/coder-azure-vm/main.tf` (an `azurerm` template). This is
-what the live staging deployment is pointed at.
+Coder VM. To instead mirror eleven_x's AWS EC2-per-workspace dev-kit - **one
+dedicated Azure VM per workspace, running the AO worker + harness NATIVELY (no
+Docker, no container)** - use `cloud/coder-azure-vm/main.tf` (an `azurerm`
+template that boots from a baked image). This is what the live staging deployment
+is pointed at.
 
 Setup (on top of the base Coder from provision-coder-azure.sh):
 
-1. **Give Coder Azure creds.** A scoped service principal is simplest for the
-   container (avoids container->IMDS): `az ad sp create-for-rbac --name
-   ao-coder-azurerm --role Contributor --scopes <rg>`, then re-run the coder
-   container with `ARM_CLIENT_ID/ARM_CLIENT_SECRET/ARM_TENANT_ID/ARM_SUBSCRIPTION_ID`
-   env (stored in /etc/ao-coder.env). (The Coder VM also has a system managed
-   identity with Contributor, used for day-2 admin.)
-2. **ACR for the workspace image.** `az acr create -n <acr> --sku Basic
-   --admin-enabled true`; on the Coder VM `docker tag ao-coder-workspace:local
-   <acr>.azurecr.io/ao-coder-workspace:latest && docker push ...`.
+1. **Give Coder Azure creds** so its `azurerm` provider can create VMs. Simplest
+   for the container is a scoped service principal (avoids container->IMDS):
+   `az ad sp create-for-rbac --name ao-coder-azurerm --role Contributor --scopes
+   <rg>`, then re-run the coder container with `ARM_CLIENT_ID/ARM_CLIENT_SECRET/
+   ARM_TENANT_ID/ARM_SUBSCRIPTION_ID` env (persisted in /etc/ao-coder.env).
+2. **Bake the native VM image** (`ao-coder-workspace-image`): a temp Ubuntu VM
+   installs node + `@anthropic-ai/claude-code` natively, extracts the `ao-worker`
+   and `ao` Go binaries from the control-plane image, adds a `coder` user with
+   NOPASSWD sudo, then Docker is removed - so nothing runs in a container. Then
+   `az vm deallocate/generalize` + `az image create --hyper-v-generation V2`.
 3. **Publish the template:** `coder templates push ao-azure-vm -d <dir>
-   --variable subnet_id=<subnet> --variable acr_server=<acr>.azurecr.io
-   --variable acr_username=<u> --variable acr_password=<p>`.
-4. **Repoint** `ao-cloud/staging/coder` `template_id` at the new template and
-   redeploy the CP (parameters_json stays `{}`; owner `aoadmin`).
+   --variable subnet_id=<subnet> --variable image_id=<managed-image-id>`.
+4. **Repoint** `ao-cloud/staging/coder` `template_id` at it and redeploy the CP
+   (parameters_json stays `{}`; owner `aoadmin`).
 
 Each workspace VM is `Standard_D2s_v5` (~2 vCPU/8 GB, form-tunable via `vm_size`),
-boots Ubuntu, and on first boot cloud-init installs Docker, pulls the worker image
-from ACR, and runs it with the coder agent - so the agent + AO worker connect in
-~2 min. Stop deallocates the VM; start brings it back.
+boots from the baked image, and cloud-init starts the **coder agent as a native
+systemd service** (`coder-agent.service`, `Restart=always`, so it survives
+stop/start). The control plane then bootstraps the baked `ao-worker` natively
+over the agent - exactly like eleven_x's EC2 setup. No Docker install, no image
+pull at boot.
 
-**Follow-ups for this variant** (not blockers for a bounded test): persist the OS
-disk across stop/start via a separate managed disk (Coder's stop currently
-destroys the VM); bake a Compute Gallery image (Docker + image pre-pulled) so
-boots skip the per-VM pull; and give each workspace VM an NSG that only allows
-outbound (the agent dials out).
+**Follow-ups for this variant** (not blockers): persist the OS disk across
+stop/start via a separate managed disk (Coder's stop currently destroys the VM);
+move the baked image into a Compute Gallery for multi-region/versioning; and give
+each workspace VM an NSG that only allows outbound (the agent dials out).
 
 ## Teardown
 
