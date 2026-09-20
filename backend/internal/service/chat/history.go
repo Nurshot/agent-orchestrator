@@ -281,7 +281,7 @@ func (s *Service) EditMessage(
 		}
 	}()
 
-	cfg, driver, err := s.branchLaunchConfig(id, source)
+	cfg, driver, err := s.branchLaunchConfig(source)
 	if err != nil {
 		return reject(EditMessageResult{}, err)
 	}
@@ -856,7 +856,7 @@ func (s *Service) activateBranchLocked(ctx context.Context, id domain.SessionID,
 	if branch.Active {
 		return branch.ID, nil
 	}
-	cfg, driver, err := s.branchLaunchConfig(id, source)
+	cfg, driver, err := s.branchLaunchConfig(source)
 	if err != nil {
 		return "", err
 	}
@@ -942,7 +942,6 @@ func (s *Service) activateBranchLocked(ctx context.Context, id domain.SessionID,
 }
 
 func (s *Service) branchLaunchConfig(
-	id domain.SessionID,
 	source *Controller,
 ) (StartConfig, ports.ChatDriver, error) {
 	s.mu.RLock()
