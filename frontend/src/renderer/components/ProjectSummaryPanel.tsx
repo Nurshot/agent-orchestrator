@@ -1,4 +1,4 @@
-import { MessageSquareText, RefreshCw, X } from "lucide-react";
+import { MessageSquareText } from "lucide-react";
 import { useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
@@ -23,10 +23,9 @@ export function ProjectSummaryPanel({ onClose, orchestrator }: { onClose: () => 
 	};
 	return (
 		<aside aria-label={t("projectSummary.title")} className="absolute inset-0 z-overlay flex min-h-0 flex-col border-l border-border bg-background sm:relative sm:inset-auto sm:z-auto sm:w-[380px] sm:shrink-0" data-testid="project-summary-panel">
-			<header className="flex h-inspector-tabs shrink-0 items-center gap-2 border-b border-border px-3">
-				<div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{t("projectSummary.title")}</p><p className="truncate text-[11px] text-passive">{orchestrator.workspaceName}</p></div>
-				<Button aria-label={t("projectSummary.refresh")} disabled={summary.refresh.isPending} onClick={() => summary.refresh.mutate()} size="icon" variant="ghost"><RefreshCw className={summary.refresh.isPending ? "animate-spin" : ""} /></Button>
-				<Button aria-label={t("projectSummary.close")} onClick={onClose} size="icon" variant="ghost"><X /></Button>
+			<header className="shrink-0 border-b border-border px-4 py-3">
+				<p className="truncate text-sm font-medium">{t("projectSummary.title")}</p>
+				<p className="mt-0.5 truncate text-[11px] text-passive">{orchestrator.workspaceName}</p>
 			</header>
 			<div className="min-h-0 flex-1 overflow-y-auto p-4">
 				{summary.isLoading ? <p className="text-sm text-passive">{t("projectSummary.loading")}</p> : summary.isError || !data ? <p role="alert" className="text-sm text-destructive">{t("projectSummary.loadFailed")}</p> : <>

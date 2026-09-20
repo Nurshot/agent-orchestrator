@@ -108,7 +108,7 @@ func TestRefreshIsStableUntilObservedFactsChange(t *testing.T) {
 	}
 }
 
-func TestAttentionPersistsWhenWorkerAdvancesWithoutResolutionEvidence(t *testing.T) {
+func TestAttentionClearsFromLiveProjectionWhenLatestActivityNoLongerNeedsInput(t *testing.T) {
 	base := time.Date(2026, 9, 14, 8, 0, 0, 0, time.UTC)
 	store := &fakeStore{sessions: []domain.SessionRecord{{ID: "orchestrator", ProjectID: "demo", Kind: domain.KindOrchestrator, Harness: domain.HarnessCodex}, {ID: "demo-1", ProjectID: "demo", Kind: domain.KindWorker, Activity: domain.Activity{State: domain.ActivityWaitingInput}, UpdatedAt: base}}}
 	svc := New(store, &fakeGenerator{result: "A decision is pending."})
@@ -118,8 +118,11 @@ func TestAttentionPersistsWhenWorkerAdvancesWithoutResolutionEvidence(t *testing
 	}
 	store.sessions[1].Activity.State = domain.ActivityActive
 	store.sessions[1].UpdatedAt = base.Add(time.Minute)
-	if got, _ := svc.Get(context.Background(), "demo", true); len(got.NeedsAttention) != 1 {
-		t.Fatalf("attention = %d, want preserved", len(got.NeedsAttention))
+	if got, _ := svc.Get(context.Background(), "demo", false); len(got.NeedsAttention) != 0 {
+		t.Fatalf("attention = %d, want cleared", len(got.NeedsAttention))
+	}
+	if store.writes != 1 {
+		t.Fatalf("writes = %d, want narrative projection unchanged", store.writes)
 	}
 }
 
@@ -132,14 +135,14 @@ func TestAttentionClearsWhenWorkerTerminates(t *testing.T) {
 	}
 	store.sessions[1].IsTerminated = true
 	store.sessions[1].UpdatedAt = base.Add(time.Minute)
-	if got, _ := svc.Get(context.Background(), "demo", true); len(got.NeedsAttention) != 0 {
+	if got, _ := svc.Get(context.Background(), "demo", false); len(got.NeedsAttention) != 0 {
 		t.Fatalf("attention = %d, want cleared for terminated worker", len(got.NeedsAttention))
 	}
 }
 
 func TestRefreshConsumesReadOnlyReportFactsAsNarrativeContext(t *testing.T) {
 	base := time.Date(2026, 9, 14, 8, 0, 0, 0, time.UTC)
-	store := &fakeStore{sessions: []domain.SessionRecord{{ID: "orchestrator", ProjectID: "demo", Kind: domain.KindOrchestrator, Harness: domain.HarnessCodex}, {ID: "worker", ProjectID: "demo", Kind: domain.KindWorker, DisplayName: "Worker", Activity: domain.Activity{State: domain.ActivityActive}, UpdatedAt: base}}}
+	store := &fakeStore{sessions: []domain.SessionRecord{{ID: "orchestrator", ProjectID: "demo", Kind: domain.KindOrchestrator, Harness: domain.HarnessCodex}, {ID: "worker", ProjectID: "demo", Kind: domain.KindWorker, DisplayName: "Worker", Activity: domain.Activity{State: domain.ActivityWaitingInput}, UpdatedAt: base}}}
 	reports := &fakeReportReader{reports: []ReportFact{{ID: "rpt-1", SessionID: "worker", State: "needs_input", Note: "Choose the API shape.", CreatedAt: base, RepeatCount: 1, Outputs: []ReportOutputFact{{Kind: "artifact", Reference: "opaque-output", Label: "Design"}}}}}
 	generator := &fakeGenerator{result: "The API decision is pending."}
 	svc := New(store, generator, reports)
@@ -158,6 +161,20 @@ func TestRefreshConsumesReadOnlyReportFactsAsNarrativeContext(t *testing.T) {
 	}
 	if second.SourceWatermark == watermark || generator.calls != 2 {
 		t.Fatalf("report change did not regenerate: watermark=%q calls=%d", second.SourceWatermark, generator.calls)
+	}
+}
+
+func TestNeedsInputReportDoesNotOutliveLatestWorkerActivity(t *testing.T) {
+	base := time.Date(2026, 9, 18, 8, 0, 0, 0, time.UTC)
+	store := &fakeStore{sessions: []domain.SessionRecord{{ID: "orchestrator", ProjectID: "demo", Kind: domain.KindOrchestrator, Harness: domain.HarnessCodex}, {ID: "worker", ProjectID: "demo", Kind: domain.KindWorker, Activity: domain.Activity{State: domain.ActivityActive}, UpdatedAt: base}}}
+	reports := &fakeReportReader{reports: []ReportFact{{ID: "rpt-1", SessionID: "worker", State: "needs_input", Note: "This question was dismissed.", CreatedAt: base}}}
+
+	got, err := New(store, &fakeGenerator{result: "Work resumed."}, reports).Get(context.Background(), "demo", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.NeedsAttention) != 0 {
+		t.Fatalf("attention = %d, want stale report hidden by latest active state", len(got.NeedsAttention))
 	}
 }
 

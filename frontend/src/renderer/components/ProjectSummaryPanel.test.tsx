@@ -59,4 +59,11 @@ describe("ProjectSummaryPanel", () => {
 		expect(screen.queryByText("Meaningful outputs")).not.toBeInTheDocument();
 		expect(screen.queryByText("PR #42")).not.toBeInTheDocument();
 	});
+
+	it("uses the toolbar toggle as the only close control", () => {
+		render(<ProjectSummaryPanel onClose={() => {}} orchestrator={orchestrator} />);
+
+		expect(screen.queryByRole("button", { name: "Refresh project summary" })).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Close project summary" })).not.toBeInTheDocument();
+	});
 });

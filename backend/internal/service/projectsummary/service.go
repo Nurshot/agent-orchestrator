@@ -120,10 +120,7 @@ func (s *Service) Get(ctx context.Context, projectID domain.ProjectID, refresh b
 		return current, nil
 	}
 	if !refresh && ok {
-		return current, nil
-	}
-	if ok {
-		next.NeedsAttention = preserveAttention(current.NeedsAttention, next.NeedsAttention, workers)
+		return withLiveProjection(current, next), nil
 	}
 	harness := projectRecord.Config.Orchestrator.Harness
 	model := projectRecord.Config.Orchestrator.AgentConfig.Model
@@ -137,11 +134,11 @@ func (s *Service) Get(ctx context.Context, projectID domain.ProjectID, refresh b
 		model = projectRecord.Config.AgentConfig.Model
 	}
 	if s.generator == nil {
-		return failedGeneration(current, ok, "project summary generator is unavailable"), nil
+		return failedGeneration(current, next, ok, "project summary generator is unavailable"), nil
 	}
 	narrative, err := s.generator.Update(ctx, GenerationRequest{Harness: harness, Model: model, WorkspacePath: projectRecord.Path, Existing: current.Narrative, Facts: next, Reports: generationReports(reports, workers)})
 	if err != nil {
-		return failedGeneration(current, ok, err.Error()), nil
+		return failedGeneration(current, next, ok, err.Error()), nil
 	}
 	next.Narrative = narrative
 	if err := s.store.PutProjectSummary(ctx, next); err != nil {
@@ -161,41 +158,22 @@ func generationReports(reports []ReportFact, workers []domain.SessionRecord) []G
 	return result
 }
 
-func failedGeneration(current domain.ProjectSummary, exists bool, message string) domain.ProjectSummary {
+func failedGeneration(current, next domain.ProjectSummary, exists bool, message string) domain.ProjectSummary {
 	if !exists {
-		current.NeedsAttention = []domain.ProjectAttentionItem{}
+		next.SourceWatermark = ""
+		next.GenerationError = message
+		return next
 	}
-	current.GenerationError = message
+	live := withLiveProjection(current, next)
+	live.GenerationError = message
+	return live
+}
+
+func withLiveProjection(current, next domain.ProjectSummary) domain.ProjectSummary {
+	current.ActiveWorkers = next.ActiveWorkers
+	current.CompletedWorkers = next.CompletedWorkers
+	current.NeedsAttention = next.NeedsAttention
 	return current
-}
-
-func preserveAttention(previous, observed []domain.ProjectAttentionItem, workers []domain.SessionRecord) []domain.ProjectAttentionItem {
-	bySession := make(map[domain.SessionID]domain.ProjectAttentionItem, len(previous)+len(observed))
-	for _, item := range previous {
-		if workerIsLive(workers, item.SessionID) {
-			bySession[item.SessionID] = item
-		}
-	}
-	for _, item := range observed {
-		if workerIsLive(workers, item.SessionID) {
-			bySession[item.SessionID] = item
-		}
-	}
-	result := make([]domain.ProjectAttentionItem, 0, len(bySession))
-	for _, item := range bySession {
-		result = append(result, item)
-	}
-	sort.Slice(result, func(i, j int) bool { return result[i].SessionID < result[j].SessionID })
-	return result
-}
-
-func workerIsLive(workers []domain.SessionRecord, id domain.SessionID) bool {
-	for _, worker := range workers {
-		if worker.ID == id {
-			return !worker.IsTerminated
-		}
-	}
-	return false
 }
 
 func project(projectID domain.ProjectID, workers []domain.SessionRecord, reports []ReportFact, at time.Time) domain.ProjectSummary {
@@ -203,6 +181,22 @@ func project(projectID domain.ProjectID, workers []domain.SessionRecord, reports
 	h := sha256.New()
 	_, _ = fmt.Fprintf(h, "projection:%s;", summaryProjectionVersion)
 	result := domain.ProjectSummary{ProjectID: projectID, GeneratedAt: at, NeedsAttention: []domain.ProjectAttentionItem{}}
+	questions := make(map[domain.SessionID]string)
+	for _, report := range reports {
+		_, _ = fmt.Fprintf(h, "%s|%s|%s|%s|%s|%d;", report.ID, report.SessionID, report.State, report.Note, report.Message, report.RepeatCount)
+		if report.State == "needs_input" {
+			question := strings.TrimSpace(report.Note)
+			if question == "" {
+				question = strings.TrimSpace(report.Message)
+			}
+			if question != "" {
+				questions[report.SessionID] = question
+			}
+		}
+		for _, output := range report.Outputs {
+			_, _ = fmt.Fprintf(h, "%s|%s|%s;", output.Kind, output.Reference, output.Label)
+		}
+	}
 	for _, worker := range workers {
 		_, _ = fmt.Fprintf(h, "%s|%s|%t|%s|%s;", worker.ID, worker.Activity.State, worker.IsTerminated, worker.UpdatedAt.UTC(), worker.DisplayName)
 		if worker.IsTerminated {
@@ -211,26 +205,14 @@ func project(projectID domain.ProjectID, workers []domain.SessionRecord, reports
 			result.ActiveWorkers++
 		}
 		if !worker.IsTerminated && worker.Activity.State == domain.ActivityWaitingInput {
-			question := strings.TrimSpace(worker.Metadata.LatestAssistantUpdate)
+			question := questions[worker.ID]
+			if question == "" {
+				question = strings.TrimSpace(worker.Metadata.LatestAssistantUpdate)
+			}
 			if question == "" {
 				question = "This worker needs a decision before it can continue."
 			}
 			result.NeedsAttention = append(result.NeedsAttention, domain.ProjectAttentionItem{SessionID: worker.ID, SessionName: displayName(worker), Question: question})
-		}
-	}
-	for _, report := range reports {
-		_, _ = fmt.Fprintf(h, "%s|%s|%s|%s|%s|%d;", report.ID, report.SessionID, report.State, report.Note, report.Message, report.RepeatCount)
-		if report.State == "needs_input" && workerIsLive(workers, report.SessionID) {
-			question := strings.TrimSpace(report.Note)
-			if question == "" {
-				question = strings.TrimSpace(report.Message)
-			}
-			if question != "" {
-				result.NeedsAttention = append(result.NeedsAttention, domain.ProjectAttentionItem{SessionID: report.SessionID, SessionName: workerName(workers, report.SessionID), Question: question})
-			}
-		}
-		for _, output := range report.Outputs {
-			_, _ = fmt.Fprintf(h, "%s|%s|%s;", output.Kind, output.Reference, output.Label)
 		}
 	}
 	result.SourceWatermark = hex.EncodeToString(h.Sum(nil))
