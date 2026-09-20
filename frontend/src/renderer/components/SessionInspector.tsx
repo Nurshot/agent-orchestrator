@@ -14,6 +14,7 @@ import {
 	SessionInspectorShellView,
 	SessionInspectorSummaryView,
 	inspectorEmptyClass,
+	inspectorReviewHeadingClass,
 	type InspectorPullRequest,
 	type InspectorInlineComment,
 	type InspectorGithubReview,
@@ -383,6 +384,7 @@ function InspectorPolicyRow({
 	id,
 	label,
 	ariaLabel = label,
+	className,
 	description,
 	tooltipClassName,
 	checked,
@@ -392,6 +394,8 @@ function InspectorPolicyRow({
 	id: string;
 	label: string;
 	ariaLabel?: string;
+	/** Lets a caller match this row to the rhythm of the rows around it. */
+	className?: string;
 	description?: string;
 	tooltipClassName?: string;
 	checked: boolean;
@@ -399,7 +403,7 @@ function InspectorPolicyRow({
 	onCheckedChange: (checked: boolean) => void;
 }) {
 	return (
-		<div className="flex items-center justify-between gap-3 py-1" data-slot="inspector-policy-row">
+		<div className={cn("flex items-center justify-between gap-3 py-1", className)} data-slot="inspector-policy-row">
 			<div className="flex min-w-0 items-center gap-1.5">
 				<label className="min-w-0 text-xs font-medium text-settings-label" htmlFor={id}>
 					{label}
@@ -2261,7 +2265,12 @@ function ReviewPanel({
 
 	return (
 		<div className="mb-2.5 flex flex-col">
-				<Section surface title={t("inspector.review.controls")}>
+				<Section
+					surface
+					surfaceClassName="px-0"
+					title={t("inspector.review.controls")}
+					titleClassName={inspectorReviewHeadingClass}
+				>
 					{error ? (
 						<p className="m-0 rounded-md border border-error/28 bg-error/8 px-2.5 py-2 text-sm-md leading-normal text-error">
 							{apiErrorMessage(error, t("inspector.reviewRequestFailed"))}
@@ -2303,7 +2312,10 @@ function ReviewPanel({
 						</Tooltip>
 					</TooltipProvider>
 				) : null}
-				<div className="review-run-controls-container min-w-0 divide-y divide-border/70 text-xs">
+				{/* Spacing carries the separation here, not rules: three rows do not
+				    need ruling off from each other, and the gap reads the way the
+				    summary tab's groups do. */}
+				<div className="review-run-controls-container flex min-w-0 flex-col gap-1 text-xs">
 					<div className="flex min-h-10 min-w-0 items-center justify-between gap-3 py-2">
 						<span className="min-w-0 text-xs font-medium text-foreground">
 							{t("inspector.selectReviewerAgent")}
@@ -2320,59 +2332,64 @@ function ReviewPanel({
 							model={reviewerModel}
 							mode={reviewerMode}
 							projectId={session.workspaceId}
-							triggerClassName="review-run-agent-select ml-auto h-control-md w-auto min-w-0 max-w-[11rem] shrink-0 justify-end px-2 text-right text-xs"
+							triggerClassName="review-run-agent-select ml-auto h-control-md w-auto min-w-0 shrink-0 justify-end px-2 text-right text-xs"
 							value={reviewerOverride}
 							showDefaultOption
 						/>
 					</div>
 					<InspectorPolicyRow
 						checked={autoReviewEnabled}
-						description={t("inspector.autoReviewDescription")}
+						className="min-h-10 py-2"
 						disabled={isAutoReviewSaving}
 						id={`auto-review-${session.id}`}
 						label={t("inspector.autoReview")}
 						onCheckedChange={onAutoReviewChange}
-						tooltipClassName="max-w-64"
 					/>
-					<div className="flex min-h-10 min-w-0 items-center justify-between gap-3 py-2">
-						<span className="text-xs font-medium text-foreground">{t("inspector.review.session")}</span>
-						<div className="flex min-w-0 items-center justify-end gap-1.5">
-							<Button
-								aria-label={primaryReviewActionLabel}
-								className="shrink-0 gap-1 px-1.5 text-xs [&_svg]:size-icon-sm"
-								disabled={reviewRunning ? isCancelling || isKilling || isSwitchingReviewer : runDisabled || autoReviewEnabled}
-								onClick={reviewRunning ? onCancel : onTrigger}
-								size="sm"
-								type="button"
-								variant={reviewRunning ? "ghost" : reviewHasRun ? "secondary" : "primary"}
-							>
-								{reviewRunning ? <X aria-hidden="true" /> : <Play aria-hidden="true" />}
-								<span className="review-run-action-label">{primaryReviewActionLabel}</span>
-							</Button>
-							{hasReviewerSession ? (
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<span className="inline-flex">
-											<Button
-												aria-label={isKilling ? t("inspector.review.killingSession") : t("inspector.review.killSession")}
-												className="h-control-md w-control-md shrink-0 p-0 text-error [&_svg]:size-icon-sm"
-												disabled={killDisabled}
-												onClick={onKill}
-												size="sm"
-												type="button"
-												variant="ghost"
-											>
-												<Trash2 aria-hidden="true" />
-											</Button>
-										</span>
-									</TooltipTrigger>
-									<TooltipContent side="bottom">
-										{isKilling ? t("inspector.review.killingSession") : t("inspector.review.killSession")}
-									</TooltipContent>
-								</Tooltip>
-							) : null}
+					{/* Auto review owns the run, so this row's controls are all inert
+					    while it is on and the row only restates the toggle above. The
+					    exception is a review actually in flight: stopping it is reachable
+					    from nowhere else, so the row comes back for as long as it runs. */}
+					{autoReviewEnabled && !reviewRunning ? null : (
+						<div className="flex min-h-10 min-w-0 items-center justify-between gap-3 py-2">
+							<span className="text-xs font-medium text-foreground">{t("inspector.review.session")}</span>
+							<div className="flex min-w-0 items-center justify-end gap-1.5">
+								<Button
+									aria-label={primaryReviewActionLabel}
+									className="shrink-0 gap-1 px-1.5 text-xs [&_svg]:size-icon-sm"
+									disabled={reviewRunning ? isCancelling || isKilling || isSwitchingReviewer : runDisabled || autoReviewEnabled}
+									onClick={reviewRunning ? onCancel : onTrigger}
+									size="sm"
+									type="button"
+									variant={reviewRunning ? "ghost" : reviewHasRun ? "secondary" : "primary"}
+								>
+									{reviewRunning ? <X aria-hidden="true" /> : <Play aria-hidden="true" />}
+									<span className="review-run-action-label">{primaryReviewActionLabel}</span>
+								</Button>
+								{hasReviewerSession ? (
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<span className="inline-flex">
+												<Button
+													aria-label={isKilling ? t("inspector.review.killingSession") : t("inspector.review.killSession")}
+													className="h-control-md w-control-md shrink-0 p-0 text-error [&_svg]:size-icon-sm"
+													disabled={killDisabled}
+													onClick={onKill}
+													size="sm"
+													type="button"
+													variant="ghost"
+												>
+													<Trash2 aria-hidden="true" />
+												</Button>
+											</span>
+										</TooltipTrigger>
+										<TooltipContent side="bottom">
+											{isKilling ? t("inspector.review.killingSession") : t("inspector.review.killSession")}
+										</TooltipContent>
+									</Tooltip>
+								) : null}
+							</div>
 						</div>
-					</div>
+					)}
 				</div>
 				{reviewLive ? (
 					<div className="mt-3 flex items-center gap-2 border-t border-border pt-3">

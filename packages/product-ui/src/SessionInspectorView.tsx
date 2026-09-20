@@ -36,6 +36,13 @@ const inspectorShellClass = "@container/inspector flex h-full min-h-0 flex-col o
 const inspectorBodyBaseClass = "min-h-0 flex-1";
 const inspectorScrollableBodyClass = "board-scrollbar overflow-x-hidden overflow-y-auto p-3 pb-4 @max-[300px]/inspector:px-2.5";
 export const inspectorEmptyClass = "text-xs text-settings-muted leading-normal";
+/**
+ * The Reviews tab labels its sections in sentence case rather than the settings
+ * rail's small caps: they name content below them, not a settings group, and
+ * the caps tracking read as a second, competing header row.
+ */
+export const inspectorReviewHeadingClass =
+	"normal-case text-foreground [&>span:first-child]:text-xs [&>span:first-child]:tracking-wide";
 
 export function SessionInspectorShellView({
 	activeView,
@@ -198,6 +205,7 @@ export function InspectorSection({
 	children,
 	className,
 	surface = true,
+	surfaceClassName,
 	title,
 	titleClassName,
 }: {
@@ -205,6 +213,8 @@ export function InspectorSection({
 	children: ReactNode;
 	className?: string;
 	surface?: boolean;
+	/** Overrides the row card's own padding, for a section that runs flush. */
+	surfaceClassName?: string;
 	title?: string;
 	titleClassName?: string;
 }) {
@@ -219,7 +229,7 @@ export function InspectorSection({
 		<section className={cn("mb-4 last:mb-0", className)} data-testid="inspector-section">
 			{heading}
 			{surface ? (
-				<div className="overflow-hidden rounded-settings-row bg-settings-row px-3.5 py-1.5">
+				<div className={cn("overflow-hidden rounded-settings-row bg-settings-row px-3.5 py-1.5", surfaceClassName)}>
 					{children}
 				</div>
 			) : (
@@ -570,14 +580,14 @@ export function InspectorReviewsView({
 }) {
 	if (isLoading && groups.length === 0) {
 		return (
-			<InspectorSection surface title={labels.reviews}>
+			<InspectorSection surface surfaceClassName="px-0" title={labels.reviews} titleClassName={inspectorReviewHeadingClass}>
 				<p className={inspectorEmptyClass}>{labels.loadingReviews}</p>
 			</InspectorSection>
 		);
 	}
 	if (groups.length === 0) return null;
 	return (
-		<InspectorSection surface={false} title={labels.reviews} titleClassName="text-foreground [&>span:first-child]:text-xs [&>span:first-child]:tracking-wide">
+		<InspectorSection surface={false} title={labels.reviews} titleClassName={inspectorReviewHeadingClass}>
 			<div className="flex flex-col gap-2">
 				{groups.map((group) => (
 					<ReviewDisclosure
