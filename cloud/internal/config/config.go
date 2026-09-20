@@ -115,6 +115,14 @@ type Config struct {
 	CoderDurableRoot    string
 	CoderWorkerTokenTTL time.Duration
 
+	ECSRegion           string
+	ECSCluster          string
+	ECSTaskDefinition   string
+	ECSContainerName    string
+	ECSCapacityProvider string
+	ECSNamespace        string
+	ECSWorkerTokenTTL   time.Duration
+
 	GitHub GitHubConfig
 }
 
@@ -249,6 +257,16 @@ func Load() (Config, error) {
 			"AO_CLOUD_CODER_WORKER_TOKEN_TTL", sandbox.DefaultWorkerTokenTTL,
 		),
 
+		ECSRegion:           strings.TrimSpace(os.Getenv("AO_CLOUD_ECS_REGION")),
+		ECSCluster:          strings.TrimSpace(os.Getenv("AO_CLOUD_ECS_CLUSTER")),
+		ECSTaskDefinition:   strings.TrimSpace(os.Getenv("AO_CLOUD_ECS_TASK_DEFINITION")),
+		ECSContainerName:    envOrDefault("AO_CLOUD_ECS_CONTAINER_NAME", "worker"),
+		ECSCapacityProvider: strings.TrimSpace(os.Getenv("AO_CLOUD_ECS_CAPACITY_PROVIDER")),
+		ECSNamespace:        envOrDefault("AO_CLOUD_ECS_NAMESPACE", "ao-cloud"),
+		ECSWorkerTokenTTL: durationEnv(
+			"AO_CLOUD_ECS_WORKER_TOKEN_TTL", sandbox.DefaultWorkerTokenTTL,
+		),
+
 		GitHub: GitHubConfig{
 			AppID:          int64Env("AO_CLOUD_GITHUB_APP_ID"),
 			AppSlug:        strings.TrimSpace(os.Getenv("AO_CLOUD_GITHUB_APP_SLUG")),
@@ -348,8 +366,8 @@ func Load() (Config, error) {
 	default:
 		return Config{}, errors.New("AO_CLOUD_SANDBOX_PROVIDER must be coder, daytona, docker, ecs, or nodeops")
 	}
-	if cfg.Hosted() && cfg.SandboxProvider != "nodeops" && cfg.SandboxProvider != "coder" {
-		return Config{}, errors.New("AO_CLOUD_SANDBOX_PROVIDER must be coder or nodeops in staging and production")
+	if cfg.Hosted() && !hostedProviderAllowed(cfg.SandboxProvider) {
+		return Config{}, errors.New("AO_CLOUD_SANDBOX_PROVIDER must be coder, ecs, or nodeops in staging and production")
 	}
 	available, err := resolveAvailableProviders(cfg.SandboxProvider, cfg.Hosted())
 	if err != nil {
@@ -408,6 +426,16 @@ func Load() (Config, error) {
 					err = errors.New("AO_CLOUD_CODER_URL must use HTTPS in hosted environments")
 				}
 			}
+		case "ecs":
+			err = (sandbox.ECSConfig{
+				Region:           cfg.ECSRegion,
+				Cluster:          cfg.ECSCluster,
+				TaskDefinition:   cfg.ECSTaskDefinition,
+				ContainerName:    cfg.ECSContainerName,
+				CapacityProvider: cfg.ECSCapacityProvider,
+				Namespace:        cfg.ECSNamespace,
+				WorkerTokenTTL:   cfg.ECSWorkerTokenTTL,
+			}).Validate()
 		}
 		if err != nil {
 			if cfg.Hosted() {
@@ -434,7 +462,7 @@ func Load() (Config, error) {
 		// be trusted if its token is signed by a key strong enough to matter.
 		if cfg.PublicURL == "" {
 			return Config{}, errors.New(
-				"AO_CLOUD_PUBLIC_URL is required when a nodeops, docker, or coder provider is available",
+				"AO_CLOUD_PUBLIC_URL is required when a nodeops, docker, coder, or ecs provider is available",
 			)
 		}
 		// A worker reads this origin out of its environment and dials it with
@@ -455,7 +483,7 @@ func Load() (Config, error) {
 			)
 		}
 	}
-	if cfg.SandboxProvider == "nodeops" || cfg.SandboxProvider == "coder" {
+	if cfg.SandboxProvider == "nodeops" || cfg.SandboxProvider == "coder" || cfg.SandboxProvider == "ecs" {
 		if cfg.WorkerBinaryPath == "" {
 			return Config{}, fmt.Errorf("AO_CLOUD_WORKER_BINARY_PATH is required when AO_CLOUD_SANDBOX_PROVIDER=%s", cfg.SandboxProvider)
 		}
@@ -583,6 +611,9 @@ func (c Config) WorkerTokenTTL() time.Duration {
 	if c.SandboxProvider == sandbox.ProviderCoder {
 		return c.CoderWorkerTokenTTL
 	}
+	if c.SandboxProvider == sandbox.ProviderECS {
+		return c.ECSWorkerTokenTTL
+	}
 	return c.NodeOpsWorkerTokenTTL
 }
 
@@ -652,9 +683,9 @@ func resolveAvailableProviders(defaultProvider string, hosted bool) ([]string, e
 		default:
 			return nil, fmt.Errorf("AO_CLOUD_SANDBOX_PROVIDERS contains unknown provider %q", provider)
 		}
-		if hosted && provider != "nodeops" && provider != "coder" {
+		if hosted && !hostedProviderAllowed(provider) {
 			return nil, fmt.Errorf(
-				"AO_CLOUD_SANDBOX_PROVIDERS may only contain coder or nodeops in staging and production, got %q",
+				"AO_CLOUD_SANDBOX_PROVIDERS may only contain coder, ecs, or nodeops in staging and production, got %q",
 				provider,
 			)
 		}
@@ -662,12 +693,23 @@ func resolveAvailableProviders(defaultProvider string, hosted bool) ([]string, e
 	return list, nil
 }
 
+// hostedProviderAllowed reports whether a sandbox provider may run in a hosted
+// (staging or production) environment. Docker and Daytona are local-only.
+func hostedProviderAllowed(provider string) bool {
+	switch provider {
+	case sandbox.ProviderNodeOps, sandbox.ProviderCoder, sandbox.ProviderECS:
+		return true
+	default:
+		return false
+	}
+}
+
 // providersRequireWorkerHome reports whether any available provider launches a
 // worker that must dial back to AO_CLOUD_PUBLIC_URL.
 func providersRequireWorkerHome(providers []string) bool {
 	for _, provider := range providers {
 		switch provider {
-		case "nodeops", "docker", "coder":
+		case "nodeops", "docker", "coder", "ecs":
 			return true
 		}
 	}

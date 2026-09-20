@@ -64,10 +64,13 @@ func TestResolveAvailableProvidersAllowsCoderAndNodeOpsWhenHosted(t *testing.T) 
 }
 
 func TestProvidersRequireWorkerHome(t *testing.T) {
-	if providersRequireWorkerHome([]string{"ecs"}) {
-		t.Fatal("ecs does not require a worker home")
+	if providersRequireWorkerHome([]string{"daytona"}) {
+		t.Fatal("daytona does not require a worker home")
 	}
-	if !providersRequireWorkerHome([]string{"ecs", "coder"}) {
+	if !providersRequireWorkerHome([]string{"daytona", "coder"}) {
 		t.Fatal("coder requires a worker home")
+	}
+	if !providersRequireWorkerHome([]string{"ecs"}) {
+		t.Fatal("ecs bakes and self-updates a worker and requires a worker home")
 	}
 }

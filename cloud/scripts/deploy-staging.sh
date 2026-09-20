@@ -14,6 +14,17 @@ SANDBOX_PROVIDER="${AO_CLOUD_SANDBOX_PROVIDER:-nodeops}"
 NODEOPS_SECRET_ID="${AO_CLOUD_NODEOPS_SECRET_ID:-ao-cloud/staging/nodeops}"
 CODER_SECRET_ID="${AO_CLOUD_CODER_SECRET_ID:-ao-cloud/staging/coder}"
 WORKER_SECRET_ID="${AO_CLOUD_WORKER_SECRET_ID:-ao-cloud/staging/worker}"
+# ECS-on-EC2 (Graviton) sandbox provider. Enabled as an ADDITIONAL provider
+# alongside the primary SANDBOX_PROVIDER, opt-in via AO_CLOUD_ECS_ENABLED=1. It
+# needs no secrets (the control-plane task role carries the RunTask permissions).
+# scripts/provision-ecs-sandbox.sh creates the cluster, capacity provider and the
+# task-definition family named here before this is turned on.
+ECS_ENABLED="${AO_CLOUD_ECS_ENABLED:-0}"
+ECS_SANDBOX_CLUSTER="${AO_CLOUD_ECS_SANDBOX_CLUSTER:-ao-cloud-staging-sandboxes}"
+ECS_SANDBOX_TASK_FAMILY="${AO_CLOUD_ECS_SANDBOX_TASK_FAMILY:-ao-cloud-sandbox-worker}"
+ECS_SANDBOX_CONTAINER_NAME="${AO_CLOUD_ECS_SANDBOX_CONTAINER_NAME:-worker}"
+ECS_SANDBOX_CAPACITY_PROVIDER="${AO_CLOUD_ECS_SANDBOX_CAPACITY_PROVIDER:-ao-cloud-sandbox-graviton}"
+ECS_SANDBOX_NAMESPACE="${AO_CLOUD_ECS_SANDBOX_NAMESPACE:-ao-cloud}"
 HEAD_SHA="$(git rev-parse HEAD)"
 RELEASE="${1:-$HEAD_SHA}"
 IMAGE_TAG="${RELEASE//+/-}-linux-amd64"
@@ -214,6 +225,19 @@ if [[ "$SANDBOX_PROVIDER" == "coder" ]]; then
 		./scripts/publish-coder-workspace.sh
 fi
 
+# The ECS sandbox worker runs on Graviton and does not self-update, so its arm64
+# image must be rebuilt from this exact commit and a fresh task-definition
+# revision registered before the rollout. The control plane runs the family's
+# latest revision (it stores the family name, not a pinned revision), so this
+# stays in step with each release without touching the control-plane env.
+if [[ "$ECS_ENABLED" == "1" ]]; then
+	AWS_REGION="$REGION" \
+		AO_CLOUD_WORKER_ECR_REPOSITORY="$WORKER_REPOSITORY" \
+		AO_CLOUD_ECS_TASK_FAMILY="$ECS_SANDBOX_TASK_FAMILY" \
+		AO_CLOUD_ECS_CONTAINER_NAME="$ECS_SANDBOX_CONTAINER_NAME" \
+		./scripts/build-ecs-sandbox-image.sh "$RELEASE"
+fi
+
 register_task_definition() {
 	local family="$1"
 	local container_name="$2"
@@ -246,6 +270,21 @@ register_task_definition() {
 			--set-secret "AO_CLOUD_SANDBOX_STARTUP_TIMEOUT=${worker_secret_arn}:sandbox_startup_timeout::"
 			--set-secret "AO_CLOUD_WORKER_HEARTBEAT_TIMEOUT=${worker_secret_arn}:worker_heartbeat_timeout::"
 		)
+		if [[ "$ECS_ENABLED" == "1" ]]; then
+			# ECS is an additional provider on top of SANDBOX_PROVIDER. It has no
+			# secrets (the task role carries RunTask permissions) and stores the
+			# task-definition family name so RunTask always uses the latest revision
+			# the build step registered.
+			render_args+=(
+				--set-environment "AO_CLOUD_SANDBOX_PROVIDERS=${SANDBOX_PROVIDER},ecs"
+				--set-environment "AO_CLOUD_ECS_REGION=${REGION}"
+				--set-environment "AO_CLOUD_ECS_CLUSTER=${ECS_SANDBOX_CLUSTER}"
+				--set-environment "AO_CLOUD_ECS_TASK_DEFINITION=${ECS_SANDBOX_TASK_FAMILY}"
+				--set-environment "AO_CLOUD_ECS_CONTAINER_NAME=${ECS_SANDBOX_CONTAINER_NAME}"
+				--set-environment "AO_CLOUD_ECS_CAPACITY_PROVIDER=${ECS_SANDBOX_CAPACITY_PROVIDER}"
+				--set-environment "AO_CLOUD_ECS_NAMESPACE=${ECS_SANDBOX_NAMESPACE}"
+			)
+		fi
 		if [[ "$SANDBOX_PROVIDER" == "coder" ]]; then
 			render_args+=(
 				--set-secret "AO_CLOUD_CODER_URL=${sandbox_secret_arn}:url::"
