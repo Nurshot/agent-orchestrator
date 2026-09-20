@@ -36,6 +36,14 @@ type Config struct {
 	LocalAuthEnabled     bool
 	LocalSessionTTL      time.Duration
 	SandboxProvider      string
+	// SandboxDefaultProvider is the provider a new session lands on when the
+	// client picks none, and the default the control plane advertises to clients
+	// via /me. It is separate from SandboxProvider so a deployment can keep one
+	// provider as its secret-plumbing primary (for example coder, whose secrets
+	// the deploy tooling injects) while defaulting new sessions onto another (for
+	// example ecs, our own infra). Empty means "same as SandboxProvider"; it must
+	// be one of AvailableSandboxProviders.
+	SandboxDefaultProvider string
 	// AvailableSandboxProviders lists every provider this control plane offers.
 	// It always contains SandboxProvider (the default) and is derived from
 	// AO_CLOUD_SANDBOX_PROVIDERS, so a single CP can serve more than one
@@ -198,6 +206,9 @@ func Load() (Config, error) {
 		TerminalRelayEnabled:   boolEnv("AO_CLOUD_TERMINAL_RELAY", false),
 		SandboxProvider: strings.ToLower(
 			envOrDefault("AO_CLOUD_SANDBOX_PROVIDER", defaultSandboxProvider(hosted)),
+		),
+		SandboxDefaultProvider: strings.ToLower(
+			strings.TrimSpace(os.Getenv("AO_CLOUD_SANDBOX_DEFAULT_PROVIDER")),
 		),
 		Release: strings.TrimSpace(os.Getenv("AO_CLOUD_RELEASE")),
 		RepositoryBrokerURL: strings.TrimRight(
@@ -457,6 +468,16 @@ func Load() (Config, error) {
 			cfg.SandboxProvider = cfg.AvailableSandboxProviders[0]
 		}
 	}
+	// The advertised default (and the provider a new session lands on when the
+	// client picks none) is SandboxProvider unless explicitly overridden. An
+	// explicit override must be a provider this control plane actually offers.
+	defaultProvider, err := resolveDefaultProvider(
+		cfg.SandboxDefaultProvider, cfg.SandboxProvider, cfg.AvailableSandboxProviders,
+	)
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.SandboxDefaultProvider = defaultProvider
 	if providersRequireWorkerHome(cfg.AvailableSandboxProviders) {
 		// A worker can only dial home if it is told where home is, and can only
 		// be trusted if its token is signed by a key strong enough to matter.
@@ -691,6 +712,22 @@ func resolveAvailableProviders(defaultProvider string, hosted bool) ([]string, e
 		}
 	}
 	return list, nil
+}
+
+// resolveDefaultProvider picks the provider new sessions default to. An empty
+// override means "same as the primary"; an explicit override must be one of the
+// available providers so a client is never handed a default it cannot use.
+func resolveDefaultProvider(override, primary string, available []string) (string, error) {
+	if override == "" {
+		return primary, nil
+	}
+	if !slices.Contains(available, override) {
+		return "", fmt.Errorf(
+			"AO_CLOUD_SANDBOX_DEFAULT_PROVIDER %q must be one of the available providers %v",
+			override, available,
+		)
+	}
+	return override, nil
 }
 
 // hostedProviderAllowed reports whether a sandbox provider may run in a hosted

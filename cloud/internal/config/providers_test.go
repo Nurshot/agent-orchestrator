@@ -63,6 +63,32 @@ func TestResolveAvailableProvidersAllowsCoderAndNodeOpsWhenHosted(t *testing.T) 
 	}
 }
 
+func TestResolveDefaultProviderFallsBackToPrimary(t *testing.T) {
+	got, err := resolveDefaultProvider("", "coder", []string{"coder", "ecs"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "coder" {
+		t.Fatalf("got %q, want coder", got)
+	}
+}
+
+func TestResolveDefaultProviderHonorsAvailableOverride(t *testing.T) {
+	got, err := resolveDefaultProvider("ecs", "coder", []string{"coder", "ecs"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "ecs" {
+		t.Fatalf("got %q, want ecs", got)
+	}
+}
+
+func TestResolveDefaultProviderRejectsUnavailableOverride(t *testing.T) {
+	if _, err := resolveDefaultProvider("ecs", "coder", []string{"coder"}); err == nil {
+		t.Fatal("expected an error: ecs is not an available provider")
+	}
+}
+
 func TestProvidersRequireWorkerHome(t *testing.T) {
 	if providersRequireWorkerHome([]string{"daytona"}) {
 		t.Fatal("daytona does not require a worker home")

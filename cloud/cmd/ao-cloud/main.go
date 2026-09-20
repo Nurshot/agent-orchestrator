@@ -55,7 +55,9 @@ func readSSHPubKeys(path string) ([]string, error) {
 // a user's first session.
 func provisioningDefaults(cfg config.Config) sandbox.ProvisioningDefaults {
 	return sandbox.ProvisioningDefaults{
-		Provider: cfg.SandboxProvider,
+		// A session with no explicit provider lands on the deployment's default
+		// provider, which may differ from the secret-plumbing primary.
+		Provider: cfg.SandboxDefaultProvider,
 		Release:  cfg.Release,
 		NodeOps: sandbox.NodeOpsConfig{
 			BaseURL:          cfg.NodeOpsBaseURL,
@@ -402,12 +404,15 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	apiOptions := httpapi.Options{
-		Store:                     store,
-		Transcripts:               store.SessionTranscripts(),
-		WorkOS:                    workosVerifier,
-		LocalAuthEnabled:          cfg.LocalAuthEnabled,
-		LocalSessionTTL:           cfg.LocalSessionTTL,
-		SandboxProvider:           cfg.SandboxProvider,
+		Store:            store,
+		Transcripts:      store.SessionTranscripts(),
+		WorkOS:           workosVerifier,
+		LocalAuthEnabled: cfg.LocalAuthEnabled,
+		LocalSessionTTL:  cfg.LocalSessionTTL,
+		// The server advertises this as the /me default and uses it as the
+		// no-override provisioning fallback, so it is the deployment default
+		// provider, which may differ from the secret-plumbing primary.
+		SandboxProvider:           cfg.SandboxDefaultProvider,
 		AvailableSandboxProviders: cfg.AvailableSandboxProviders,
 		Provisioning:              provisioningDefaults(cfg),
 		WorkerTokens:              workerTokens,

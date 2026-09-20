@@ -274,9 +274,12 @@ register_task_definition() {
 			# ECS is an additional provider on top of SANDBOX_PROVIDER. It has no
 			# secrets (the task role carries RunTask permissions) and stores the
 			# task-definition family name so RunTask always uses the latest revision
-			# the build step registered.
+			# the build step registered. It is also the default provider new
+			# sessions land on (our own infra); SANDBOX_PROVIDER stays the
+			# secret-plumbing primary so coder keeps working for 11x.
 			render_args+=(
 				--set-environment "AO_CLOUD_SANDBOX_PROVIDERS=${SANDBOX_PROVIDER},ecs"
+				--set-environment "AO_CLOUD_SANDBOX_DEFAULT_PROVIDER=ecs"
 				--set-environment "AO_CLOUD_ECS_REGION=${REGION}"
 				--set-environment "AO_CLOUD_ECS_CLUSTER=${ECS_SANDBOX_CLUSTER}"
 				--set-environment "AO_CLOUD_ECS_TASK_DEFINITION=${ECS_SANDBOX_TASK_FAMILY}"
