@@ -2420,6 +2420,7 @@ describe("SessionInspector summary reviews", () => {
 
   it("opens an AO review in Browser and sends its summary to the worker", async () => {
     const reviewUrl = "https://github.com/acme/repo/pull/3#pullrequestreview-98765";
+    const onWorkerMessageSent = vi.fn();
     mockCommonGets([], "reviewer-pane", [
       {
         ...reviewState(3, "up_to_date", "abc123"),
@@ -2432,7 +2433,12 @@ describe("SessionInspector summary reviews", () => {
       },
     ]);
 
-    renderWithQuery(<SessionInspector session={session([pr(3, "open")])} />);
+    renderWithQuery(
+      <SessionInspector
+        onWorkerMessageSent={onWorkerMessageSent}
+        session={session([pr(3, "open")])}
+      />,
+    );
     await openReviewsSection();
 
     await userEvent.click(await screen.findByRole("button", { name: "Review actions" }));
@@ -2460,6 +2466,7 @@ describe("SessionInspector summary reviews", () => {
       params: { path: { sessionId: "sess-1" } },
       body: { message: expect.stringContaining(`Review URL: ${reviewUrl}`) },
     });
+    expect(onWorkerMessageSent).toHaveBeenCalledOnce();
   });
 
   it("shows inline comments on their exact AO review pass without duplicating them externally", async () => {

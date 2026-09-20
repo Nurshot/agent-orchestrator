@@ -326,6 +326,11 @@ vi.mock("./chat/SessionChatSurface", async () => {
 	}),
 	};
 });
+vi.mock("./chat/ReviewerChatSurface", () => ({
+	ReviewerChatSurface: ({ reviewId }: { reviewId: string }) => (
+		<div data-testid="reviewer-chat-surface">{reviewId}</div>
+	),
+}));
 vi.mock("./CenterPane", () => ({
 	CenterPane: ({
 		agentInputDisabled,
@@ -529,16 +534,20 @@ vi.mock("./SessionInspector", () => ({
 		isInspectorVisible = true,
 		onOpenFiles,
 		onOpenReviewFile,
+		onOpenReviewerChat,
 		onToggleBrowserPopOut,
 		onViewChange,
+		onWorkerMessageSent,
 		view,
 	}: {
 		filesView?: ReactNode;
 		isInspectorVisible?: boolean;
 		onOpenFiles?: () => void;
 		onOpenReviewFile?: (target: { line?: number; path: string }) => void;
+		onOpenReviewerChat?: (reviewId: string) => void;
 		onToggleBrowserPopOut?: (next: boolean) => void;
 		onViewChange?: (view: InspectorView) => void;
+		onWorkerMessageSent?: () => void;
 		view?: string;
 	}) => {
 		inspectorVisibilityRenders.push(isInspectorVisible);
@@ -570,6 +579,12 @@ vi.mock("./SessionInspector", () => ({
 				</button>
 				<button type="button" onClick={() => onOpenReviewFile?.({ path: "notes.txt" })}>
 					view review basename
+				</button>
+				<button type="button" onClick={() => onOpenReviewerChat?.("review-1")}>
+					open reviewer chat
+				</button>
+				<button type="button" onClick={onWorkerMessageSent}>
+					send review feedback
 				</button>
 				{view === "files" ? filesView : null}
 			</div>
@@ -2523,6 +2538,29 @@ describe("SessionView", () => {
 		// Selecting the chat tab returns to the chat timeline.
 		fireEvent.click(screen.getByRole("button", { name: "select chat tab" }));
 		expect(screen.queryByTestId("terminal-target")).not.toBeInTheDocument();
+		expect(screen.getByTestId("chat-surface")).toBeInTheDocument();
+	});
+
+	it("returns to worker Chat after review feedback is sent", () => {
+		const worker = workerSession("sess-1");
+		worker.mode = "chat";
+		worker.prs = [{
+			url: "https://github.com/acme/repo/pull/7",
+			number: 7,
+			state: "open",
+			ci: "passing",
+			review: "none",
+			mergeability: "mergeable",
+			reviewComments: false,
+			updatedAt: "2026-06-15T00:00:00Z",
+		}];
+
+		render(<SessionView sessionId="sess-1" />);
+		fireEvent.click(screen.getByRole("button", { name: "open reviewer chat" }));
+		expect(screen.getByTestId("reviewer-chat-surface")).toHaveTextContent("review-1");
+
+		fireEvent.click(screen.getByRole("button", { name: "send review feedback" }));
+		expect(screen.queryByTestId("reviewer-chat-surface")).not.toBeInTheDocument();
 		expect(screen.getByTestId("chat-surface")).toBeInTheDocument();
 	});
 
