@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -358,6 +359,75 @@ func TestStartReattachesExistingRunnerWithoutStartingBinary(t *testing.T) {
 	case <-leaseCalls:
 	case <-time.After(time.Second):
 		t.Fatal("replacement daemon did not renew the existing runner lease")
+	}
+}
+
+func TestAccountsManagerSupervisorEndpointFeedsManagementClient(t *testing.T) {
+	t.Parallel()
+
+	const (
+		controlKey    = "integration-control-secret"
+		clientKey     = "integration-client-secret"
+		managementKey = "integration-management-secret"
+	)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	mux.HandleFunc("/ao/internal/identity", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer "+controlKey {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(controlIdentity{Service: serviceName, InstanceID: "integration-instance", EngineVersion: "v7.3.8"})
+	})
+	mux.HandleFunc("/ao/internal/lease", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer "+controlKey {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("/v0/management/auth-files", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer "+managementKey {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_, _ = io.WriteString(w, `{"observed_at":"2026-09-20T10:11:12Z","files":[]}`)
+	})
+	mux.HandleFunc("/v0/management/routing/strategy", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer "+managementKey {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_, _ = io.WriteString(w, `{"strategy":"round-robin"}`)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	port := server.Listener.Addr().(*net.TCPAddr).Port
+
+	supervisor := New(Config{HTTPClient: server.Client()})
+	endpoint, ok := supervisor.tryAttach(context.Background(), RuntimeRecord{PID: os.Getpid(), Port: port, InstanceID: "integration-instance"}, controlKey, clientKey, managementKey)
+	if !ok {
+		t.Fatal("supervisor did not accept the authenticated runner contract")
+	}
+	supervisor.setReady(endpoint, "v7.3.8")
+	client := NewManagementClient(supervisor, server.Client())
+	credentials, err := client.ListCredentials(context.Background())
+	if err != nil || len(credentials) != 0 {
+		t.Fatalf("ListCredentials() count=%d error=%v, want empty inventory", len(credentials), err)
+	}
+	strategy, err := client.RoutingStrategy(context.Background())
+	if err != nil || strategy != RoutingRoundRobin {
+		t.Fatalf("RoutingStrategy()=%q error=%v, want %q", strategy, err, RoutingRoundRobin)
+	}
+
+	publicStatus, err := json.Marshal(supervisor.Status())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{server.URL, controlKey, clientKey, managementKey} {
+		if strings.Contains(string(publicStatus), secret) {
+			t.Fatal("public supervisor status exposed private connection material")
+		}
 	}
 }
 

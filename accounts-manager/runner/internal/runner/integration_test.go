@@ -249,6 +249,7 @@ routing:
 		want  int
 	}{
 		{name: "no token", want: http.StatusUnauthorized},
+		{name: "lifecycle key", token: controlKey, want: http.StatusUnauthorized},
 		{name: "data plane key", token: clientKey, want: http.StatusUnauthorized},
 		{name: "management key", token: managementKey, want: http.StatusOK},
 	} {
@@ -280,6 +281,70 @@ routing:
 				}
 			}
 		})
+	}
+
+	authFilesRequest, err := http.NewRequest(http.MethodGet, baseURL+"/v0/management/auth-files", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authFilesRequest.Header.Set("Authorization", "Bearer "+managementKey)
+	authFilesResponse, err := http.DefaultClient.Do(authFilesRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var authFilesPayload struct {
+		Files []json.RawMessage `json:"files"`
+	}
+	if err = json.NewDecoder(authFilesResponse.Body).Decode(&authFilesPayload); err != nil {
+		_ = authFilesResponse.Body.Close()
+		t.Fatal(err)
+	}
+	_ = authFilesResponse.Body.Close()
+	if authFilesResponse.StatusCode != http.StatusOK || len(authFilesPayload.Files) != 0 {
+		t.Fatalf("empty credential inventory status=%d count=%d", authFilesResponse.StatusCode, len(authFilesPayload.Files))
+	}
+
+	renewCtx, stopRenewing := context.WithCancel(context.Background())
+	renewed := make(chan struct{}, 1)
+	go func() {
+		ticker := time.NewTicker(20 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			request, requestErr := http.NewRequestWithContext(renewCtx, http.MethodPost, baseURL+"/ao/internal/lease", nil)
+			if requestErr == nil {
+				request.Header.Set("Authorization", "Bearer "+controlKey)
+				if response, requestErr := http.DefaultClient.Do(request); requestErr == nil {
+					_ = response.Body.Close()
+					if response.StatusCode == http.StatusNoContent {
+						select {
+						case renewed <- struct{}{}:
+						default:
+						}
+					}
+				}
+			}
+			select {
+			case <-renewCtx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+	select {
+	case <-renewed:
+		stopRenewing()
+	case <-time.After(time.Second):
+		stopRenewing()
+		t.Fatal("daemon-side lease renewal did not reach the runner")
+	}
+	time.Sleep(100 * time.Millisecond)
+	healthResponse, err := http.Get(baseURL + "/healthz")
+	if err != nil {
+		t.Fatalf("runner was not available during the reattach lease window: %v", err)
+	}
+	_ = healthResponse.Body.Close()
+	if healthResponse.StatusCode != http.StatusOK {
+		t.Fatalf("runner health after daemon-side stop = %d, want 200", healthResponse.StatusCode)
 	}
 
 	response, err := http.Get(baseURL + "/management.html")
