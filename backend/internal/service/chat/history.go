@@ -947,7 +947,13 @@ func (s *Service) branchLaunchConfig(
 ) (StartConfig, ports.ChatDriver, error) {
 	s.mu.RLock()
 	cfg, ok := s.startConfigs[id]
-	current := s.controllers[id]
+	// Controllers are registered by typed owner. Session history operations still
+	// address the worker by session id, so use the source's owner here rather
+	// than treating the legacy session index as the authority. In particular, a
+	// branch replacement must update the typed entry before the old controller's
+	// cleanup goroutine runs, otherwise that goroutine can remove the new
+	// session controller.
+	current := s.ownerControllers[source.owner()]
 	s.mu.RUnlock()
 	if !ok || current != source {
 		return StartConfig{}, nil, ErrControllerHandoff
@@ -1047,8 +1053,9 @@ func (s *Service) installStartedBranchController(
 	source, replacement *Controller,
 	sourceBranchID string,
 ) error {
+	owner := source.owner()
 	s.mu.Lock()
-	if s.controllers[id] != source {
+	if s.ownerControllers[owner] != source {
 		s.mu.Unlock()
 		_ = replacement.Terminate(ctx)
 		if err := s.store.ActivateConversationBranch(ctx, id, source.conversation.ID,
@@ -1058,7 +1065,13 @@ func (s *Service) installStartedBranchController(
 		return ErrControllerHandoff
 	}
 	source.prepareBranchHandoffStop()
-	s.controllers[id] = replacement
+	s.ownerControllers[owner] = replacement
+	// Keep the session index as the backwards-compatible lookup path used by
+	// worker chat commands. Review owners never share this index, so replacing a
+	// worker controller cannot affect a reviewer controller for the same session.
+	if owner.Kind == domain.ConversationOwnerSession {
+		s.controllers[id] = replacement
+	}
 	if cfg, ok := s.startConfigs[id]; ok {
 		cfg.ExpectedControllerOwner.Harness = cfg.Harness
 		cfg.ExpectedControllerOwner.Mode = domain.SessionModeChat
@@ -1074,8 +1087,11 @@ func (s *Service) installStartedBranchController(
 		replacement.Wait()
 		replacement.waitForBranchHandoff()
 		s.mu.Lock()
-		if current := s.controllers[id]; current == replacement {
-			delete(s.controllers, id)
+		if current := s.ownerControllers[owner]; current == replacement {
+			delete(s.ownerControllers, owner)
+			if owner.Kind == domain.ConversationOwnerSession {
+				delete(s.controllers, id)
+			}
 		}
 		s.mu.Unlock()
 	}()
