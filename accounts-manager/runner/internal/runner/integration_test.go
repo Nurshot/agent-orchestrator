@@ -36,6 +36,7 @@ func TestRunnerStreamsThroughFakeOpenAIProviderWithoutLeakingSecrets(t *testing.
 	const (
 		controlKey    = "control-secret-do-not-log"
 		clientKey     = "client-secret-do-not-log"
+		managementKey = "management-secret-do-not-log"
 		providerKey   = "provider-secret-do-not-log"
 		requestSecret = "request-body-secret-do-not-log"
 	)
@@ -71,6 +72,7 @@ func TestRunnerStreamsThroughFakeOpenAIProviderWithoutLeakingSecrets(t *testing.
 		t.Fatal(err)
 	}
 	writePrivateFile(t, filepath.Join(stateDir, "control.key"), controlKey+"\n")
+	writePrivateFile(t, filepath.Join(stateDir, "management.key"), managementKey+"\n")
 	config := fmt.Sprintf(`host: 127.0.0.1
 port: %d
 auth-dir: %s
@@ -170,10 +172,126 @@ openai-compatibility:
 	}
 
 	combinedPublicOutput := strings.Join([]string{string(runtimeBytes), string(identityBody), logs.String()}, "\n")
-	for _, secret := range []string{controlKey, clientKey, providerKey, requestSecret} {
+	for _, secret := range []string{controlKey, clientKey, managementKey, providerKey, requestSecret} {
 		if strings.Contains(combinedPublicOutput, secret) {
 			t.Fatalf("runner exposed secret %q", secret)
 		}
+	}
+}
+
+func TestServeRequiresManagementKeyForManagementAPI(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping runner integration in short mode")
+	}
+
+	const (
+		controlKey    = "management-test-control"
+		clientKey     = "management-test-client"
+		managementKey = "management-test-secret"
+	)
+	runnerPort := reservePort(t)
+	stateDir := t.TempDir()
+	chmodPrivateDir(t, stateDir)
+	authDir := filepath.Join(stateDir, "auth")
+	if err := os.Mkdir(authDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writePrivateFile(t, filepath.Join(stateDir, "control.key"), controlKey+"\n")
+	writePrivateFile(t, filepath.Join(stateDir, "management.key"), managementKey+"\n")
+	config := fmt.Sprintf(`host: 127.0.0.1
+port: %d
+auth-dir: %s
+api-keys:
+  - %s
+request-log: false
+logging-to-file: false
+usage-statistics-enabled: false
+remote-management:
+  allow-remote: false
+  secret-key: ''
+  disable-control-panel: true
+  disable-auto-update-panel: true
+plugins:
+  enabled: false
+pprof:
+  enable: false
+discovery:
+  enabled: false
+routing:
+  strategy: round-robin
+`, runnerPort, authDir, clientKey)
+	writePrivateFile(t, filepath.Join(stateDir, "config.yaml"), config)
+
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	logs := &lockedBuffer{}
+	command := exec.Command(executable, "-test.run=^TestRunnerHelperProcess$")
+	command.Env = append(os.Environ(), runnerHelperEnvironment+"=1", "AO_ACCOUNTS_MANAGER_TEST_STATE="+stateDir, "GIN_MODE=release")
+	command.Stdout = logs
+	command.Stderr = logs
+	if err = command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = command.Process.Kill()
+		_ = command.Wait()
+	}()
+
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", runnerPort)
+	waitForRunnerHealth(t, baseURL)
+	managementURL := baseURL + "/v0/management/routing/strategy"
+
+	for _, tt := range []struct {
+		name  string
+		token string
+		want  int
+	}{
+		{name: "no token", want: http.StatusUnauthorized},
+		{name: "data plane key", token: clientKey, want: http.StatusUnauthorized},
+		{name: "management key", token: managementKey, want: http.StatusOK},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			request, requestErr := http.NewRequest(http.MethodGet, managementURL, nil)
+			if requestErr != nil {
+				t.Fatal(requestErr)
+			}
+			if tt.token != "" {
+				request.Header.Set("Authorization", "Bearer "+tt.token)
+			}
+			response, requestErr := http.DefaultClient.Do(request)
+			if requestErr != nil {
+				t.Fatal(requestErr)
+			}
+			defer response.Body.Close()
+			if response.StatusCode != tt.want {
+				t.Fatalf("management status = %d, want %d", response.StatusCode, tt.want)
+			}
+			if tt.want == http.StatusOK {
+				var payload struct {
+					Strategy string `json:"strategy"`
+				}
+				if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+					t.Fatal(err)
+				}
+				if payload.Strategy != "round-robin" && payload.Strategy != "weighted-round-robin" && payload.Strategy != "fill-first" {
+					t.Fatalf("unexpected routing strategy %q", payload.Strategy)
+				}
+			}
+		})
+	}
+
+	response, err := http.Get(baseURL + "/management.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = response.Body.Close()
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("management panel status = %d, want %d", response.StatusCode, http.StatusNotFound)
+	}
+	if logsText := logs.String(); strings.Contains(logsText, controlKey) || strings.Contains(logsText, clientKey) || strings.Contains(logsText, managementKey) {
+		t.Fatal("runner logs exposed a private key")
 	}
 }
 

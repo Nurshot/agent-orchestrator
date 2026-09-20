@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"time"
@@ -46,9 +47,22 @@ func Serve(ctx context.Context, stateDir string) error {
 		EngineVersion: UpstreamVersion,
 	}, state.ControlKey, lease)
 
+	previousPassword, passwordWasSet := os.LookupEnv("MANAGEMENT_PASSWORD")
+	if err = os.Setenv("MANAGEMENT_PASSWORD", state.ManagementKey); err != nil {
+		return fmt.Errorf("configure private management access: %w", err)
+	}
+	defer func() {
+		if passwordWasSet {
+			_ = os.Setenv("MANAGEMENT_PASSWORD", previousPassword)
+		} else {
+			_ = os.Unsetenv("MANAGEMENT_PASSWORD")
+		}
+	}()
+
 	service, err := cliproxy.NewBuilder().
 		WithConfig(state.Config).
 		WithConfigPath(state.ConfigPath).
+		WithLocalManagementPassword(state.ManagementKey).
 		WithServerOptions(sdkapi.WithRouterConfigurator(func(router *gin.Engine, _ *handlers.BaseAPIHandler, _ *sdkconfig.Config) {
 			router.GET("/ao/internal/identity", gin.WrapH(control))
 			router.POST("/ao/internal/lease", gin.WrapH(control))
