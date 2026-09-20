@@ -10,6 +10,7 @@ from lib.deployment import (
     NODEOPS_SECRET_ENV,
     WORKER_SECRET_ENV,
     build_task_definition,
+    resolve_sandbox_providers,
     secret_environment,
     validate_hosted_settings,
     validate_service,
@@ -421,6 +422,50 @@ class TaskDefinitionTests(unittest.TestCase):
                 control_image=CONTROL_IMAGE,
                 worker_image=WORKER_IMAGE,
             )
+
+    def test_validate_backward_compat_without_providers_env(self):
+        # An older task-def rendered before AO_CLOUD_SANDBOX_PROVIDERS existed
+        # carries only AO_CLOUD_SANDBOX_PROVIDER. validate_task_artifacts must
+        # fall back to that single provider and still accept the task (the
+        # first-promote-after-upgrade case).
+        payload = build_task_definition(
+            task_source("staging"),
+            family="ao-cloud-staging-api",
+            container_name="control-plane",
+            image=CONTROL_IMAGE,
+            worker_image=WORKER_IMAGE,
+            release="abc123",
+            environment="staging",
+            log_group="/ao-cloud/staging/control-plane",
+            region="eu-north-1",
+            sandbox_provider="nodeops",
+            sandbox_providers=["nodeops"],
+            secret_overrides=hosted_secret_overrides("staging"),
+        )
+        rendered = payload["containerDefinitions"][0]
+        rendered["environment"] = [
+            item
+            for item in rendered["environment"]
+            if item["name"] != "AO_CLOUD_SANDBOX_PROVIDERS"
+        ]
+        # Must not raise: the fallback derives [AO_CLOUD_SANDBOX_PROVIDER].
+        validate_task_artifacts(
+            {"taskDefinition": payload, "tags": payload["tags"]},
+            container_name="control-plane",
+            control_image=CONTROL_IMAGE,
+            worker_image=WORKER_IMAGE,
+        )
+
+    def test_resolve_sandbox_providers_dedups_and_defaults(self):
+        self.assertEqual(resolve_sandbox_providers("nodeops", None), ["nodeops"])
+        self.assertEqual(
+            resolve_sandbox_providers("nodeops", ["nodeops", "coder", "nodeops"]),
+            ["nodeops", "coder"],
+        )
+        with self.assertRaises(ValueError):
+            resolve_sandbox_providers("nodeops", ["coder"])
+        with self.assertRaises(ValueError):
+            resolve_sandbox_providers("nodeops", ["nodeops", "bogus"])
 
 
 class HostedSettingsTests(unittest.TestCase):
