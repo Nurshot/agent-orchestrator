@@ -516,6 +516,10 @@ func (c *commandContext) runHook(ctx context.Context, agent, event string) error
 	switch domain.AgentHarness(agent) {
 	case domain.HarnessClaudeCode, domain.HarnessCodex, domain.HarnessContinue:
 		conversation = hookConversationFacts(domain.AgentHarness(agent), event, payload)
+	case domain.HarnessOpenCode, domain.HarnessGrok, domain.HarnessKilocode,
+		domain.HarnessOMP, domain.HarnessPi,
+		domain.HarnessAmp, domain.HarnessPrimeAgent:
+		conversation = hookSemanticAcceptanceFacts(event, payload)
 	}
 	path := "sessions/" + url.PathEscape(sessionID) + "/activity"
 	req := setActivityAPIRequest{
@@ -552,6 +556,29 @@ func (c *commandContext) runHook(ctx context.Context, agent, event string) error
 		c.reportHookFailure(agent, event, sessionID, err)
 	}
 	return nil
+}
+
+// hookSemanticAcceptanceFacts extracts only AO's opaque delivery identity.
+// OpenCode and Grok expose accepted prompt text, but ordinary prompt content is
+// not part of their durable conversation-checkpoint contract.
+func hookSemanticAcceptanceFacts(event string, payload []byte) hookConversationSnapshot {
+	if event != "user-prompt-submit" {
+		return hookConversationSnapshot{}
+	}
+	var p struct {
+		Prompt string `json:"prompt"`
+	}
+	if json.Unmarshal(payload, &p) != nil {
+		return hookConversationSnapshot{}
+	}
+	id, ok := domain.ReportDeliveryID(p.Prompt)
+	if !ok {
+		return hookConversationSnapshot{}
+	}
+	return hookConversationSnapshot{
+		CheckpointOrigin: domain.ConversationCheckpointOriginCoordination,
+		CoordinationID:   id,
+	}
 }
 
 func (c *commandContext) postActivityHook(ctx context.Context, path string, req setActivityAPIRequest) error {
