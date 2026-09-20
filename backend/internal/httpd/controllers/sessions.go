@@ -669,8 +669,8 @@ func (c *SessionsController) getPRFileRevision(w http.ResponseWriter, r *http.Re
 		return
 	}
 	query := r.URL.Query()
-	path := strings.TrimSpace(query.Get("path"))
-	if path == "" {
+	relPath := strings.TrimSpace(query.Get("path"))
+	if relPath == "" {
 		envelope.WriteAPIError(w, r, http.StatusBadRequest, "bad_request", "WORKSPACE_PATH_REQUIRED", "path is required", nil)
 		return
 	}
@@ -678,7 +678,7 @@ func (c *SessionsController) getPRFileRevision(w http.ResponseWriter, r *http.Re
 	if side == "" {
 		side = sessionsvc.WorkspaceBlobAfter
 	}
-	revision, err := c.Svc.GetPRFileRevision(r.Context(), sessionID(r), number, strings.TrimSpace(query.Get("sourceUrl")), path, side)
+	revision, err := c.Svc.GetPRFileRevision(r.Context(), sessionID(r), number, strings.TrimSpace(query.Get("sourceUrl")), relPath, side)
 	if err != nil {
 		envelope.WriteError(w, r, err)
 		return
