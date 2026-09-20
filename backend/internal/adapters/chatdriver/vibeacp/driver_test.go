@@ -12,7 +12,7 @@ import (
 	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
 )
 
-func TestPermissionPolicyNeverSelectsVibesPermanentGrant(t *testing.T) {
+func TestPermissionPolicyUsesRevocableVibeGrant(t *testing.T) {
 	session := acpsdk.PermissionOption{
 		OptionId: "allow_always", Kind: acpsdk.PermissionOptionKindAllowAlways,
 	}
@@ -22,19 +22,19 @@ func TestPermissionPolicyNeverSelectsVibesPermanentGrant(t *testing.T) {
 	once := acpsdk.PermissionOption{
 		OptionId: "allow_once", Kind: acpsdk.PermissionOptionKindAllowOnce,
 	}
-	for _, tt := range []struct {
-		options []acpsdk.PermissionOption
-		want    acpsdk.PermissionOptionId
-	}{
-		{options: []acpsdk.PermissionOption{session, permanent, once}, want: session.OptionId},
-		{options: []acpsdk.PermissionOption{permanent, session, once}, want: session.OptionId},
-		{options: []acpsdk.PermissionOption{permanent, once}, want: once.OptionId},
+	options := []acpsdk.PermissionOption{permanent, session, once}
+	for _, mode := range []ports.PermissionMode{
+		ports.PermissionModeAuto,
+		ports.PermissionModeBypassPermissions,
 	} {
-		id, handled := permissionPolicy(ports.PermissionModeAuto,
-			acpsdk.RequestPermissionRequest{Options: tt.options})
-		if !handled || id != tt.want {
-			t.Fatalf("selection = (%q, %v), want (%q, true)", id, handled, tt.want)
+		id, handled := permissionPolicy(mode, acpsdk.RequestPermissionRequest{Options: options})
+		if !handled || id != once.OptionId {
+			t.Fatalf("mode %q selection = (%q, %v), want (%q, true)", mode, id, handled, once.OptionId)
 		}
+	}
+	if id, handled := permissionPolicy(ports.PermissionModeAuto,
+		acpsdk.RequestPermissionRequest{Options: options[:2]}); handled {
+		t.Fatalf("persistent-only selection = (%q, true), want parked request", id)
 	}
 }
 

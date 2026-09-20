@@ -2,6 +2,9 @@ package kiroacp
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -10,7 +13,11 @@ import (
 )
 
 func TestConfigureSelectsWorkspaceCustomAgent(t *testing.T) {
-	args, env, err := configure(context.Background(), acpdriver.LaunchConfig{})
+	workspace := t.TempDir()
+	args, env, err := configure(context.Background(), acpdriver.LaunchConfig{
+		WorkspacePath: workspace,
+		SystemPrompt:  "Follow AO rules.",
+	})
 	if err != nil {
 		t.Fatalf("configure: %v", err)
 	}
@@ -20,5 +27,19 @@ func TestConfigureSelectsWorkspaceCustomAgent(t *testing.T) {
 	}
 	if env != nil {
 		t.Fatalf("env = %#v, want nil", env)
+	}
+	data, err := os.ReadFile(filepath.Join(workspace, ".kiro", "agents", "ao.json"))
+	if err != nil {
+		t.Fatalf("read prepared agent: %v", err)
+	}
+	var agent struct {
+		Name   string `json:"name"`
+		Prompt string `json:"prompt"`
+	}
+	if err := json.Unmarshal(data, &agent); err != nil {
+		t.Fatalf("decode prepared agent: %v", err)
+	}
+	if agent.Name != kiro.AgentName || agent.Prompt != "Follow AO rules." {
+		t.Fatalf("prepared agent = %#v", agent)
 	}
 }

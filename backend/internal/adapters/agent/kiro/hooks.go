@@ -119,6 +119,34 @@ func (p *Plugin) GetAgentHooks(ctx context.Context, cfg ports.WorkspaceHookConfi
 	return nil
 }
 
+// PrepareACPAgent installs the workspace-local custom agent selected by
+// `kiro-cli acp --agent ao`. Chat sessions call this immediately before launch;
+// unlike TUI sessions, they do not run GetAgentHooks during workspace setup.
+func PrepareACPAgent(ctx context.Context, workspacePath, systemPrompt string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if strings.TrimSpace(workspacePath) == "" {
+		return errors.New("kiro: workspace path is required for ACP agent")
+	}
+
+	agentPath := kiroAgentPath(workspacePath)
+	topLevel, rawHooks, err := readKiroHooks(agentPath)
+	if err != nil {
+		return fmt.Errorf("kiro: prepare ACP agent: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := writeKiroHooks(agentPath, topLevel, rawHooks, systemPrompt, "", ports.AgentConfig{}); err != nil {
+		return fmt.Errorf("kiro: prepare ACP agent: %w", err)
+	}
+	if err := hookutil.EnsureWorkspaceGitignore(filepath.Dir(agentPath), kiroAgentFileName); err != nil {
+		return fmt.Errorf("kiro: gitignore ACP agent: %w", err)
+	}
+	return ctx.Err()
+}
+
 // UninstallHooks removes AO's Kiro hooks from the workspace-local
 // .kiro/agents/ao.json file, leaving user-defined hooks untouched. A missing
 // file is a no-op.

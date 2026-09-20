@@ -40,7 +40,8 @@ func (a acpAdapter) ResolveBinary(ctx context.Context) (string, error) {
 //
 // Vibe resolves approvals through ACP permission requests, so AO's stronger
 // modes are answered per request rather than by a launch flag; a mid-session
-// approval change takes effect on the next tool call.
+// approval change takes effect on the next tool call. Automatic modes select
+// allow_once so Vibe never caches a grant that survives a later downgrade.
 //
 // accept-edits is deliberately not resolved here. Verified against Vibe
 // 2.25.5: its request_permission sends a ToolCallUpdate carrying only a
@@ -48,18 +49,18 @@ func (a acpAdapter) ResolveBinary(ctx context.Context) (string, error) {
 // edit from a shell command. accept-edits therefore prompts like default,
 // rather than auto-approving a call that might not be an edit. auto and bypass
 // are unaffected: Vibe always offers allow_once, allow_always,
-// allow_always_permanent, and reject_once, and AO explicitly selects the
-// session-scoped allow_always id rather than the permanent one.
+// allow_always_permanent, and reject_once, and AO selects allow_once so every
+// call is re-evaluated against the current AO mode.
 func New(plugin vibePlugin, log *slog.Logger) ports.ChatDriver {
 	return nativeacp.New(acpAdapter{plugin}, nativeacp.Config{
 		Harness:          domain.HarnessVibe,
 		Configure:        configure,
+		SessionOptions:   acpdriver.ModelOption,
 		PermissionPolicy: permissionPolicy,
 	}, log)
 }
 
-var standardPermissionPolicy = acpdriver.StandardPermissionPolicy(
-	ports.PermissionModeAuto, ports.PermissionModeBypassPermissions)
+var standardPermissionPolicy = acpdriver.StandardPermissionPolicy()
 
 func permissionPolicy(
 	mode ports.PermissionMode,
@@ -67,11 +68,6 @@ func permissionPolicy(
 ) (acpsdk.PermissionOptionId, bool) {
 	switch ports.NormalizePermissionMode(mode) {
 	case ports.PermissionModeAuto, ports.PermissionModeBypassPermissions:
-		for _, option := range params.Options {
-			if option.Kind == acpsdk.PermissionOptionKindAllowAlways && option.OptionId == "allow_always" {
-				return option.OptionId, true
-			}
-		}
 		return acpdriver.PermissionOption(params.Options, acpsdk.PermissionOptionKindAllowOnce)
 	default:
 		return standardPermissionPolicy(mode, params)

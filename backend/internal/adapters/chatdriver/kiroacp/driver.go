@@ -20,9 +20,9 @@ import (
 
 // New launches `kiro-cli acp --agent ao` from the exact binary resolved by the
 // existing Kiro agent plugin. The custom agent carries AO's standing
-// instructions (installed during workspace preparation) and Kiro owns models,
-// steering, and auth. Kiro's ACP server advertises session/set_model and
-// session/load, so models and native history are available to Chat.
+// instructions, and Kiro owns models, steering, and auth. Kiro's ACP server
+// advertises session/set_model and session/load, so models and native history
+// are available to Chat.
 //
 // Kiro's mode is not fixed at launch: configure passes no trust flag and the
 // permission policy runs per request against the conversation's current mode,
@@ -37,11 +37,12 @@ func New(plugin nativeacp.Plugin, log *slog.Logger) ports.ChatDriver {
 	}, log)
 }
 
-// configure builds the `kiro-cli acp` argv. AO selects the workspace-local
-// custom agent by name; its system prompt is written by the Kiro agent plugin's
-// GetAgentHooks, so configure forwards no separate system prompt. Kiro's
+// configure prepares and selects the workspace-local custom agent. Kiro's
 // tool-trust flags are documented for `chat` rather than `acp`, so AO resolves
 // permissions through ACP requests instead of guessing a launch flag.
-func configure(_ context.Context, _ acpdriver.LaunchConfig) ([]string, map[string]string, error) {
+func configure(ctx context.Context, cfg acpdriver.LaunchConfig) ([]string, map[string]string, error) {
+	if err := kiro.PrepareACPAgent(ctx, cfg.WorkspacePath, cfg.SystemPrompt); err != nil {
+		return nil, nil, err
+	}
 	return []string{"acp", "--agent", kiro.AgentName}, nil, nil
 }
