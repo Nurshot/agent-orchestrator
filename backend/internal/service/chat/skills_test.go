@@ -2,6 +2,7 @@ package chat_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
@@ -86,8 +87,24 @@ func TestSkillsSurviveARestartThroughTheStoredCatalog(t *testing.T) {
 	h := newHarnessWithConversation(t, conv)
 	ctx := context.Background()
 
-	conv.emit(ports.ChatEvent{Kind: ports.ChatEventSkills, Skills: conv.skills})
+	conv.emit(ports.ChatEvent{Kind: ports.ChatEventSkills, ProviderEventID: "skills-1", Skills: conv.skills})
 	awaitStoredSkills(t, h, 1)
+	archived, err := h.st.ProviderEventsSince(ctx, h.ctrl.ConversationID(), 0, 10)
+	if err != nil {
+		t.Fatalf("ProviderEventsSince: %v", err)
+	}
+	if len(archived) != 1 {
+		t.Fatalf("archived events = %d, want 1", len(archived))
+	}
+	var payload struct {
+		Skills []ports.ChatSkill `json:"skills"`
+	}
+	if err := json.Unmarshal([]byte(archived[0].PayloadJson), &payload); err != nil {
+		t.Fatalf("decode archived skills: %v", err)
+	}
+	if len(payload.Skills) != 1 || payload.Skills[0] != conv.skills[0] {
+		t.Fatalf("archived skills = %+v, want %+v", payload.Skills, conv.skills)
+	}
 
 	// The provider now answers empty, which is what a reattached ACP conversation
 	// does for the whole life of the controller.

@@ -2576,6 +2576,7 @@ func (c *Controller) projectEvent(ctx context.Context, event ports.ChatEvent) (b
 		"account":                event.Account,
 		"threadState":            event.ThreadState,
 		"mcpServers":             event.MCPServers,
+		"skills":                 event.Skills,
 	}
 	if c.harness == domain.HarnessCodex {
 		// Codex account identity and subscription capacity are daemon-memory
