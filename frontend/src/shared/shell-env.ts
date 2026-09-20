@@ -144,10 +144,15 @@ export function parseEnvBlock(stdout: string): Record<string, string> {
 	return out;
 }
 
-// Prefer $SHELL (the user's login shell); under launchd it may be absent, so
-// fall back to /bin/zsh.
-export function resolveShellPath(env: Record<string, string | undefined>): string {
+// Prefer $SHELL, except for launchd's generic /bin/sh when macOS supplied the
+// account's configured login shell. An actual /bin/sh account remains /bin/sh.
+export function resolveShellPath(
+	env: Record<string, string | undefined>,
+	configuredLoginShell?: string,
+): string {
 	const shell = env.SHELL?.trim();
+	const configured = configuredLoginShell?.trim();
+	if (shell === "/bin/sh" && configured && configured !== "/bin/sh") return configured;
 	return shell && shell.length > 0 ? shell : "/bin/zsh";
 }
 
@@ -187,6 +192,9 @@ export function buildDaemonEnv(
 ): NodeJS.ProcessEnv {
 	const merged: NodeJS.ProcessEnv = { TERM: "xterm-256color", ...(shellEnv ?? {}), ...processEnv };
 	merged.PATH = withFallbackPath(shellEnv?.PATH ?? processEnv.PATH);
+	// Electron may carry launchd's generic SHELL=/bin/sh. The probe records the
+	// executable it actually ran, which must win for daemon children.
+	if (shellEnv?.SHELL) merged.SHELL = shellEnv.SHELL;
 	merged.TERM = normalizeTerm(merged.TERM);
 	return { ...merged, ...overrides };
 }
@@ -222,6 +230,9 @@ export async function resolveShellEnvWithSpec(spec: ShellEnvProbe, run: ShellRun
 export async function resolveShellEnv(
 	env: Record<string, string | undefined>,
 	run: ShellRunner,
+	configuredLoginShell?: string,
 ): Promise<Record<string, string> | null> {
-	return resolveShellEnvWithSpec({ shellPath: resolveShellPath(env), args: shellEnvArgs() }, run);
+	const shellPath = resolveShellPath(env, configuredLoginShell);
+	const resolved = await resolveShellEnvWithSpec({ shellPath, args: shellEnvArgs() }, run);
+	return resolved ? { ...resolved, SHELL: shellPath } : null;
 }

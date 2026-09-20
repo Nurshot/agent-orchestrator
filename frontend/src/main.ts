@@ -1078,7 +1078,8 @@ function ensureShellEnv(): Promise<void> {
 			});
 			return shellEnvPromise;
 		}
-		shellEnvPromise = resolveShellEnv(process.env, runLoginShell).then((resolved) => {
+		const configuredLoginShell = process.platform === "darwin" ? (os.userInfo().shell ?? undefined) : undefined;
+		shellEnvPromise = resolveShellEnv(process.env, runLoginShell, configuredLoginShell).then((resolved) => {
 			cachedShellEnv = resolved;
 			if (!resolved) {
 				console.error("AO: could not read the login-shell environment; falling back to a static PATH floor.");
