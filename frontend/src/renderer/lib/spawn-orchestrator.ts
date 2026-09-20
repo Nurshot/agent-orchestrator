@@ -1,4 +1,6 @@
 import { apiClient, apiErrorCode, apiErrorDetails, apiErrorMessage, apiErrorRequestId } from "./api-client";
+import { appI18n } from "../i18n";
+import { aoBridge } from "./bridge";
 import type { OrchestratorSpawnSource } from "./orchestrator-spawn-sources";
 import { captureRendererEvent } from "./telemetry";
 import type { SessionMode } from "../types/conversation";
@@ -101,10 +103,19 @@ export async function spawnOrchestrator(
  * working orchestrator and that is this one, so it resolves rather than throws.
  */
 export async function resumeOrchestrator(sessionId: string): Promise<void> {
-	const { error, response } = await apiClient.POST("/api/v1/sessions/{sessionId}/resume-agent", {
+	const { data, error, response } = await apiClient.POST("/api/v1/sessions/{sessionId}/resume-agent", {
 		params: { path: { sessionId } },
 	});
 	if (error && apiErrorCode(error) !== "AGENT_NOT_EXITED") {
 		throw new Error(apiErrorMessage(error, `Could not resume the orchestrator (${response.status})`));
+	}
+	if (data?.resumeMode === "saved_prompt") {
+		void aoBridge.notifications
+			.show({
+				id: `resume-agent-fallback:${sessionId}:${Date.now()}`,
+				title: appI18n.t("inspector.startedFromPrompt"),
+				body: appI18n.t("inspector.resumeFallbackBody"),
+			})
+			.catch((err) => console.warn("Unable to show resume fallback notification", err));
 	}
 }

@@ -1305,12 +1305,11 @@ describe("SessionInspector completion controls", () => {
 });
 
 describe("SessionInspector Activity section", () => {
-  const activitySection = () =>
-    within(
-      screen
-        .getByText("Activity")
-        .closest("[data-testid='inspector-section']") as HTMLElement,
-    );
+  const activitySectionElement = () =>
+    screen
+      .getByText("Activity")
+      .closest("[data-testid='inspector-section']") as HTMLElement;
+  const activitySection = () => within(activitySectionElement());
 
   it("offers a managed resume only for an exited, nonterminated agent", async () => {
     renderWithQuery(
@@ -1348,6 +1347,9 @@ describe("SessionInspector Activity section", () => {
 
     expect(
       screen.queryByRole("button", { name: "Resume agent" }),
+    ).not.toBeInTheDocument();
+    expect(
+      activitySectionElement().querySelector(".mt-3.border-t.pt-3"),
     ).not.toBeInTheDocument();
 
     live.unmount();

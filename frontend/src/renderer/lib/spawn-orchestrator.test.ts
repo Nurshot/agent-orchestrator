@@ -9,6 +9,10 @@ import {
 import { apiClient } from "./api-client";
 import { captureRendererEvent } from "./telemetry";
 
+const { notificationShowMock } = vi.hoisted(() => ({
+	notificationShowMock: vi.fn(),
+}));
+
 vi.mock("./api-client", () => ({
 	apiClient: { POST: vi.fn() },
 	apiErrorCode: (error: unknown) =>
@@ -35,6 +39,10 @@ vi.mock("./api-client", () => ({
 
 vi.mock("./telemetry", () => ({
 	captureRendererEvent: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("./bridge", () => ({
+	aoBridge: { notifications: { show: notificationShowMock } },
 }));
 
 const captureMock = vi.mocked(captureRendererEvent);
@@ -197,11 +205,31 @@ describe("spawnOrchestrator", () => {
 describe("resumeOrchestrator", () => {
 	const postMock = vi.mocked(apiClient.POST);
 
+	beforeEach(() => {
+		notificationShowMock.mockReset().mockResolvedValue(undefined);
+	});
+
 	it("posts resume-agent for the session", async () => {
 		postMock.mockResolvedValue({ data: {}, error: undefined, response: { status: 200 } } as never);
 		await resumeOrchestrator("proj-1-orch");
 		expect(postMock).toHaveBeenCalledWith("/api/v1/sessions/{sessionId}/resume-agent", {
 			params: { path: { sessionId: "proj-1-orch" } },
+		});
+	});
+
+	it("warns when resume falls back to the saved prompt", async () => {
+		postMock.mockResolvedValue({
+			data: { resumeMode: "saved_prompt" },
+			error: undefined,
+			response: { status: 200 },
+		} as never);
+
+		await resumeOrchestrator("proj-1-orch");
+
+		expect(notificationShowMock).toHaveBeenCalledWith({
+			id: expect.stringMatching(/^resume-agent-fallback:proj-1-orch:/),
+			title: "Started from saved prompt",
+			body: "AO could not resume the native agent session, so it started a new conversation from the saved prompt.",
 		});
 	});
 

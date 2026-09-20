@@ -9,6 +9,10 @@ import { cn } from "../lib/utils";
 import { sessionAgentExited, type WorkspaceSession } from "../types/workspace";
 import { Button } from "./ui/button";
 
+export function canResumeAgent(session: WorkspaceSession): boolean {
+	return sessionAgentExited(session) && !session.activeAgentSwitch && !session.cloud;
+}
+
 /**
  * Relaunches an agent that exited inside a still-live session. Distinct from
  * restore, which revives a TERMINATED row: this keeps the worktree, terminal
@@ -52,7 +56,7 @@ export function ResumeAgentControl({
 	// Cloud sessions re-provision through the control plane (useRestoreSession),
 	// not this local-daemon route — the local daemon has never heard of them and
 	// would answer "Unknown session".
-	if (!sessionAgentExited(session) || session.activeAgentSwitch || session.cloud) return null;
+	if (!canResumeAgent(session)) return null;
 
 	const error = resume.error instanceof Error ? resume.error.message : null;
 	return (
