@@ -1,6 +1,7 @@
 package accountsmanager
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,10 @@ import (
 	"testing"
 	"time"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 type staticEndpointSource struct {
 	endpoint Endpoint
@@ -245,5 +250,99 @@ func TestManagementClientPropagatesCancellationAndTimeout(t *testing.T) {
 	defaultClient := NewManagementClient(source, &http.Client{})
 	if defaultClient.client.Timeout != 5*time.Second {
 		t.Fatalf("default client timeout = %s, want 5s", defaultClient.client.Timeout)
+	}
+}
+
+func TestManagementClientJSONTransportSupportsAllMethods(t *testing.T) {
+	t.Parallel()
+
+	const managementToken = "management-secret"
+	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+		method := method
+		t.Run(method, func(t *testing.T) {
+			t.Parallel()
+			transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				if req.Method != method {
+					t.Fatalf("method = %q, want %q", req.Method, method)
+				}
+				if req.Header.Get("Authorization") != "Bearer "+managementToken {
+					t.Fatal("missing management authentication")
+				}
+				if req.Header.Get("Accept") != "application/json" {
+					t.Fatal("missing JSON accept header")
+				}
+				if method != http.MethodGet && req.Header.Get("Content-Type") != "application/json" {
+					t.Fatal("missing JSON content type")
+				}
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(`{"ok":true}`)),
+					Request:    req,
+				}, nil
+			})
+			client := NewManagementClient(
+				staticEndpointSource{endpoint: Endpoint{BaseURL: "http://127.0.0.1:12345", ManagementToken: managementToken}, ready: true},
+				&http.Client{Transport: transport},
+			)
+			var got struct {
+				OK bool `json:"ok"`
+			}
+			var body any
+			if method != http.MethodGet {
+				body = map[string]string{"value": "safe"}
+			}
+			if err := client.doJSON(context.Background(), "test operation", method, "/test", body, &got); err != nil {
+				t.Fatalf("doJSON() error = %v", err)
+			}
+			if !got.OK {
+				t.Fatal("response was not decoded")
+			}
+		})
+	}
+}
+
+func TestManagementClientRejectsNonJSONAndOversizedRequest(t *testing.T) {
+	t.Parallel()
+
+	transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"text/plain"}},
+			Body:       io.NopCloser(strings.NewReader(`{"ok":true}`)),
+			Request:    req,
+		}, nil
+	})
+	client := NewManagementClient(
+		staticEndpointSource{endpoint: Endpoint{BaseURL: "http://127.0.0.1:12345", ManagementToken: "management-secret"}, ready: true},
+		&http.Client{Transport: transport},
+	)
+	var dst map[string]any
+	if err := client.doJSON(context.Background(), "test operation", http.MethodGet, "/test", nil, &dst); !errors.Is(err, ErrInvalidResponse) {
+		t.Fatalf("non-JSON response error = %v, want ErrInvalidResponse", err)
+	}
+
+	oversized := string(bytes.Repeat([]byte("x"), managementImportLimit+1))
+	if err := client.doJSON(context.Background(), "test operation", http.MethodPost, "/test", oversized, &dst); !errors.Is(err, ErrRequestTooLarge) {
+		t.Fatalf("oversized request error = %v, want ErrRequestTooLarge", err)
+	}
+}
+
+func TestManagementErrorsAreStableAndRedacted(t *testing.T) {
+	t.Parallel()
+
+	for _, err := range []error{
+		ErrUnavailable,
+		ErrUnsupportedProvider,
+		ErrCredentialNotFound,
+		ErrCredentialConflict,
+		ErrOperationUnsupported,
+		ErrOAuthBusy,
+		ErrOAuthExpired,
+		ErrInvalidResponse,
+	} {
+		if strings.Contains(err.Error(), "secret") || strings.Contains(err.Error(), "http://") {
+			t.Fatalf("unsafe typed error: %v", err)
+		}
 	}
 }
