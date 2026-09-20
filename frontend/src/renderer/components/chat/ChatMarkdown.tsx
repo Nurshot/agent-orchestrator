@@ -40,7 +40,12 @@ import { WrapText } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { canonicalLanguage } from "../../lib/code-highlight";
 import { fenceOf } from "../../lib/markdown-fence";
-import { isWebLink, isWorkspaceFileLink, openLinkInSystemBrowser } from "../../lib/external-link-policy";
+import {
+	isPotentialWorkspaceFileLink,
+	isWebLink,
+	openLinkInSystemBrowser,
+	workspaceFilePath,
+} from "../../lib/external-link-policy";
 import { isSessionLink, remarkSessionLinks } from "../../lib/session-links";
 import { AppLink } from "../AppLink";
 import { HighlightedCode } from "./HighlightedCode";
@@ -74,25 +79,40 @@ const PLUGINS = [remarkGfm, remarkSessionLinks];
  * and re-parse every message on every poll.
  */
 const StreamingProse = createContext(false);
-const OpenChatLink = createContext<{ open?: (url: string) => void; workspacePaths: string[] }>({ workspacePaths: [] });
-const OpenSessionLink = createContext<((url: string) => void) | undefined>(undefined);
+const OpenChatLink = createContext<{
+	open?: (url: string) => void;
+	openFile?: (path: string) => void;
+	openSession?: (url: string) => void;
+	workspacePaths: string[];
+}>({ workspacePaths: [] });
 
 export function ChatLinkProvider({
 	onLinkOpen,
+	onFileOpen,
 	onSessionLinkOpen,
 	workspacePaths = [],
 	children,
 }: {
 	onLinkOpen?: (url: string) => void;
+	onFileOpen?: (path: string) => void;
 	onSessionLinkOpen?: (url: string) => void;
 	workspacePaths?: string[];
 	children: ReactNode;
 }) {
 	return (
-		<OpenChatLink.Provider value={{ open: onLinkOpen, workspacePaths }}>
-			<OpenSessionLink.Provider value={onSessionLinkOpen}>{children}</OpenSessionLink.Provider>
+		<OpenChatLink.Provider value={{ open: onLinkOpen, openFile: onFileOpen, openSession: onSessionLinkOpen, workspacePaths }}>
+			{children}
 		</OpenChatLink.Provider>
 	);
+}
+
+function chatUrlTransform(url: string, key: string): string | undefined {
+	// react-markdown correctly strips unknown schemes, but a Windows absolute
+	// path resembles one (C:). Preserve only hrefs that look like local paths;
+	// the click still goes through the workspace-confined preview endpoint.
+	if (key === "href" && isPotentialWorkspaceFileLink(url)) return url;
+	if (key === "href" && isSessionLink(url)) return url;
+	return defaultUrlTransform(url);
 }
 
 export const ChatMarkdown = memo(function ChatMarkdown({
@@ -218,19 +238,22 @@ function compactEmoji(children: ReactNode): ReactNode {
 }
 
 function MarkdownLink({ href, children }: { href?: string; children?: ReactNode }) {
-	const { open: onLinkOpen, workspacePaths } = useContext(OpenChatLink);
-	const onSessionLinkOpen = useContext(OpenSessionLink);
+	const { open: onLinkOpen, openFile: onFileOpen, openSession: onSessionLinkOpen, workspacePaths } = useContext(OpenChatLink);
+	const filePath = href ? workspaceFilePath(href, workspacePaths) : undefined;
 	const sessionLink = Boolean(href && isSessionLink(href));
+	const browserLink = href ? isWebLink(href) || !!filePath || isPotentialWorkspaceFileLink(href) || sessionLink : false;
 	return (
 		<AppLink
 			href={href}
 			onBrowserOpen={onLinkOpen}
-			inAppLink={href ? (url) => isWebLink(url) || isWorkspaceFileLink(url, workspacePaths) || isSessionLink(url) : undefined}
+			inAppLink={href ? () => browserLink : undefined}
+			filePath={filePath}
+			onFileOpen={onFileOpen}
 			onClick={(event) => {
 				if (href && sessionLink) {
 					event.preventDefault();
 					onSessionLinkOpen?.(href);
-				} else if (href && !isWebLink(href) && !isWorkspaceFileLink(href, workspacePaths)) {
+				} else if (href && !browserLink) {
 					event.preventDefault();
 					void openLinkInSystemBrowser(href);
 				}
@@ -242,10 +265,6 @@ function MarkdownLink({ href, children }: { href?: string; children?: ReactNode 
 			{children}
 		</AppLink>
 	);
-}
-
-function chatUrlTransform(url: string): string {
-	return isSessionLink(url) ? url : defaultUrlTransform(url);
 }
 
 /**
