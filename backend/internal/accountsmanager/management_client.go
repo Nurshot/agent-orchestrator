@@ -31,6 +31,7 @@ var (
 	ErrUnsupportedProvider  = errors.New("accounts manager provider is unsupported")
 	ErrCredentialNotFound   = errors.New("accounts manager credential was not found")
 	ErrCredentialConflict   = errors.New("accounts manager credential is ambiguous or already exists")
+	ErrInvalidCredential    = errors.New("accounts manager credential is invalid")
 	ErrOperationUnsupported = errors.New("accounts manager operation is unsupported")
 	ErrOAuthBusy            = errors.New("accounts manager OAuth login is already in progress")
 	ErrOAuthExpired         = errors.New("accounts manager OAuth login expired")
