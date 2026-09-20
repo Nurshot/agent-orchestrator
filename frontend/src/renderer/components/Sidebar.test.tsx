@@ -734,7 +734,7 @@ describe("Sidebar", () => {
 			workspaces: [
 				{
 					id: STANDALONE_WORKSPACE_ID,
-					name: "Ad hoc agents",
+					name: "Scratchpad",
 					kind: STANDALONE_PROJECT_KIND,
 					path: "",
 					sessions: [],
@@ -743,7 +743,7 @@ describe("Sidebar", () => {
 		});
 		const before = useUiStore.getState().newTaskRequest?.nonce ?? 0;
 
-		expect(screen.queryByLabelText("Project actions for Ad hoc agents")).not.toBeInTheDocument();
+		expect(screen.queryByLabelText("Project actions for Scratchpad")).not.toBeInTheDocument();
 		await user.click(screen.getByRole("button", { name: "Open a new agent" }));
 
 		const request = useUiStore.getState().newTaskRequest;
@@ -1183,6 +1183,7 @@ describe("Sidebar", () => {
 			"Aider",
 			"Devin",
 			"Goose",
+			"Manage agents…",
 		]);
 		await user.keyboard("{Escape}");
 
@@ -1604,7 +1605,7 @@ describe("Sidebar", () => {
 		expect(await screen.findByRole("menuitem", { name: /settings/i })).toBeInTheDocument();
 	});
 
-	it("shows needs-auth agents as unavailable while keeping authorized agents selectable", async () => {
+	it("hides unavailable agents while keeping ready agents selectable", async () => {
 		const user = userEvent.setup();
 		const onCreateProject = vi.fn().mockResolvedValue(undefined) as CreateProjectHandler;
 		window.ao!.app.chooseDirectory = vi.fn().mockResolvedValue("/repo/new-project");
@@ -1628,11 +1629,9 @@ describe("Sidebar", () => {
 		const options = await screen.findAllByRole("option");
 		expect(options.map((option) => option.textContent)).toEqual([
 			"Claude Code",
-			"CursorNeeds auth",
-			"AiderNeeds install",
+			"Manage agents…",
 		]);
-		expect(options[1]).toHaveAttribute("aria-disabled", "true");
-		expect(options[2]).toHaveAttribute("aria-disabled", "true");
+		expect(options[1]).not.toHaveAttribute("aria-disabled", "true");
 		await user.keyboard("{Escape}");
 
 		await user.click(screen.getByRole("button", { name: "Create and start" }));
@@ -2479,7 +2478,7 @@ describe("Sidebar", () => {
 				{ ...workspace, id: "bravo", name: "Bravo" },
 				{
 					id: STANDALONE_WORKSPACE_ID,
-					name: "Ad hoc agents",
+					name: "Scratchpad",
 					kind: STANDALONE_PROJECT_KIND,
 					path: "",
 					sessions: [],
@@ -2493,20 +2492,20 @@ describe("Sidebar", () => {
 		fireDrag("dragStart", alphaRow, {});
 		fireDrag("dragOver", standaloneTarget, { clientY: 40 });
 		fireDrag("drop", standaloneTarget, {});
-		expect(labels()).toEqual(["Alpha", "Bravo", "Ad hoc agents"]);
+		expect(labels()).toEqual(["Alpha", "Bravo", "Scratchpad"]);
 
 		const standaloneRow = document.querySelector(`[data-project-drag-row][data-project-id="${STANDALONE_WORKSPACE_ID}"]`)!;
 		const alphaTarget = document.querySelector('li[data-project-drop-target][data-project-id="alpha"]')!;
 		fireDrag("dragStart", standaloneRow, {});
 		fireDrag("dragOver", alphaTarget, { clientY: 0 });
 		fireDrag("drop", alphaTarget, {});
-		expect(labels()).toEqual(["Alpha", "Bravo", "Ad hoc agents"]);
+		expect(labels()).toEqual(["Alpha", "Bravo", "Scratchpad"]);
 
 		const bravoRow = document.querySelector('[data-project-drag-row][data-project-id="bravo"]')!;
 		fireDrag("dragStart", bravoRow, {});
 		fireDrag("dragOver", alphaTarget, { clientY: 0 });
 		fireDrag("drop", alphaTarget, {});
-		expect(labels()).toEqual(["Bravo", "Alpha", "Ad hoc agents"]);
+		expect(labels()).toEqual(["Bravo", "Alpha", "Scratchpad"]);
 	});
 
 	it("commits a session drop within its project", () => {

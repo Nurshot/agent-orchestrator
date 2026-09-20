@@ -109,10 +109,13 @@ func (c *conversation) drainAndFinishReplay(ctx context.Context) error {
 // projector deduplicates those identities when importing a settled snapshot.
 func (c *refreshableConversation) RefreshHistory(ctx context.Context) ([]ports.ChatEvent, error) {
 	if _, err := c.loadHistory(ctx); err != nil {
+		// When AO's own context ended, the SDK reports that as a synthetic
+		// -32603 carrying the context error text. That is AO's deadline, not a
+		// provider verdict, so it must not be classified as a provider failure.
 		if contextErr := ctx.Err(); contextErr != nil {
 			return nil, fmt.Errorf("refresh ACP session history: %w: %w", contextErr, err)
 		}
-		return nil, normalizeACPError("refresh ACP session history", err)
+		return nil, normalizeACPLoadError("refresh ACP session history", err)
 	}
 	return c.ReadHistory(ctx)
 }
