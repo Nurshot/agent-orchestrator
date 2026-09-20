@@ -152,7 +152,7 @@ export function resolveShellPath(
 ): string {
 	const shell = env.SHELL?.trim();
 	const configured = configuredLoginShell?.trim();
-	if (shell === "/bin/sh" && configured && configured !== "/bin/sh") return configured;
+	if ((!shell || shell === "/bin/sh") && configured) return configured;
 	return shell && shell.length > 0 ? shell : "/bin/zsh";
 }
 

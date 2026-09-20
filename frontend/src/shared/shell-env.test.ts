@@ -147,6 +147,10 @@ describe("resolveShellPath", () => {
 		expect(resolveShellPath({ SHELL: "/bin/sh" }, "/bin/fish")).toBe("/bin/fish");
 	});
 
+	it("uses the configured macOS login shell when launchd leaves SHELL unset", () => {
+		expect(resolveShellPath({}, "/bin/bash")).toBe("/bin/bash");
+	});
+
 	it("preserves /bin/sh when it is the configured login shell", () => {
 		expect(resolveShellPath({ SHELL: "/bin/sh" }, "/bin/sh")).toBe("/bin/sh");
 	});
