@@ -19,7 +19,10 @@ vi.mock("../lib/api-client", () => ({
 	apiErrorMessage: (_error: unknown, fallback: string) => fallback,
 }));
 
-vi.mock("./CreateProjectFlow", () => ({
+// Keep the real module for its validation copy: the step is expected to report
+// the daemon's reason through importValidationMessage, not a line of its own.
+vi.mock("./CreateProjectFlow", async (importOriginal) => ({
+	...(await importOriginal<typeof import("./CreateProjectFlow")>()),
 	CloudProjectCard: () => <div data-testid="cloud-project-card" />,
 	CloudSignInPanel: () => <div data-testid="cloud-sign-in-panel" />,
 	CreateProjectFlow: () => null,
@@ -85,6 +88,32 @@ it("goes straight to the cloud project form when the account is signed in", asyn
 
 	await user.click(screen.getByRole("button", { name: "Create a cloud project" }));
 	expect(await screen.findByTestId("cloud-project-card")).toBeInTheDocument();
+});
+
+it("reports why the daemon rejected a folder", async () => {
+	apiMocks.POST.mockResolvedValue({
+		data: {
+			blockingErrors: ["BARE_REPOSITORY"],
+			isValid: false,
+			nextStep: "error",
+			root: { hasCommit: true, isRepo: true },
+		},
+	});
+	bridgeMocks.chooseDirectory.mockResolvedValue("/repo/bare");
+
+	render(
+		<OnboardingProjectSetup
+			mode="folder"
+			onModeChange={vi.fn()}
+			onCloudProjectCreated={vi.fn()}
+			onPrepared={vi.fn()}
+			preparedProject={null}
+		/>,
+	);
+
+	await userEvent.click(screen.getByRole("button", { name: "Open local folder" }));
+
+	expect(await screen.findByText("Choose a normal working checkout instead of a bare Git repository.")).toBeInTheDocument();
 });
 
 it("advances with the folder returned by the native picker", async () => {

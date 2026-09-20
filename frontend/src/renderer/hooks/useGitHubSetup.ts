@@ -38,7 +38,10 @@ export function useGitHubSetup({ poll = false }: { poll?: boolean } = {}) {
 	requirementsRef.current = gate.query.refetch;
 	// The gh install is a system install, the same one the startup gate runs, so
 	// it uses that runner rather than a second POST-and-poll of its own.
-	const installRunner = useInstallRunner(() => void requirementsRef.current());
+	const installRunner = useInstallRunner(
+		() => void requirementsRef.current(),
+		t("onboarding.installStartFailed"),
+	);
 
 	// No manual re-check on the GitHub page: it polls until both halves settle.
 	// The CLI half matters while gh is missing (an install can land at any time)

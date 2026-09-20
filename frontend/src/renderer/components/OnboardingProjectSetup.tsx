@@ -6,12 +6,25 @@ import { aoBridge } from "../lib/bridge";
 import { useCloudGate } from "../hooks/useCloudGate";
 import {
 	CreateProjectFlow,
+	importValidationMessage,
 	type PreparedProjectInput,
 } from "./CreateProjectFlow";
 import { OnboardingCloudDialog } from "./OnboardingCloudDialog";
 import { SetupRow } from "./SetupList";
+import type { components } from "../../api/schema";
 
 type ProjectMode = "folder" | "git";
+type ImportValidationResult = components["schemas"]["ImportValidationResult"];
+
+/** The daemon says why it rejected a folder, and the create project flow
+ *  already turns those codes into sentences. Reuse them here so onboarding
+ *  reports the same reason the rest of the app does, rather than a shrug. */
+function folderRejectionMessage(result: ImportValidationResult): string {
+	if (result.nextStep === "choose_import_kind") {
+		return "That folder holds more than one repository. Open a single repository, or add the folder as a workspace from the board.";
+	}
+	return importValidationMessage(result);
+}
 
 export function OnboardingProjectSetup({
 	mode,
@@ -58,9 +71,9 @@ export function OnboardingProjectSetup({
 					const { data, error } = await apiClient.POST("/api/v1/imports/validate", {
 						body: { importKind: "project", path },
 					});
-					if (error || !data) throw new Error(apiErrorMessage(error, "Could not validate this folder."));
+					if (error || !data) throw new Error(apiErrorMessage(error, "AO could not check that folder. Try again, or pick another one."));
 					if (!data.isValid || data.nextStep === "error" || data.nextStep === "choose_import_kind") {
-						throw new Error("This folder cannot be used as a project yet.");
+						throw new Error(folderRejectionMessage(data));
 					}
 					let defaultBranch: string | undefined;
 					try {
@@ -78,7 +91,7 @@ export function OnboardingProjectSetup({
 								: null,
 					});
 				} catch (error) {
-					setFolderError(error instanceof Error ? error.message : "Could not prepare this folder.");
+					setFolderError(error instanceof Error ? error.message : "AO could not use that folder. Pick another one.");
 				} finally {
 					setIsSelectingFolder(false);
 				}

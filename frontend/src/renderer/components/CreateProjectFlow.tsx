@@ -1050,7 +1050,7 @@ async function validateImportFolder(path: string, importKind: "project" | "works
 	return data;
 }
 
-function importValidationMessage(result: ImportValidationResult): string {
+export function importValidationMessage(result: ImportValidationResult): string {
 	if (result.blockingErrors.length === 0) return "This folder cannot be imported yet.";
 	return result.blockingErrors.map(importBlockingErrorLabel).join(" ");
 }
