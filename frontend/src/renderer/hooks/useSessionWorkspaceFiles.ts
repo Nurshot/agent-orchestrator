@@ -44,7 +44,6 @@ export type WorkspaceFileSearchResponse = components["schemas"]["WorkspaceFileSe
 export type FilesSource = { kind: "workspace" } | { kind: "pull_request"; number: number; url: string; label: string };
 
 export const sessionWorkspaceFilesQueryKey = (sessionId: string) => ["session-workspace-files", sessionId] as const;
-export const sessionPRFilesQueryKey = (sessionId: string, number: number) => ["session-pr-files", sessionId, number] as const;
 const WORKSPACE_FILES_DEGRADED_REFETCH_MS = 30_000;
 
 async function fetchSessionWorkspaceFiles(sessionId: string, errorMessage: string): Promise<WorkspaceFilesResponse> {
@@ -209,6 +208,31 @@ export function sessionWorkspaceFileRevisionQueryOptions({
 		queryKey: ["session-workspace-file-revision", sessionId, scope, commitSha ?? "", side, path, workspaceVersion ?? ""] as const,
 		queryFn: () => fetchWorkspaceFileRevision({ sessionId, path, scope, side, workspaceVersion, commitSha }),
 	};
+}
+
+export function sessionSourceFileRevisionQueryOptions({
+	path,
+	scope,
+	sessionId,
+	side,
+	source,
+	workspaceVersion,
+	commitSha,
+}: {
+	path: string;
+	scope: WorkspaceDiffScope;
+	sessionId: string;
+	side: "before" | "after";
+	source: FilesSource;
+	workspaceVersion?: string;
+	commitSha?: string;
+}): UseQueryOptions<WorkspaceFileRevision> {
+	return source.kind === "workspace"
+		? sessionWorkspaceFileRevisionQueryOptions({ path, scope, sessionId, side, workspaceVersion, commitSha })
+		: {
+			queryKey: ["session-source-file-revision", sessionId, "pull_request", source.url, side, path] as const,
+			queryFn: () => fetchPRFileRevision(sessionId, source.number, source.url, path, side),
+		};
 }
 
 export async function updateSessionWorkspaceFile({

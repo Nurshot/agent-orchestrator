@@ -10932,13 +10932,11 @@ export interface operations {
     };
     getSessionPRFile: {
         parameters: {
-            query?: {
-                /** @description Session-worktree-relative file path. */
-                path?: string;
-                /** @description Git-state section the file was opened from (see WorkspaceFileSections). staged diffs the index against HEAD; unstaged diffs the worktree against the index; omitted/committed/untracked diff the worktree against the compare base. */
-                section?: "committed" | "staged" | "unstaged" | "untracked";
-                /** @description Exact commit SHA to read as an immutable committed-scope snapshot. */
-                commitSha?: string;
+            query: {
+                /** @description Repository-relative file path. */
+                path: string;
+                /** @description Stable URL of the selected associated pull request. */
+                sourceUrl?: string;
             };
             header?: never;
             path: {
@@ -10992,18 +10990,10 @@ export interface operations {
     getSessionPRFileRevision: {
         parameters: {
             query: {
-                /** @description Session-worktree-relative file path. */
+                /** @description Repository-relative file path. */
                 path: string;
-                /** @description Comparison scope. Defaults to combined. */
-                scope?: "combined" | "committed" | "staged" | "unstaged" | "untracked";
                 /** @description Comparison side. Defaults to after. */
                 side?: "before" | "after";
-                /** @description Opaque workspace snapshot token used for consistency checks. */
-                workspaceVersion?: string;
-                /** @description Opaque revision token used for optimistic consistency checks. */
-                expectedRevision?: string;
-                /** @description Exact commit SHA for a committed-scope comparison. */
-                commitSha?: string;
                 /** @description Stable URL of the selected associated pull request. */
                 sourceUrl?: string;
             };
@@ -12871,8 +12861,6 @@ export interface operations {
                 expectedRevision?: string;
                 /** @description Exact commit SHA for a committed-scope comparison. */
                 commitSha?: string;
-                /** @description Stable URL of the selected associated pull request. */
-                sourceUrl?: string;
             };
             header?: never;
             path: {

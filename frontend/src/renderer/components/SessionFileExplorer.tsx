@@ -29,6 +29,8 @@ import { FileContentPane, type FileOpenOptions } from "./FileContentPane";
 import { PanelMessage, RetryButton } from "./WorkspaceDiffView";
 import { WorkspaceReviewPane } from "./diffs/WorkspaceReviewPane";
 
+const WORKSPACE_SOURCE: FilesSource = { kind: "workspace" };
+
 type SessionFileExplorerProps = {
 	sessionId: string;
 	isMaximized?: boolean;
@@ -53,15 +55,16 @@ export function SessionFileExplorer({
 	const [internalSplit, setInternalSplit] = useState(() => window.localStorage.getItem("ao.files.diffStyle") === "split");
 	const split = controlledSplit ?? internalSplit;
 	const [selectedPath, setSelectedPath] = useState<string | null>(null);
-	const [source, setSource] = useState<FilesSource>({ kind: "workspace" });
 	const [sourceNotice, setSourceNotice] = useState("");
 	const scmQuery = useSessionScmSummary(sessionId);
-	const annotation = useFileAnnotation(sessionId, source.kind === "workspace" ? "Workspace" : source.label);
 	const queryClient = useQueryClient();
 	const connectionState = useWorkspaceFileConnectionState(sessionId);
 
 	const changedOnly = useUiStore((state) => state.inspectorSessions[sessionId]?.filesChangedOnly ?? true);
+	const source = useUiStore((state) => state.inspectorSessions[sessionId]?.filesSource ?? WORKSPACE_SOURCE);
 	const setFilesChangedOnly = useUiStore((state) => state.setFilesChangedOnly);
+	const setFilesSource = useUiStore((state) => state.setFilesSource);
+	const annotation = useFileAnnotation(sessionId, source.kind === "workspace" ? "Workspace" : `${source.label} (${source.url})`);
 
 	const filesQuery = useQuery({
 		...sessionSourceFilesQueryOptions(sessionId, source, t("files.error.loadWorkspace")),
@@ -77,24 +80,23 @@ export function SessionFileExplorer({
 	useEffect(() => {
 		setSelectedPath(null);
 		setFilter("");
-		setSource({ kind: "workspace" });
 		setSourceNotice("");
 	}, [sessionId]);
 
 	useEffect(() => {
 		if (source.kind !== "pull_request" || !scmQuery.data) return;
 		if (scmQuery.data.some((pr) => pr.url === source.url)) return;
-		setSource({ kind: "workspace" });
+		setFilesSource(sessionId, WORKSPACE_SOURCE);
 		setSelectedPath(null);
 		setSourceNotice(t("files.explorer.sourceUnavailable"));
-	}, [scmQuery.data, source, t]);
+	}, [scmQuery.data, sessionId, setFilesSource, source, t]);
 
 	useEffect(() => {
 		if (source.kind !== "pull_request" || !filesQuery.isError) return;
-		setSource({ kind: "workspace" });
+		setFilesSource(sessionId, WORKSPACE_SOURCE);
 		setSelectedPath(null);
 		setSourceNotice(t("files.explorer.sourceUnavailable"));
-	}, [filesQuery.isError, source.kind, t]);
+	}, [filesQuery.isError, sessionId, setFilesSource, source.kind, t]);
 
 	useEffect(() => subscribeWorkspaceFileChanges(sessionId, queryClient), [queryClient, sessionId]);
 	useEffect(() => {
@@ -116,17 +118,16 @@ export function SessionFileExplorer({
 		setFilesChangedOnly(sessionId, next);
 	};
 	const treeSelectedPath = selectedPath;
-	const sourceValue = source.kind === "workspace" ? "workspace" : `pr:${source.number}`;
+	const sourceValue = source.kind === "workspace" ? "workspace" : source.url;
 	const selectSource = (value: string) => {
 		setSourceNotice("");
 		setSelectedPath(null);
 		if (value === "workspace") {
-			setSource({ kind: "workspace" });
+			setFilesSource(sessionId, WORKSPACE_SOURCE);
 			return;
 		}
-		const number = Number(value.slice(3));
-		const pr = scmQuery.data?.find((candidate) => candidate.number === number);
-		if (pr) setSource({ kind: "pull_request", number, url: pr.url, label: `PR #${number} · ${pr.sourceBranch || pr.title}` });
+		const pr = scmQuery.data?.find((candidate) => candidate.url === value);
+		if (pr) setFilesSource(sessionId, { kind: "pull_request", number: pr.number, url: pr.url, label: `PR #${pr.number} · ${pr.sourceBranch || pr.title}` });
 	};
 
 	return (
@@ -139,7 +140,7 @@ export function SessionFileExplorer({
 					<SelectContent>
 						<SelectItem value="workspace">{t("files.explorer.workspaceSource")}</SelectItem>
 						{scmQuery.data?.map((pr) => (
-							<SelectItem key={pr.url} value={`pr:${pr.number}`}>{`PR #${pr.number} · ${pr.sourceBranch || pr.title}`}</SelectItem>
+							<SelectItem key={pr.url} value={pr.url}>{`PR #${pr.number} · ${pr.sourceBranch || pr.title}`}</SelectItem>
 						))}
 					</SelectContent>
 				</Select>

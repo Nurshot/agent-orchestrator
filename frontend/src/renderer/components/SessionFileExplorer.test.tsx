@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -228,6 +228,36 @@ describe("SessionFileExplorer", () => {
 				},
 			}),
 		);
+	});
+
+	it("selects duplicate PR numbers by URL and preserves the source across remounts", async () => {
+		getMock.mockImplementation(async (path: string) => {
+			if (path === "/api/v1/sessions/{sessionId}/pr") {
+				return { data: { sessionId: "sess-duplicate-pr", prs: [
+					{ number: 42, url: "https://github.example/acme/app/pull/42", sourceBranch: "upstream", title: "Upstream" },
+					{ number: 42, url: "https://gitlab.example/acme/app/-/merge_requests/42", sourceBranch: "canonical", title: "Canonical" },
+				] } };
+			}
+			return { data: { sessionId: "sess-duplicate-pr", files: [], truncated: false } };
+		});
+		const first = renderWithQuery(<SessionFileExplorer sessionId="sess-duplicate-pr" />);
+
+		await userEvent.click(screen.getByRole("combobox", { name: "File source" }));
+		await userEvent.click(await screen.findByRole("option", { name: "PR #42 · canonical" }));
+		await waitFor(() => expect(getMock).toHaveBeenCalledWith(
+			"/api/v1/sessions/{sessionId}/pr/{prNumber}/files",
+			expect.objectContaining({ params: { path: { sessionId: "sess-duplicate-pr", prNumber: 42 }, query: { sourceUrl: "https://gitlab.example/acme/app/-/merge_requests/42" } } }),
+		));
+
+		first.unmount();
+		renderWithQuery(<SessionFileExplorer isMaximized sessionId="sess-duplicate-pr" />);
+		expect((await screen.findAllByText("PR #42 · canonical")).length).toBeGreaterThan(0);
+		expect(useUiStore.getState().inspectorSessions["sess-duplicate-pr"]?.filesSource).toEqual({
+			kind: "pull_request",
+			label: "PR #42 · canonical",
+			number: 42,
+			url: "https://gitlab.example/acme/app/-/merge_requests/42",
+		});
 	});
 
 	it("keeps the continuous right-side diff visible when opening the full file in center", async () => {

@@ -258,6 +258,8 @@ var schemaNames = map[string]string{ //nolint:gosec // Public OpenAPI type names
 	"ControllersCleanupSessionsResponse":                  "CleanupSessionsResponse",
 	"ControllersCleanupSkippedSession":                    "CleanupSkippedSession",
 	"ControllersWorkspaceFileQuery":                       "WorkspaceFileQuery",
+	"ControllersPRFileQuery":                              "PRFileQuery",
+	"ControllersPRFileRevisionQuery":                      "PRFileRevisionQuery",
 	"ControllersUpdateWorkspaceFileRequest":               "UpdateWorkspaceFileRequest",
 	"ControllersWorkspaceFileBlobQuery":                   "WorkspaceFileBlobQuery",
 	"ControllersWorkspaceFileRevisionQuery":               "WorkspaceFileRevisionQuery",
@@ -2055,7 +2057,7 @@ func sessionOperations() []operation {
 		{
 			method: http.MethodGet, path: "/api/v1/sessions/{sessionId}/pr/{prNumber}/file", id: "getSessionPRFile", tag: "sessions",
 			summary:    "Read one file from an associated pull request base-to-head diff",
-			pathParams: []any{controllers.SessionIDParam{}, controllers.PRNumberParam{}, controllers.WorkspaceFileQuery{}},
+			pathParams: []any{controllers.SessionIDParam{}, controllers.PRNumberParam{}, controllers.PRFileQuery{}},
 			resps: []respUnit{
 				{http.StatusOK, controllers.WorkspaceFileResponse{}},
 				{http.StatusBadRequest, envelope.APIError{}},
@@ -2131,7 +2133,7 @@ func sessionOperations() []operation {
 		{
 			method: http.MethodGet, path: "/api/v1/sessions/{sessionId}/pr/{prNumber}/file/revision", id: "getSessionPRFileRevision", tag: "sessions",
 			summary:    "Read one text-capable side of a pull request comparison",
-			pathParams: []any{controllers.SessionIDParam{}, controllers.PRNumberParam{}, controllers.WorkspaceFileRevisionQuery{}},
+			pathParams: []any{controllers.SessionIDParam{}, controllers.PRNumberParam{}, controllers.PRFileRevisionQuery{}},
 			resps: []respUnit{
 				{http.StatusOK, controllers.WorkspaceFileRevisionResponse{}},
 				{http.StatusBadRequest, envelope.APIError{}},

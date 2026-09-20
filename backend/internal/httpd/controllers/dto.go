@@ -210,12 +210,24 @@ type WorkspaceFileRevisionQuery struct {
 	WorkspaceVersion string `query:"workspaceVersion,omitempty" description:"Opaque workspace snapshot token used for consistency checks."`
 	ExpectedRevision string `query:"expectedRevision,omitempty" description:"Opaque revision token used for optimistic consistency checks."`
 	CommitSHA        string `query:"commitSha,omitempty" description:"Exact commit SHA for a committed-scope comparison."`
-	SourceURL        string `query:"sourceUrl,omitempty" description:"Stable URL of the selected associated pull request."`
 }
 
 // PRFilesQuery selects the associated pull request when multiple providers or
 // repositories can have the same pull-request number.
 type PRFilesQuery struct {
+	SourceURL string `query:"sourceUrl,omitempty" description:"Stable URL of the selected associated pull request."`
+}
+
+// PRFileQuery identifies one file in an associated pull request.
+type PRFileQuery struct {
+	Path      string `query:"path" required:"true" description:"Repository-relative file path."`
+	SourceURL string `query:"sourceUrl,omitempty" description:"Stable URL of the selected associated pull request."`
+}
+
+// PRFileRevisionQuery selects one immutable side of a pull-request comparison.
+type PRFileRevisionQuery struct {
+	Path      string `query:"path" required:"true" description:"Repository-relative file path."`
+	Side      string `query:"side,omitempty" enum:"before,after" description:"Comparison side. Defaults to after."`
 	SourceURL string `query:"sourceUrl,omitempty" description:"Stable URL of the selected associated pull request."`
 }
 

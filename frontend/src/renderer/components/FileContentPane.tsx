@@ -7,7 +7,7 @@ import { EditProvider } from "@pierre/diffs/react";
 import {
 	sessionWorkspaceFileQueryKey,
 	sessionSourceFileQueryOptions,
-	sessionWorkspaceFileRevisionQueryOptions,
+	sessionSourceFileRevisionQueryOptions,
 	updateSessionWorkspaceFile,
 	type WorkspaceDiffScope,
 	type WorkspaceFileDetail,
@@ -182,6 +182,7 @@ export function FileContentPane({
 			scope={scope}
 			sessionId={sessionId}
 			commitSha={commitSha}
+			source={source}
 		/>
 	) : <PanelMessage>{t("files.loading")}</PanelMessage>;
 	const beginEditing = () => {
@@ -327,10 +328,10 @@ export function FileContentPane({
 	);
 }
 
-function CompleteFileView({ annotation, commitSha, detail, editing, onEditChange, scope, sessionId }: { annotation: FileAnnotationModel; commitSha?: string; detail: WorkspaceFileDetail; editing: boolean; onEditChange: (content: string) => void; scope: WorkspaceDiffScope; sessionId: string }) {
+function CompleteFileView({ annotation, commitSha, detail, editing, onEditChange, scope, sessionId, source }: { annotation: FileAnnotationModel; commitSha?: string; detail: WorkspaceFileDetail; editing: boolean; onEditChange: (content: string) => void; scope: WorkspaceDiffScope; sessionId: string; source: FilesSource }) {
 	const { t } = useTranslation();
 	const revision = useQuery({
-		...sessionWorkspaceFileRevisionQueryOptions({ commitSha, path: detail.path, scope, sessionId, side: detail.deleted ? "before" : "after", workspaceVersion: detail.workspaceVersion }),
+		...sessionSourceFileRevisionQueryOptions({ commitSha, path: detail.path, scope, sessionId, side: detail.deleted ? "before" : "after", source, workspaceVersion: detail.workspaceVersion }),
 		enabled: detail.deleted || detail.contentTruncated,
 	});
 	if (revision.isPending && revision.isFetching) return <PanelMessage>{t("files.loading")}</PanelMessage>;

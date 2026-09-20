@@ -149,6 +149,9 @@ func (s *Service) GetPRFileRevision(ctx context.Context, id domain.SessionID, nu
 	if !ok {
 		return WorkspaceFileRevision{}, apierr.NotFound("PR_FILE_NOT_FOUND", "File is not part of the selected pull request")
 	}
+	if side == WorkspaceBlobAfter && status == WorkspaceFileDeleted {
+		return WorkspaceFileRevision{SessionID: id, Path: rel, Side: side, Encoding: "utf-8"}, nil
+	}
 	path, revision := rel, pr.HeadSHA
 	if side == WorkspaceBlobBefore {
 		if status == WorkspaceFileAdded {
@@ -194,12 +197,12 @@ func (s *Service) prFileSource(ctx context.Context, id domain.SessionID, number 
 		if strings.TrimSpace(pr.BaseSHA) == "" || strings.TrimSpace(pr.HeadSHA) == "" {
 			return domain.SessionRecord{}, domain.PullRequest{}, unavailablePRSource()
 		}
-		root, err := s.prWorkspaceRoot(ctx, rec, pr)
+		root, remote, err := s.prWorkspaceRoot(ctx, rec, pr)
 		if err != nil {
 			return domain.SessionRecord{}, domain.PullRequest{}, err
 		}
 		rec.Metadata.WorkspacePath = root
-		if err := ensurePRRevisionObjects(ctx, root, pr); err != nil {
+		if err := ensurePRRevisionObjects(ctx, root, remote, pr); err != nil {
 			return domain.SessionRecord{}, domain.PullRequest{}, err
 		}
 		return rec, pr, nil
@@ -207,48 +210,69 @@ func (s *Service) prFileSource(ctx context.Context, id domain.SessionID, number 
 	return domain.SessionRecord{}, domain.PullRequest{}, apierr.NotFound("PR_NOT_FOUND", "Pull request is not associated with this session")
 }
 
-// prWorkspaceRoot chooses the registered repository whose origin matches the
+// prWorkspaceRoot chooses the registered repository and remote matching the
 // PR's persisted provider repository. Workspace projects can contain child
-// repositories, so the session root is not necessarily the PR's git root.
-func (s *Service) prWorkspaceRoot(ctx context.Context, rec domain.SessionRecord, pr domain.PullRequest) (string, error) {
+// repositories, and a fork checkout can keep the PR base repository on a
+// non-origin remote.
+func (s *Service) prWorkspaceRoot(ctx context.Context, rec domain.SessionRecord, pr domain.PullRequest) (string, string, error) {
 	rows, err := s.store.ListSessionWorktrees(ctx, rec.ID)
-	if err != nil || len(rows) == 0 {
-		return rec.Metadata.WorkspacePath, err
+	if err != nil {
+		return "", "", err
+	}
+	if len(rows) == 0 {
+		rows = []domain.SessionWorktreeRecord{{WorktreePath: rec.Metadata.WorkspacePath}}
 	}
 	want := strings.Trim(strings.ToLower(pr.Repo), "/")
 	for _, row := range rows {
 		if strings.TrimSpace(row.WorktreePath) == "" {
 			continue
 		}
-		origin, originErr := gitWorkspaceOutput(ctx, row.WorktreePath, "remote", "get-url", "origin")
-		if originErr != nil {
+		remotes, remoteErr := gitWorkspaceOutput(ctx, row.WorktreePath, "remote")
+		if remoteErr != nil {
 			continue
 		}
-		identity, parseErr := domain.ParseRepositoryIdentity(strings.TrimSpace(origin))
-		if parseErr != nil {
-			continue
-		}
-		got := strings.ToLower(identity.Namespace + "/" + identity.Name)
-		if got == want {
-			return row.WorktreePath, nil
+		for _, remote := range strings.Fields(remotes) {
+			rawURL, urlErr := gitWorkspaceOutput(ctx, row.WorktreePath, "config", "--get", "remote."+remote+".url")
+			if urlErr != nil {
+				continue
+			}
+			identity, parseErr := domain.ParseRepositoryIdentity(strings.TrimSpace(rawURL))
+			if parseErr != nil {
+				continue
+			}
+			got := strings.ToLower(identity.Namespace + "/" + identity.Name)
+			if strings.EqualFold(identity.Provider, pr.Provider) && strings.EqualFold(identity.Host, pr.Host) && got == want {
+				return row.WorktreePath, remote, nil
+			}
 		}
 	}
-	return "", apierr.NotFound("PR_SOURCE_REPOSITORY_NOT_FOUND", "No registered workspace repository matches the selected pull request")
+	return "", "", apierr.NotFound("PR_SOURCE_REPOSITORY_NOT_FOUND", "No registered workspace repository matches the selected pull request")
 }
 
 // ensurePRRevisionObjects fetches provider-owned review refs only when the
 // persisted immutable SHAs are absent. Fetch updates git object/ref storage but
 // never HEAD, the index, or worktree files.
-func ensurePRRevisionObjects(ctx context.Context, root string, pr domain.PullRequest) error {
-	if gitCommitExists(ctx, root, pr.BaseSHA) && gitCommitExists(ctx, root, pr.HeadSHA) {
+func ensurePRRevisionObjects(ctx context.Context, root, remote string, pr domain.PullRequest) error {
+	baseExists := gitCommitExists(ctx, root, pr.BaseSHA)
+	headExists := gitCommitExists(ctx, root, pr.HeadSHA)
+	if baseExists && headExists {
 		return nil
 	}
-	providerRef := "refs/pull/" + strconv.Itoa(pr.Number) + "/head"
-	if strings.EqualFold(pr.Provider, "gitlab") {
-		providerRef = "refs/merge-requests/" + strconv.Itoa(pr.Number) + "/head"
+	refPrefix := "refs/ao/pr/" + strconv.Itoa(pr.Number)
+	refspecs := make([]string, 0, 2)
+	if !baseExists && strings.TrimSpace(pr.TargetBranch) != "" {
+		refspecs = append(refspecs, "+refs/heads/"+pr.TargetBranch+":"+refPrefix+"/base")
 	}
-	localRef := "refs/ao/pr/" + strconv.Itoa(pr.Number) + "/head"
-	_, _ = gitWorkspaceOutput(ctx, root, "fetch", "--no-tags", "origin", "+"+providerRef+":"+localRef)
+	if !headExists {
+		providerRef := "refs/pull/" + strconv.Itoa(pr.Number) + "/head"
+		if strings.EqualFold(pr.Provider, "gitlab") {
+			providerRef = "refs/merge-requests/" + strconv.Itoa(pr.Number) + "/head"
+		}
+		refspecs = append(refspecs, "+"+providerRef+":"+refPrefix+"/head")
+	}
+	if strings.TrimSpace(remote) != "" && len(refspecs) > 0 {
+		_, _ = gitWorkspaceOutput(ctx, root, append([]string{"fetch", "--no-tags", remote}, refspecs...)...)
+	}
 	if !gitCommitExists(ctx, root, pr.BaseSHA) || !gitCommitExists(ctx, root, pr.HeadSHA) {
 		return unavailablePRSource()
 	}

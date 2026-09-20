@@ -12,6 +12,7 @@ import (
 
 func TestPRFilesUsePersistedBaseAndHeadWithoutReadingWorkspaceChanges(t *testing.T) {
 	repo := newWorkspaceRepo(t)
+	runGit(t, repo, "remote", "add", "origin", "https://example.test/acme/repo.git")
 	base := strings.TrimSpace(runGit(t, repo, "rev-parse", "HEAD"))
 	runGit(t, repo, "switch", "-c", "feature")
 	writeWorkspaceFile(t, repo, "README.md", "pull request\n")
@@ -22,7 +23,7 @@ func TestPRFilesUsePersistedBaseAndHeadWithoutReadingWorkspaceChanges(t *testing
 
 	st := newFakeStore()
 	st.sessions["ao-1"] = domain.SessionRecord{ID: "ao-1", Metadata: domain.SessionMetadata{WorkspacePath: repo}}
-	st.prs["ao-1"] = []domain.PullRequest{{Number: 42, URL: "https://example.test/pr/42", SourceBranch: "feature", TargetBranch: "main", BaseSHA: base, HeadSHA: head}}
+	st.prs["ao-1"] = []domain.PullRequest{{Number: 42, URL: "https://example.test/acme/repo/-/merge_requests/42", Provider: "gitlab", Host: "example.test", Repo: "acme/repo", SourceBranch: "feature", TargetBranch: "main", BaseSHA: base, HeadSHA: head}}
 	svc := &Service{store: st}
 
 	files, err := svc.ListPRFiles(context.Background(), "ao-1", 42, "")
@@ -56,6 +57,7 @@ func TestPRFilesRejectUnassociatedPR(t *testing.T) {
 
 func TestPRFileRevisionReadsPRSidesInsteadOfWorkspace(t *testing.T) {
 	repo := newWorkspaceRepo(t)
+	runGit(t, repo, "remote", "add", "origin", "https://example.test/acme/repo.git")
 	base := strings.TrimSpace(runGit(t, repo, "rev-parse", "HEAD"))
 	writeWorkspaceFile(t, repo, "README.md", "pull request\n")
 	runGit(t, repo, "add", "README.md")
@@ -64,7 +66,7 @@ func TestPRFileRevisionReadsPRSidesInsteadOfWorkspace(t *testing.T) {
 	writeWorkspaceFile(t, repo, "README.md", "workspace only\n")
 	st := newFakeStore()
 	st.sessions["ao-1"] = domain.SessionRecord{ID: "ao-1", Metadata: domain.SessionMetadata{WorkspacePath: repo}}
-	st.prs["ao-1"] = []domain.PullRequest{{Number: 42, URL: "https://example.test/pr/42", BaseSHA: base, HeadSHA: head}}
+	st.prs["ao-1"] = []domain.PullRequest{{Number: 42, URL: "https://example.test/acme/repo/-/merge_requests/42", Provider: "gitlab", Host: "example.test", Repo: "acme/repo", BaseSHA: base, HeadSHA: head}}
 	svc := &Service{store: st}
 	after, err := svc.GetPRFileRevision(context.Background(), "ao-1", 42, "", "README.md", WorkspaceBlobAfter)
 	if err != nil || after.Content != "pull request\n" {
@@ -76,6 +78,26 @@ func TestPRFileRevisionReadsPRSidesInsteadOfWorkspace(t *testing.T) {
 	}
 	if !before.Exists || before.Content == "workspace only\n" {
 		t.Fatalf("before leaked worktree: %#v", before)
+	}
+}
+
+func TestPRFileRevisionRepresentsDeletedAfterSideAsMissing(t *testing.T) {
+	repo := newWorkspaceRepo(t)
+	runGit(t, repo, "remote", "add", "origin", "https://example.test/acme/repo.git")
+	base := strings.TrimSpace(runGit(t, repo, "rev-parse", "HEAD"))
+	runGit(t, repo, "rm", "README.md")
+	runGit(t, repo, "commit", "-m", "delete readme")
+	head := strings.TrimSpace(runGit(t, repo, "rev-parse", "HEAD"))
+	st := newFakeStore()
+	st.sessions["ao-1"] = domain.SessionRecord{ID: "ao-1", Metadata: domain.SessionMetadata{WorkspacePath: repo}}
+	st.prs["ao-1"] = []domain.PullRequest{{Number: 42, URL: "https://example.test/acme/repo/-/merge_requests/42", Provider: "gitlab", Host: "example.test", Repo: "acme/repo", BaseSHA: base, HeadSHA: head}}
+
+	after, err := (&Service{store: st}).GetPRFileRevision(context.Background(), "ao-1", 42, "", "README.md", WorkspaceBlobAfter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Exists || after.Path != "README.md" || after.Side != WorkspaceBlobAfter {
+		t.Fatalf("after = %#v, want an explicit missing revision", after)
 	}
 }
 
@@ -99,9 +121,58 @@ func TestPRFilesSelectMatchingChildRepository(t *testing.T) {
 	st := newFakeStore()
 	st.sessions["ao-1"] = domain.SessionRecord{ID: "ao-1", Metadata: domain.SessionMetadata{WorkspacePath: root}}
 	st.worktrees["ao-1"] = []domain.SessionWorktreeRecord{{RepoName: "child", WorktreePath: child}}
-	st.prs["ao-1"] = []domain.PullRequest{{Number: 7, URL: "https://example.test/acme/child/pull/7", Repo: "acme/child", BaseSHA: base, HeadSHA: head}}
-	files, err := (&Service{store: st}).ListPRFiles(context.Background(), "ao-1", 7, "https://example.test/acme/child/pull/7")
+	st.prs["ao-1"] = []domain.PullRequest{{Number: 7, URL: "https://example.test/acme/child/-/merge_requests/7", Provider: "gitlab", Host: "example.test", Repo: "acme/child", BaseSHA: base, HeadSHA: head}}
+	files, err := (&Service{store: st}).ListPRFiles(context.Background(), "ao-1", 7, "https://example.test/acme/child/-/merge_requests/7")
 	if err != nil || len(files.Files) != 1 || files.Files[0].Path != "child.txt" {
 		t.Fatalf("files=%#v err=%v", files, err)
+	}
+}
+
+func TestPRFilesFetchBothRevisionsFromMatchingBaseRemote(t *testing.T) {
+	remoteRoot := t.TempDir()
+	upstream := filepath.Join(remoteRoot, "upstream.git")
+	if err := os.MkdirAll(upstream, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, upstream, "init", "--bare")
+
+	source := newWorkspaceRepo(t)
+	runGit(t, source, "branch", "-M", "main")
+	runGit(t, source, "switch", "-c", "feature")
+	writeWorkspaceFile(t, source, "feature.txt", "feature\n")
+	runGit(t, source, "add", "feature.txt")
+	runGit(t, source, "commit", "-m", "feature")
+	head := strings.TrimSpace(runGit(t, source, "rev-parse", "HEAD"))
+	runGit(t, source, "switch", "main")
+	writeWorkspaceFile(t, source, "base.txt", "base advanced\n")
+	runGit(t, source, "add", "base.txt")
+	runGit(t, source, "commit", "-m", "advance base")
+	base := strings.TrimSpace(runGit(t, source, "rev-parse", "HEAD"))
+	runGit(t, source, "remote", "add", "publish", upstream)
+	runGit(t, source, "push", "publish", "main:refs/heads/main", head+":refs/pull/42/head")
+
+	checkout := filepath.Join(remoteRoot, "checkout")
+	if err := os.MkdirAll(checkout, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, checkout, "init")
+	runGit(t, checkout, "remote", "add", "origin", "https://gitlab.example.com/acme/repo.git")
+	runGit(t, checkout, "remote", "add", "fork", "https://github.com/fork/repo.git")
+	runGit(t, checkout, "remote", "add", "upstream", "https://github.com/acme/repo.git")
+	runGit(t, checkout, "config", "url.file://"+upstream+".insteadOf", "https://github.com/acme/repo.git")
+
+	st := newFakeStore()
+	st.sessions["ao-1"] = domain.SessionRecord{ID: "ao-1", Metadata: domain.SessionMetadata{WorkspacePath: checkout}}
+	st.prs["ao-1"] = []domain.PullRequest{{Number: 42, URL: "https://github.com/acme/repo/pull/42", Provider: "github", Host: "github.com", Repo: "acme/repo", TargetBranch: "main", BaseSHA: base, HeadSHA: head}}
+
+	files, err := (&Service{store: st}).ListPRFiles(context.Background(), "ao-1", 42, "https://github.com/acme/repo/pull/42")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files.Files) != 1 || files.Files[0].Path != "feature.txt" {
+		t.Fatalf("files = %#v, want feature.txt", files.Files)
+	}
+	if !gitCommitExists(context.Background(), checkout, base) || !gitCommitExists(context.Background(), checkout, head) {
+		t.Fatal("persisted base and head revisions were not both fetched")
 	}
 }
