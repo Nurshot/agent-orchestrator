@@ -4524,6 +4524,35 @@ func TestSCMObservation_AnchoredBotReviewSuppressesReadyNotification(t *testing.
 	}
 }
 
+func TestSCMObservation_PersistedAnchoredBotReviewSuppressesReadyNotification(t *testing.T) {
+	st := newFakeStore()
+	sink := &fakeNotificationSink{}
+	m := New(st, nil, WithNotificationSink(sink))
+	st.sessions["mer-1"] = working("mer-1")
+	prURL := "https://github.com/o/r/pull/1"
+	st.comments[prURL] = []domain.PullRequestComment{{
+		ID: "bot-1", ThreadID: "thread-1", Author: "react-doctor[bot]", IsBot: true,
+		File: "src/App.tsx", Line: 42, Body: "avoid this pattern", AutoInjectReview: true,
+	}}
+	obs := ports.SCMObservation{
+		Fetched:      true,
+		PR:           ports.SCMPRObservation{URL: prURL, Number: 1},
+		CI:           ports.SCMCIObservation{Summary: string(domain.CIPassing)},
+		Review:       ports.SCMReviewObservation{Decision: string(domain.ReviewApproved)},
+		Mergeability: ports.SCMMergeabilityObservation{State: string(domain.MergeMergeable)},
+	}
+
+	if err := m.ApplySCMObservation(ctx, "mer-1", obs); err != nil {
+		t.Fatal(err)
+	}
+	if len(sink.intents) != 0 {
+		t.Fatalf("ready notification ignored persisted actionable bot feedback: %+v", sink.intents)
+	}
+	if len(sink.resolutions) != 1 || sink.resolutions[0].Type != domain.NotificationReadyToMerge {
+		t.Fatalf("ready notification was not resolved from persisted actionable bot feedback: %+v", sink.resolutions)
+	}
+}
+
 func TestSCMObservation_AnchoredBotReviewResolvesExistingReadyNotification(t *testing.T) {
 	st := newFakeStore()
 	sink := &fakeNotificationSink{}
