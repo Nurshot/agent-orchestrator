@@ -1,0 +1,133 @@
+time=2026-09-20T18:34:46.704+05:30 level=INFO msg="built per-session agent resolver" default=claude-code registered="[agy aider amp auggie autohand claude-code cline codex continue copilot crush cursor devin droid goose grok kilocode kimchi kimi kiro muse omp opencode pi prime-agent qwen vibe]"
+time=2026-09-20T18:34:46.712+05:30 level=WARN msg="tracker disabled: no usable token" provider=gitlab err="gitlab scm: no token configured"
+time=2026-09-20T18:34:46.819+05:30 level=INFO msg="mobile remote access available" cloudflared=/opt/homebrew/bin/cloudflared source=system
+time=2026-09-20T18:34:46.826+05:30 level=INFO msg="browser runtime: listening" addr=/tmp/ao-brd-86169-8e7f1bd55fead3ac/browser.sock
+time=2026-09-20T18:34:46.828+05:30 level=INFO msg="supervisor: listening" addr=/tmp/ao-4948-lab5/data/supervise.sock
+time=2026-09-20T18:34:46.828+05:30 level=INFO msg="daemon listening" addr=127.0.0.1:3099 pid=86169
+time=2026-09-20T18:34:46.889+05:30 level=DEBUG msg="agent readiness check" harness=vibe purpose=display decision=new_check duration_ms=60 outcome=not_ready
+time=2026-09-20T18:34:46.890+05:30 level=DEBUG msg="agent readiness check" harness=devin purpose=display decision=new_check duration_ms=61 outcome=not_ready
+time=2026-09-20T18:34:46.892+05:30 level=DEBUG msg="agent readiness check" harness=grok purpose=display decision=new_check duration_ms=62 outcome=not_ready
+time=2026-09-20T18:34:46.892+05:30 level=DEBUG msg="agent readiness check" harness=droid purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:34:46.892+05:30 level=DEBUG msg="agent readiness check" harness=claude-code purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:34:46.901+05:30 level=DEBUG msg="agent readiness check" harness=kiro purpose=display decision=new_check duration_ms=72 outcome=not_ready
+time=2026-09-20T18:34:46.931+05:30 level=DEBUG msg="agent readiness check" harness=kimchi purpose=display decision=new_check duration_ms=41 outcome=not_ready
+time=2026-09-20T18:34:46.931+05:30 level=DEBUG msg="agent readiness check" harness=agy purpose=display decision=new_check duration_ms=38 outcome=not_ready
+time=2026-09-20T18:34:46.931+05:30 level=DEBUG msg="agent readiness check" harness=codex purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:34:46.932+05:30 level=DEBUG msg="agent readiness check" harness=kimi purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:34:46.932+05:30 level=DEBUG msg="agent readiness check" harness=cline purpose=display decision=new_check duration_ms=30 outcome=not_ready
+time=2026-09-20T18:34:46.932+05:30 level=DEBUG msg="agent readiness check" harness=opencode purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:34:46.932+05:30 level=DEBUG msg="agent readiness check" harness=omp purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:34:46.960+05:30 level=DEBUG msg="agent readiness check" harness=kilocode purpose=display decision=new_check duration_ms=69 outcome=not_ready
+time=2026-09-20T18:34:46.973+05:30 level=DEBUG msg="agent readiness check" harness=crush purpose=display decision=new_check duration_ms=40 outcome=not_ready
+time=2026-09-20T18:34:46.973+05:30 level=DEBUG msg="agent readiness check" harness=amp purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:34:46.974+05:30 level=DEBUG msg="agent readiness check" harness=muse purpose=display decision=new_check duration_ms=41 outcome=not_ready
+time=2026-09-20T18:34:46.974+05:30 level=DEBUG msg="agent readiness check" harness=auggie purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:34:46.974+05:30 level=DEBUG msg="agent readiness check" harness=prime-agent purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:34:46.975+05:30 level=DEBUG msg="agent readiness check" harness=pi purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:34:46.975+05:30 level=DEBUG msg="agent readiness check" harness=cursor purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:34:46.977+05:30 level=DEBUG msg="agent readiness check" harness=continue purpose=display decision=new_check duration_ms=45 outcome=not_ready
+time=2026-09-20T18:34:46.977+05:30 level=DEBUG msg="agent readiness check" harness=copilot purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:34:47.011+05:30 level=DEBUG msg="agent readiness check" harness=aider purpose=display decision=new_check duration_ms=51 outcome=not_ready
+time=2026-09-20T18:34:47.019+05:30 level=DEBUG msg="agent readiness check" harness=qwen purpose=display decision=new_check duration_ms=43 outcome=not_ready
+time=2026-09-20T18:34:47.019+05:30 level=DEBUG msg="agent readiness check" harness=autohand purpose=display decision=new_check duration_ms=45 outcome=not_ready
+time=2026-09-20T18:34:47.021+05:30 level=DEBUG msg="agent readiness check" harness=goose purpose=display decision=new_check duration_ms=43 outcome=not_ready
+time=2026-09-20T18:34:47.021+05:30 level=DEBUG msg="agent readiness check" harness=vibe purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:34:47.021+05:30 level=DEBUG msg="agent readiness check" harness=agy purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:34:47.021+05:30 level=DEBUG msg="agent readiness check" harness=aider purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:34:47.021+05:30 level=DEBUG msg="agent readiness check" harness=goose purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:34:47.021+05:30 level=DEBUG msg="agent readiness check" harness=continue purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:34:47.022+05:30 level=DEBUG msg="agent readiness check" harness=autohand purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:34:47.022+05:30 level=DEBUG msg="agent readiness check" harness=auggie purpose=display decision=new_check duration_ms=0 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:05:02.022Z
+time=2026-09-20T18:34:47.025+05:30 level=DEBUG msg="agent readiness check" harness=cline purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:34:47.025+05:30 level=DEBUG msg="agent readiness check" harness=muse purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:34:47.026+05:30 level=DEBUG msg="agent readiness check" harness=grok purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:34:47.026+05:30 level=DEBUG msg="agent readiness check" harness=crush purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:34:47.038+05:30 level=DEBUG msg="agent readiness check" harness=claude-code purpose=display decision=new_check duration_ms=16 outcome=ready
+time=2026-09-20T18:34:47.038+05:30 level=DEBUG msg="agent readiness check" harness=devin purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:34:47.039+05:30 level=DEBUG msg="agent readiness check" harness=droid purpose=display decision=new_check duration_ms=1 outcome=ready
+time=2026-09-20T18:34:47.039+05:30 level=DEBUG msg="agent readiness check" harness=kilocode purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:34:47.039+05:30 level=DEBUG msg="agent readiness check" harness=kimchi purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:34:47.041+05:30 level=DEBUG msg="agent readiness check" harness=kimi purpose=display decision=new_check duration_ms=1 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:05:02.041Z
+time=2026-09-20T18:34:47.041+05:30 level=DEBUG msg="agent readiness check" harness=kiro purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:34:47.042+05:30 level=DEBUG msg="agent readiness check" harness=pi purpose=display decision=new_check duration_ms=0 outcome=ready
+time=2026-09-20T18:34:47.044+05:30 level=DEBUG msg="agent readiness check" harness=opencode purpose=display decision=new_check duration_ms=1 outcome=ready
+time=2026-09-20T18:34:47.059+05:30 level=DEBUG msg="agent readiness check" harness=omp purpose=display decision=new_check duration_ms=14 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:05:02.059Z
+time=2026-09-20T18:34:47.059+05:30 level=DEBUG msg="agent readiness check" harness=qwen purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:34:47.060+05:30 level=DEBUG msg="agent readiness check" harness=prime-agent purpose=display decision=new_check duration_ms=0 outcome=ready
+time=2026-09-20T18:34:47.160+05:30 level=DEBUG msg="agent readiness check" harness=copilot purpose=display decision=new_check duration_ms=137 outcome=ready
+time=2026-09-20T18:34:47.291+05:30 level=INFO msg="Codex capability check completed" operation=capability_check cache=new duration_ms=398 account_read=supported native_login=supported capacity_read=supported
+time=2026-09-20T18:34:47.599+05:30 level=DEBUG msg="agent readiness check" harness=codex purpose=display decision=new_check duration_ms=539 outcome=ready
+time=2026-09-20T18:34:49.348+05:30 level=DEBUG msg="agent readiness check" harness=amp purpose=display decision=new_check duration_ms=2327 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:05:04.348Z
+time=2026-09-20T18:34:49.909+05:30 level=DEBUG msg="agent readiness check" harness=cursor purpose=display decision=new_check duration_ms=2882 outcome=ready
+time=2026-09-20T18:34:51.332+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:34:54.507+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:34:59.268+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:35:02.026+05:30 level=DEBUG msg="agent readiness check" harness=auggie purpose=display decision=new_check duration_ms=0 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:06:02.026Z
+time=2026-09-20T18:35:02.043+05:30 level=DEBUG msg="agent readiness check" harness=kimi purpose=display decision=new_check duration_ms=0 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:06:02.043Z
+time=2026-09-20T18:35:02.064+05:30 level=DEBUG msg="agent readiness check" harness=omp purpose=display decision=new_check duration_ms=4 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:06:02.064Z
+time=2026-09-20T18:35:04.638+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:35:05.511+05:30 level=DEBUG msg="agent readiness check" harness=amp purpose=display decision=new_check duration_ms=1162 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:06:05.511Z
+time=2026-09-20T18:35:11.095+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:35:14.276+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:35:19.753+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:35:24.033+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:35:29.315+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:35:43.856+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:35:53.606+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:36:02.012+05:30 level=DEBUG msg="agent readiness check" harness=auggie purpose=display decision=new_check duration_ms=0 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:11:02.012Z
+time=2026-09-20T18:36:02.029+05:30 level=DEBUG msg="agent readiness check" harness=kimi purpose=display decision=new_check duration_ms=1 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:11:02.029Z
+time=2026-09-20T18:36:02.070+05:30 level=DEBUG msg="agent readiness check" harness=omp purpose=display decision=new_check duration_ms=22 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:11:02.070Z
+time=2026-09-20T18:36:09.695+05:30 level=DEBUG msg="agent readiness check" harness=amp purpose=display decision=new_check duration_ms=4188 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:11:09.695Z
+time=2026-09-20T18:36:12.500+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:36:28.104+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:36:45.791+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:37:04.782+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:37:22.646+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:37:41.352+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+2026/09/20 18:37:51 WARN lifecycle: container reap failed session=lab-b-3 err="dockerreap: list containers for session lab-b-3: signal: killed: "
+time=2026-09-20T18:38:04.717+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:38:21.759+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:38:39.323+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:38:56.814+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:39:10.595+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:39:21.695+05:30 level=INFO msg="shutdown signal received, draining connections" timeout=10s
+time=2026-09-20T18:39:21.696+05:30 level=INFO msg="daemon stopped cleanly"
+time=2026-09-20T18:39:21.725+05:30 level=DEBUG msg="reaper: probe error reported as failed fact" session=lab-b-9 err="tmux runtime: probe session lab-b-9: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=DEBUG msg="reaper: probe error reported as failed fact" session=lab-b-10 err="tmux runtime: probe session lab-b-10: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=DEBUG msg="reaper: probe error reported as failed fact" session=lab-b-11 err="tmux runtime: probe session lab-b-11: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=DEBUG msg="reaper: probe error reported as failed fact" session=lab-b-12 err="tmux runtime: probe session lab-b-12: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=DEBUG msg="reaper: probe error reported as failed fact" session=lab-b-13 err="tmux runtime: probe session lab-b-13: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=DEBUG msg="reaper: probe error reported as failed fact" session=lab-b-14 err="tmux runtime: probe session lab-b-14: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=DEBUG msg="reaper: probe error reported as failed fact" session=lab-b-15 err="tmux runtime: probe session lab-b-15: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=DEBUG msg="reaper: probe error reported as failed fact" session=lab-b-16 err="tmux runtime: probe session lab-b-16: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-a-1 err="get session lab-a-1: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-a-2 err="get session lab-a-2: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-a-3 err="get session lab-a-3: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-a-4 err="get session lab-a-4: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-a-5 err="get session lab-a-5: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-a-6 err="get session lab-a-6: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-a-7 err="get session lab-a-7: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-a-8 err="get session lab-a-8: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-a-9 err="get session lab-a-9: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-a-10 err="get session lab-a-10: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-a-11 err="get session lab-a-11: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-a-12 err="get session lab-a-12: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-a-13 err="get session lab-a-13: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-a-14 err="get session lab-a-14: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-b-1 err="get session lab-b-1: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-b-2 err="get session lab-b-2: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-b-4 err="get session lab-b-4: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-b-5 err="get session lab-b-5: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-b-6 err="get session lab-b-6: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-b-7 err="get session lab-b-7: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-b-8 err="get session lab-b-8: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-b-9 err="get session lab-b-9: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-b-10 err="get session lab-b-10: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-b-11 err="get session lab-b-11: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-b-12 err="get session lab-b-12: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-b-13 err="get session lab-b-13: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-b-14 err="get session lab-b-14: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-b-15 err="get session lab-b-15: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: ApplyRuntimeObservation failed" session=lab-b-16 err="get session lab-b-16: context canceled"
+time=2026-09-20T18:39:21.730+05:30 level=ERROR msg="reaper: tick failed" err="list all sessions: context canceled"

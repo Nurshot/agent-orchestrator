@@ -1,0 +1,108 @@
+time=2026-09-20T18:39:24.409+05:30 level=INFO msg="built per-session agent resolver" default=claude-code registered="[agy aider amp auggie autohand claude-code cline codex continue copilot crush cursor devin droid goose grok kilocode kimchi kimi kiro muse omp opencode pi prime-agent qwen vibe]"
+time=2026-09-20T18:39:24.414+05:30 level=WARN msg="tracker disabled: no usable token" provider=gitlab err="gitlab scm: no token configured"
+time=2026-09-20T18:39:25.259+05:30 level=INFO msg="mobile remote access available" cloudflared=/opt/homebrew/bin/cloudflared source=system
+time=2026-09-20T18:39:25.277+05:30 level=INFO msg="browser runtime: listening" addr=/tmp/ao-brd-7798-90258e0e745b18e6/browser.sock
+time=2026-09-20T18:39:25.285+05:30 level=INFO msg="supervisor: listening" addr=/tmp/ao-4948-lab5/data/supervise.sock
+time=2026-09-20T18:39:25.287+05:30 level=INFO msg="daemon listening" addr=127.0.0.1:3099 pid=7798
+time=2026-09-20T18:39:25.296+05:30 level=DEBUG msg="agent readiness check" harness=claude-code purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:39:25.443+05:30 level=DEBUG msg="agent readiness check" harness=vibe purpose=display decision=new_check duration_ms=152 outcome=not_ready
+time=2026-09-20T18:39:25.444+05:30 level=DEBUG msg="agent readiness check" harness=kiro purpose=display decision=new_check duration_ms=148 outcome=not_ready
+time=2026-09-20T18:39:25.444+05:30 level=DEBUG msg="agent readiness check" harness=droid purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:39:25.456+05:30 level=DEBUG msg="agent readiness check" harness=devin purpose=display decision=new_check duration_ms=164 outcome=not_ready
+time=2026-09-20T18:39:25.465+05:30 level=DEBUG msg="agent readiness check" harness=agy purpose=display decision=new_check duration_ms=169 outcome=not_ready
+time=2026-09-20T18:39:25.555+05:30 level=DEBUG msg="agent readiness check" harness=goose purpose=display decision=new_check duration_ms=110 outcome=not_ready
+time=2026-09-20T18:39:25.556+05:30 level=DEBUG msg="agent readiness check" harness=codex purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:39:25.565+05:30 level=DEBUG msg="agent readiness check" harness=grok purpose=display decision=new_check duration_ms=121 outcome=not_ready
+time=2026-09-20T18:39:25.566+05:30 level=DEBUG msg="agent readiness check" harness=kimi purpose=display decision=new_check duration_ms=1 outcome=unknown
+time=2026-09-20T18:39:25.566+05:30 level=DEBUG msg="agent readiness check" harness=amp purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:39:25.570+05:30 level=DEBUG msg="agent readiness check" harness=continue purpose=display decision=new_check duration_ms=113 outcome=not_ready
+time=2026-09-20T18:39:25.586+05:30 level=DEBUG msg="agent readiness check" harness=cline purpose=display decision=new_check duration_ms=120 outcome=not_ready
+time=2026-09-20T18:39:25.587+05:30 level=DEBUG msg="agent readiness check" harness=copilot purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:39:25.587+05:30 level=DEBUG msg="agent readiness check" harness=auggie purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:39:25.645+05:30 level=DEBUG msg="agent readiness check" harness=aider purpose=display decision=new_check duration_ms=79 outcome=not_ready
+time=2026-09-20T18:39:25.646+05:30 level=DEBUG msg="agent readiness check" harness=cursor purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:39:25.691+05:30 level=DEBUG msg="agent readiness check" harness=crush purpose=display decision=new_check duration_ms=115 outcome=not_ready
+time=2026-09-20T18:39:25.694+05:30 level=DEBUG msg="agent readiness check" harness=prime-agent purpose=display decision=new_check duration_ms=2 outcome=unknown
+time=2026-09-20T18:39:25.694+05:30 level=DEBUG msg="agent readiness check" harness=pi purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:39:25.696+05:30 level=DEBUG msg="agent readiness check" harness=kimchi purpose=display decision=new_check duration_ms=108 outcome=not_ready
+time=2026-09-20T18:39:25.696+05:30 level=DEBUG msg="agent readiness check" harness=omp purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:39:25.763+05:30 level=DEBUG msg="agent readiness check" harness=autohand purpose=display decision=new_check duration_ms=117 outcome=not_ready
+time=2026-09-20T18:39:25.764+05:30 level=DEBUG msg="agent readiness check" harness=opencode purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:39:25.789+05:30 level=DEBUG msg="agent readiness check" harness=kilocode purpose=display decision=new_check duration_ms=233 outcome=not_ready
+time=2026-09-20T18:39:25.805+05:30 level=DEBUG msg="agent readiness check" harness=muse purpose=display decision=new_check duration_ms=110 outcome=not_ready
+time=2026-09-20T18:39:25.845+05:30 level=DEBUG msg="agent readiness check" harness=qwen purpose=display decision=new_check duration_ms=149 outcome=not_ready
+time=2026-09-20T18:39:25.846+05:30 level=DEBUG msg="agent readiness check" harness=vibe purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:39:25.846+05:30 level=DEBUG msg="agent readiness check" harness=agy purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:39:25.846+05:30 level=DEBUG msg="agent readiness check" harness=aider purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:39:25.846+05:30 level=DEBUG msg="agent readiness check" harness=goose purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:39:25.846+05:30 level=DEBUG msg="agent readiness check" harness=muse purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:39:25.846+05:30 level=DEBUG msg="agent readiness check" harness=grok purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:39:25.846+05:30 level=DEBUG msg="agent readiness check" harness=kilocode purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:39:25.846+05:30 level=DEBUG msg="agent readiness check" harness=auggie purpose=display decision=new_check duration_ms=0 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:09:40.846Z
+time=2026-09-20T18:39:25.846+05:30 level=DEBUG msg="agent readiness check" harness=kimchi purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:39:25.846+05:30 level=DEBUG msg="agent readiness check" harness=autohand purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:39:25.846+05:30 level=DEBUG msg="agent readiness check" harness=cline purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:39:25.847+05:30 level=DEBUG msg="agent readiness check" harness=pi purpose=display decision=new_check duration_ms=0 outcome=ready
+time=2026-09-20T18:39:25.847+05:30 level=DEBUG msg="agent readiness check" harness=continue purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:39:25.864+05:30 level=DEBUG msg="agent readiness check" harness=claude-code purpose=display decision=new_check duration_ms=17 outcome=ready
+time=2026-09-20T18:39:25.865+05:30 level=DEBUG msg="agent readiness check" harness=crush purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:39:25.986+05:30 level=INFO msg="Codex capability check completed" operation=capability_check cache=new duration_ms=1071 account_read=supported native_login=supported capacity_read=supported
+time=2026-09-20T18:39:26.382+05:30 level=DEBUG msg="agent readiness check" harness=copilot purpose=display decision=new_check duration_ms=535 outcome=ready
+time=2026-09-20T18:39:26.383+05:30 level=DEBUG msg="agent readiness check" harness=devin purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:39:26.385+05:30 level=DEBUG msg="agent readiness check" harness=droid purpose=display decision=new_check duration_ms=1 outcome=ready
+time=2026-09-20T18:39:26.385+05:30 level=DEBUG msg="agent readiness check" harness=kiro purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:39:26.392+05:30 level=DEBUG msg="agent readiness check" harness=kimi purpose=display decision=new_check duration_ms=6 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:09:41.392Z
+time=2026-09-20T18:39:26.398+05:30 level=DEBUG msg="agent readiness check" harness=prime-agent purpose=display decision=new_check duration_ms=1 outcome=ready
+time=2026-09-20T18:39:26.402+05:30 level=DEBUG msg="agent readiness check" harness=omp purpose=display decision=new_check duration_ms=3 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:09:41.402Z
+time=2026-09-20T18:39:26.402+05:30 level=DEBUG msg="agent readiness check" harness=qwen purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:39:26.403+05:30 level=DEBUG msg="agent readiness check" harness=opencode purpose=display decision=new_check duration_ms=0 outcome=ready
+time=2026-09-20T18:39:27.170+05:30 level=DEBUG msg="agent readiness check" harness=codex purpose=display decision=new_check duration_ms=1323 outcome=ready
+time=2026-09-20T18:39:28.898+05:30 level=DEBUG msg="agent readiness check" harness=cursor purpose=display decision=new_check duration_ms=3028 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:09:43.898Z
+time=2026-09-20T18:39:30.180+05:30 level=DEBUG msg="agent readiness check" harness=amp purpose=display decision=new_check duration_ms=4334 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:09:45.180Z
+time=2026-09-20T18:39:34.154+05:30 level=INFO msg="http request" id=Dhruvs-MacBook-Pro.local/uYr0jeYoaW-000001 method=GET path=/api/v1/projects status=200 bytes=277 duration=15.03775ms remote=127.0.0.1:64183
+time=2026-09-20T18:39:40.850+05:30 level=DEBUG msg="agent readiness check" harness=auggie purpose=display decision=new_check duration_ms=1 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:10:40.850Z
+time=2026-09-20T18:39:41.402+05:30 level=DEBUG msg="agent readiness check" harness=kimi purpose=display decision=new_check duration_ms=2 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:10:41.402Z
+time=2026-09-20T18:39:41.432+05:30 level=DEBUG msg="agent readiness check" harness=omp purpose=display decision=new_check duration_ms=26 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:10:41.432Z
+time=2026-09-20T18:39:46.943+05:30 level=DEBUG msg="agent readiness check" harness=cursor purpose=display decision=new_check duration_ms=3043 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:10:46.943Z
+time=2026-09-20T18:39:47.112+05:30 level=DEBUG msg="agent readiness check" harness=amp purpose=display decision=new_check duration_ms=1930 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:10:47.112Z
+time=2026-09-20T18:39:50.219+05:30 level=INFO msg="http request" id=Dhruvs-MacBook-Pro.local/uYr0jeYoaW-000002 method=POST path=/internal/telemetry/cli-invoked status=202 bytes=0 duration=3.054625ms remote=127.0.0.1:64218
+2026/09/20 18:39:52 WARN lifecycle: container reap failed session=lab-a-1 err="dockerreap: list containers for session lab-a-1: signal: killed: "
+2026/09/20 18:39:53 WARN lifecycle: container reap failed session=lab-a-2 err="dockerreap: list containers for session lab-a-2: signal: killed: "
+2026/09/20 18:40:01 WARN lifecycle: container reap failed session=lab-b-2 err="dockerreap: list containers for session lab-b-2: signal: killed: "
+2026/09/20 18:40:02 WARN lifecycle: container reap failed session=lab-b-5 err="dockerreap: list containers for session lab-b-5: signal: killed: "
+2026/09/20 18:40:02 WARN lifecycle: container reap failed session=lab-a-3 err="dockerreap: list containers for session lab-a-3: signal: killed: "
+2026/09/20 18:40:02 WARN lifecycle: container reap failed session=lab-b-6 err="dockerreap: list containers for session lab-b-6: signal: killed: "
+2026/09/20 18:40:03 WARN lifecycle: container reap failed session=lab-a-4 err="dockerreap: list containers for session lab-a-4: signal: killed: "
+2026/09/20 18:40:03 WARN lifecycle: container reap failed session=lab-b-4 err="dockerreap: list containers for session lab-b-4: signal: killed: "
+2026/09/20 18:40:04 WARN lifecycle: container reap failed session=lab-b-16 err="dockerreap: list containers for session lab-b-16: signal: killed: "
+2026/09/20 18:40:04 WARN lifecycle: container reap failed session=lab-b-14 err="dockerreap: list containers for session lab-b-14: signal: killed: "
+2026/09/20 18:40:05 WARN lifecycle: container reap failed session=lab-b-15 err="dockerreap: list containers for session lab-b-15: signal: killed: "
+2026/09/20 18:40:06 WARN lifecycle: container reap failed session=lab-b-13 err="dockerreap: list containers for session lab-b-13: signal: killed: "
+2026/09/20 18:40:07 WARN lifecycle: container reap failed session=lab-b-12 err="dockerreap: list containers for session lab-b-12: signal: killed: "
+2026/09/20 18:40:08 WARN lifecycle: container reap failed session=lab-b-3 err="dockerreap: list containers for session lab-b-3: signal: killed: "
+time=2026-09-20T18:40:08.222+05:30 level=INFO msg="http request" id=Dhruvs-MacBook-Pro.local/uYr0jeYoaW-000004 method=GET path=/api/v1/projects status=200 bytes=277 duration=550.5µs remote=127.0.0.1:64273
+2026/09/20 18:40:08 WARN lifecycle: container reap failed session=lab-b-10 err="dockerreap: list containers for session lab-b-10: signal: killed: "
+2026/09/20 18:40:09 WARN lifecycle: container reap failed session=lab-b-7 err="dockerreap: list containers for session lab-b-7: signal: killed: "
+2026/09/20 18:40:10 WARN lifecycle: container reap failed session=lab-b-1 err="dockerreap: list containers for session lab-b-1: signal: killed: "
+2026/09/20 18:40:12 WARN lifecycle: container reap failed session=lab-b-8 err="dockerreap: list containers for session lab-b-8: signal: killed: "
+2026/09/20 18:40:12 WARN lifecycle: container reap failed session=lab-a-5 err="dockerreap: list containers for session lab-a-5: signal: killed: "
+2026/09/20 18:40:13 WARN lifecycle: container reap failed session=lab-b-9 err="dockerreap: list containers for session lab-b-9: signal: killed: "
+2026/09/20 18:40:13 WARN lifecycle: container reap failed session=lab-a-6 err="dockerreap: list containers for session lab-a-6: signal: killed: "
+2026/09/20 18:40:14 WARN lifecycle: container reap failed session=lab-b-11 err="dockerreap: list containers for session lab-b-11: signal: killed: "
+time=2026-09-20T18:40:14.220+05:30 level=INFO msg="http request" id=Dhruvs-MacBook-Pro.local/uYr0jeYoaW-000003 method=DELETE path=/api/v1/projects/lab-b status=500 bytes=136 duration=23.98910575s remote=127.0.0.1:64218 error="cleanup lab-b: list sessions for lab-b: context canceled"
+2026/09/20 18:40:22 WARN lifecycle: container reap failed session=lab-a-7 err="dockerreap: list containers for session lab-a-7: signal: killed: "
+2026/09/20 18:40:23 WARN lifecycle: container reap failed session=lab-a-8 err="dockerreap: list containers for session lab-a-8: signal: killed: "
+2026/09/20 18:40:32 WARN lifecycle: container reap failed session=lab-a-9 err="dockerreap: list containers for session lab-a-9: signal: killed: "
+2026/09/20 18:40:33 WARN lifecycle: container reap failed session=lab-a-10 err="dockerreap: list containers for session lab-a-10: signal: killed: "
+time=2026-09-20T18:40:40.851+05:30 level=DEBUG msg="agent readiness check" harness=auggie purpose=display decision=new_check duration_ms=0 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:15:40.851Z
+time=2026-09-20T18:40:41.403+05:30 level=DEBUG msg="agent readiness check" harness=kimi purpose=display decision=new_check duration_ms=0 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:15:41.403Z
+time=2026-09-20T18:40:41.449+05:30 level=DEBUG msg="agent readiness check" harness=omp purpose=display decision=new_check duration_ms=15 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:15:41.449Z
+2026/09/20 18:40:42 WARN lifecycle: container reap failed session=lab-a-11 err="dockerreap: list containers for session lab-a-11: signal: killed: "
+2026/09/20 18:40:43 WARN lifecycle: container reap failed session=lab-a-12 err="dockerreap: list containers for session lab-a-12: signal: killed: "
+time=2026-09-20T18:40:45.327+05:30 level=INFO msg="http request" id=Dhruvs-MacBook-Pro.local/uYr0jeYoaW-000005 method=GET path=/api/v1/projects status=200 bytes=277 duration=701.125µs remote=127.0.0.1:64394
+time=2026-09-20T18:40:49.466+05:30 level=DEBUG msg="agent readiness check" harness=amp purpose=display decision=new_check duration_ms=2353 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:15:49.466Z
+time=2026-09-20T18:40:49.970+05:30 level=DEBUG msg="agent readiness check" harness=cursor purpose=display decision=new_check duration_ms=3026 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:15:49.970Z
+2026/09/20 18:40:52 WARN lifecycle: container reap failed session=lab-a-13 err="dockerreap: list containers for session lab-a-13: signal: killed: "
+2026/09/20 18:40:53 WARN lifecycle: container reap failed session=lab-a-14 err="dockerreap: list containers for session lab-a-14: signal: killed: "
+time=2026-09-20T18:41:16.412+05:30 level=INFO msg="shutdown signal received, draining connections" timeout=10s
+time=2026-09-20T18:41:16.413+05:30 level=INFO msg="daemon stopped cleanly"

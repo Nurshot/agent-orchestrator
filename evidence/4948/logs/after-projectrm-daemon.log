@@ -1,0 +1,148 @@
+time=2026-09-20T18:41:23.757+05:30 level=INFO msg="built per-session agent resolver" default=claude-code registered="[agy aider amp auggie autohand claude-code cline codex continue copilot crush cursor devin droid goose grok kilocode kimchi kimi kiro muse omp opencode pi prime-agent qwen vibe]"
+time=2026-09-20T18:41:23.760+05:30 level=WARN msg="tracker disabled: no usable token" provider=gitlab err="gitlab scm: no token configured"
+time=2026-09-20T18:41:23.921+05:30 level=INFO msg="mobile remote access available" cloudflared=/opt/homebrew/bin/cloudflared source=system
+time=2026-09-20T18:41:23.930+05:30 level=INFO msg="browser runtime: listening" addr=/tmp/ao-brd-17063-19c80d563e8d98f1/browser.sock
+time=2026-09-20T18:41:23.930+05:30 level=INFO msg="supervisor: listening" addr=/tmp/ao-4948-lab5/data/supervise.sock
+time=2026-09-20T18:41:23.931+05:30 level=INFO msg="daemon listening" addr=127.0.0.1:3099 pid=17063
+time=2026-09-20T18:41:23.931+05:30 level=DEBUG msg="agent readiness check" harness=amp purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:41:23.936+05:30 level=DEBUG msg="agent readiness check" harness=auggie purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:41:24.006+05:30 level=DEBUG msg="agent readiness check" harness=vibe purpose=display decision=new_check duration_ms=74 outcome=not_ready
+time=2026-09-20T18:41:24.006+05:30 level=DEBUG msg="agent readiness check" harness=agy purpose=display decision=new_check duration_ms=74 outcome=not_ready
+time=2026-09-20T18:41:24.006+05:30 level=DEBUG msg="agent readiness check" harness=claude-code purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:41:24.031+05:30 level=DEBUG msg="agent readiness check" harness=autohand purpose=display decision=new_check duration_ms=94 outcome=not_ready
+time=2026-09-20T18:41:24.031+05:30 level=DEBUG msg="agent readiness check" harness=codex purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:41:24.039+05:30 level=DEBUG msg="agent readiness check" harness=aider purpose=display decision=new_check duration_ms=103 outcome=not_ready
+time=2026-09-20T18:41:24.040+05:30 level=DEBUG msg="agent readiness check" harness=copilot purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:41:24.084+05:30 level=DEBUG msg="agent readiness check" harness=continue purpose=display decision=new_check duration_ms=52 outcome=not_ready
+time=2026-09-20T18:41:24.084+05:30 level=DEBUG msg="agent readiness check" harness=cursor purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:41:24.115+05:30 level=DEBUG msg="agent readiness check" harness=grok purpose=display decision=new_check duration_ms=108 outcome=not_ready
+time=2026-09-20T18:41:24.115+05:30 level=DEBUG msg="agent readiness check" harness=droid purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:41:24.143+05:30 level=DEBUG msg="agent readiness check" harness=crush purpose=display decision=new_check duration_ms=103 outcome=not_ready
+time=2026-09-20T18:41:24.179+05:30 level=DEBUG msg="agent readiness check" harness=cline purpose=display decision=new_check duration_ms=173 outcome=not_ready
+time=2026-09-20T18:41:24.182+05:30 level=DEBUG msg="agent readiness check" harness=devin purpose=display decision=new_check duration_ms=97 outcome=not_ready
+time=2026-09-20T18:41:24.343+05:30 level=DEBUG msg="agent readiness check" harness=muse purpose=display decision=new_check duration_ms=196 outcome=not_ready
+time=2026-09-20T18:41:24.343+05:30 level=DEBUG msg="agent readiness check" harness=kimi purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:41:24.344+05:30 level=DEBUG msg="agent readiness check" harness=goose purpose=display decision=new_check duration_ms=229 outcome=not_ready
+time=2026-09-20T18:41:24.347+05:30 level=DEBUG msg="agent readiness check" harness=pi purpose=display decision=new_check duration_ms=2 outcome=unknown
+time=2026-09-20T18:41:24.349+05:30 level=DEBUG msg="agent readiness check" harness=omp purpose=display decision=new_check duration_ms=2 outcome=unknown
+time=2026-09-20T18:41:24.349+05:30 level=DEBUG msg="agent readiness check" harness=opencode purpose=display decision=new_check duration_ms=0 outcome=unknown
+time=2026-09-20T18:41:24.351+05:30 level=DEBUG msg="agent readiness check" harness=kimchi purpose=display decision=new_check duration_ms=169 outcome=not_ready
+time=2026-09-20T18:41:24.352+05:30 level=DEBUG msg="agent readiness check" harness=prime-agent purpose=display decision=new_check duration_ms=2 outcome=unknown
+time=2026-09-20T18:41:24.579+05:30 level=DEBUG msg="agent readiness check" harness=kilocode purpose=display decision=new_check duration_ms=398 outcome=not_ready
+time=2026-09-20T18:41:24.581+05:30 level=DEBUG msg="agent readiness check" harness=qwen purpose=display decision=new_check duration_ms=225 outcome=not_ready
+time=2026-09-20T18:41:24.587+05:30 level=DEBUG msg="agent readiness check" harness=kiro purpose=display decision=new_check duration_ms=243 outcome=not_ready
+time=2026-09-20T18:41:24.587+05:30 level=DEBUG msg="agent readiness check" harness=vibe purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:41:24.587+05:30 level=DEBUG msg="agent readiness check" harness=agy purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:41:24.587+05:30 level=DEBUG msg="agent readiness check" harness=aider purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:41:24.589+05:30 level=DEBUG msg="agent readiness check" harness=goose purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:41:24.590+05:30 level=DEBUG msg="agent readiness check" harness=auggie purpose=display decision=new_check duration_ms=0 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:11:39.590Z
+time=2026-09-20T18:41:24.590+05:30 level=DEBUG msg="agent readiness check" harness=autohand purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:41:24.591+05:30 level=DEBUG msg="agent readiness check" harness=muse purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:41:24.591+05:30 level=DEBUG msg="agent readiness check" harness=grok purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:41:24.591+05:30 level=DEBUG msg="agent readiness check" harness=kilocode purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:41:24.591+05:30 level=DEBUG msg="agent readiness check" harness=kimchi purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:41:24.591+05:30 level=DEBUG msg="agent readiness check" harness=kiro purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:41:24.592+05:30 level=DEBUG msg="agent readiness check" harness=kimi purpose=display decision=new_check duration_ms=0 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:11:39.592Z
+time=2026-09-20T18:41:24.592+05:30 level=DEBUG msg="agent readiness check" harness=crush purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:41:24.592+05:30 level=DEBUG msg="agent readiness check" harness=cline purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:41:24.593+05:30 level=DEBUG msg="agent readiness check" harness=devin purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:41:24.603+05:30 level=DEBUG msg="agent readiness check" harness=claude-code purpose=display decision=new_check duration_ms=12 outcome=ready
+time=2026-09-20T18:41:24.605+05:30 level=DEBUG msg="agent readiness check" harness=pi purpose=display decision=new_check duration_ms=2 outcome=ready
+time=2026-09-20T18:41:24.616+05:30 level=DEBUG msg="agent readiness check" harness=omp purpose=display decision=new_check duration_ms=10 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:11:39.616Z
+time=2026-09-20T18:41:24.617+05:30 level=DEBUG msg="agent readiness check" harness=opencode purpose=display decision=new_check duration_ms=0 outcome=ready
+time=2026-09-20T18:41:24.618+05:30 level=DEBUG msg="agent readiness check" harness=continue purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:41:24.619+05:30 level=DEBUG msg="agent readiness check" harness=droid purpose=display decision=new_check duration_ms=0 outcome=ready
+time=2026-09-20T18:41:24.619+05:30 level=DEBUG msg="agent readiness check" harness=qwen purpose=display decision=cache_hit duration_ms=0 outcome=not_ready
+time=2026-09-20T18:41:24.621+05:30 level=DEBUG msg="agent readiness check" harness=prime-agent purpose=display decision=new_check duration_ms=0 outcome=ready
+time=2026-09-20T18:41:25.239+05:30 level=INFO msg="Codex capability check completed" operation=capability_check cache=new duration_ms=1225 account_read=supported native_login=supported capacity_read=supported
+time=2026-09-20T18:41:25.675+05:30 level=DEBUG msg="agent readiness check" harness=copilot purpose=display decision=new_check duration_ms=1055 outcome=ready
+time=2026-09-20T18:41:26.596+05:30 level=DEBUG msg="agent readiness check" harness=codex purpose=display decision=new_check duration_ms=2003 outcome=ready
+time=2026-09-20T18:41:27.639+05:30 level=DEBUG msg="agent readiness check" harness=cursor purpose=display decision=new_check duration_ms=3045 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:11:42.639Z
+time=2026-09-20T18:41:29.612+05:30 level=DEBUG msg="agent readiness check" harness=amp purpose=display decision=new_check duration_ms=5025 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:11:44.612Z
+time=2026-09-20T18:41:39.593+05:30 level=DEBUG msg="agent readiness check" harness=kimi purpose=display decision=new_check duration_ms=0 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:12:39.593Z
+time=2026-09-20T18:41:39.595+05:30 level=DEBUG msg="agent readiness check" harness=auggie purpose=display decision=new_check duration_ms=0 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:12:39.595Z
+time=2026-09-20T18:41:39.629+05:30 level=DEBUG msg="agent readiness check" harness=omp purpose=display decision=new_check duration_ms=10 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:12:39.629Z
+time=2026-09-20T18:41:41.348+05:30 level=INFO msg="http request" id=Dhruvs-MacBook-Pro.local/8BRaXhRFLA-000001 method=POST path=/internal/telemetry/cli-invoked status=202 bytes=0 duration=1.128709ms remote=127.0.0.1:64579
+time=2026-09-20T18:41:41.363+05:30 level=INFO msg="http request" id=Dhruvs-MacBook-Pro.local/8BRaXhRFLA-000002 method=DELETE path=/api/v1/projects/lab-b status=409 bytes=219 duration=3.321125ms remote=127.0.0.1:64579
+time=2026-09-20T18:41:43.379+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:41:45.111+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:41:45.676+05:30 level=DEBUG msg="agent readiness check" harness=cursor purpose=display decision=new_check duration_ms=3033 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:12:45.676Z
+time=2026-09-20T18:41:46.516+05:30 level=DEBUG msg="agent readiness check" harness=amp purpose=display decision=new_check duration_ms=1902 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:12:46.516Z
+time=2026-09-20T18:41:57.553+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:42:01.982+05:30 level=INFO msg="http request" id=Dhruvs-MacBook-Pro.local/8BRaXhRFLA-000003 method=GET path=/api/v1/projects status=200 bytes=277 duration=3.133292ms remote=127.0.0.1:64636
+time=2026-09-20T18:42:09.784+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:42:18.108+05:30 level=INFO msg="http request" id=Dhruvs-MacBook-Pro.local/8BRaXhRFLA-000004 method=POST path=/internal/telemetry/cli-invoked status=202 bytes=0 duration=129.667µs remote=127.0.0.1:64675
+time=2026-09-20T18:42:18.592+05:30 level=DEBUG msg="reaper: workload probe error reported as failed fact" session=lab-b-10 launch=launch-b-10 err="tmux runtime: invalid pane pid \"\""
+time=2026-09-20T18:42:19.127+05:30 level=ERROR msg="reaper: mass-death circuit breaker tripped, reporting the pass as inconclusive" dead=20 probed=30
+time=2026-09-20T18:42:19.128+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:42:23.436+05:30 level=ERROR msg="reaper: mass-death circuit breaker tripped, reporting the pass as inconclusive" dead=29 probed=29
+time=2026-09-20T18:42:23.436+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-b dead=15 probed=15
+time=2026-09-20T18:42:23.436+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:42:27.155+05:30 level=ERROR msg="reaper: mass-death circuit breaker tripped, reporting the pass as inconclusive" dead=22 probed=22
+time=2026-09-20T18:42:27.155+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:42:27.155+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-b dead=8 probed=8
+2026/09/20 18:42:29 WARN lifecycle: container reap failed session=lab-b-6 err="dockerreap: list containers for session lab-b-6: signal: killed: "
+2026/09/20 18:42:29 WARN lifecycle: container reap failed session=lab-b-5 err="dockerreap: list containers for session lab-b-5: signal: killed: "
+2026/09/20 18:42:30 WARN lifecycle: container reap failed session=lab-b-3 err="dockerreap: list containers for session lab-b-3: signal: killed: "
+2026/09/20 18:42:30 WARN lifecycle: container reap failed session=lab-b-15 err="dockerreap: list containers for session lab-b-15: signal: killed: "
+2026/09/20 18:42:31 WARN lifecycle: container reap failed session=lab-b-12 err="dockerreap: list containers for session lab-b-12: signal: killed: "
+time=2026-09-20T18:42:31.943+05:30 level=ERROR msg="reaper: mass-death circuit breaker tripped, reporting the pass as inconclusive" dead=15 probed=15
+time=2026-09-20T18:42:31.943+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+2026/09/20 18:42:32 WARN lifecycle: container reap failed session=lab-b-10 err="dockerreap: list containers for session lab-b-10: signal: killed: "
+2026/09/20 18:42:32 WARN lifecycle: container reap failed session=lab-b-4 err="dockerreap: list containers for session lab-b-4: signal: killed: "
+2026/09/20 18:42:33 WARN lifecycle: container reap failed session=lab-b-9 err="dockerreap: list containers for session lab-b-9: signal: killed: "
+2026/09/20 18:42:34 WARN lifecycle: container reap failed session=lab-b-11 err="dockerreap: list containers for session lab-b-11: signal: killed: "
+time=2026-09-20T18:42:34.063+05:30 level=ERROR msg="reaper: mass-death circuit breaker tripped, reporting the pass as inconclusive" dead=14 probed=14
+time=2026-09-20T18:42:34.063+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+2026/09/20 18:42:34 WARN lifecycle: container reap failed session=lab-b-13 err="dockerreap: list containers for session lab-b-13: signal: killed: "
+2026/09/20 18:42:35 WARN lifecycle: container reap failed session=lab-b-16 err="dockerreap: list containers for session lab-b-16: signal: killed: "
+2026/09/20 18:42:35 WARN lifecycle: container reap failed session=lab-b-8 err="dockerreap: list containers for session lab-b-8: signal: killed: "
+2026/09/20 18:42:36 WARN lifecycle: container reap failed session=lab-b-2 err="dockerreap: list containers for session lab-b-2: signal: killed: "
+2026/09/20 18:42:37 WARN lifecycle: container reap failed session=lab-b-7 err="dockerreap: list containers for session lab-b-7: signal: killed: "
+2026/09/20 18:42:38 WARN lifecycle: container reap failed session=lab-b-1 err="dockerreap: list containers for session lab-b-1: signal: killed: "
+2026/09/20 18:42:39 WARN lifecycle: container reap failed session=lab-b-14 err="dockerreap: list containers for session lab-b-14: signal: killed: "
+time=2026-09-20T18:42:39.596+05:30 level=DEBUG msg="agent readiness check" harness=auggie purpose=display decision=new_check duration_ms=0 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:17:39.596Z
+time=2026-09-20T18:42:39.596+05:30 level=DEBUG msg="agent readiness check" harness=kimi purpose=display decision=new_check duration_ms=1 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:17:39.596Z
+time=2026-09-20T18:42:39.636+05:30 level=DEBUG msg="agent readiness check" harness=omp purpose=display decision=new_check duration_ms=5 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:17:39.636Z
+time=2026-09-20T18:42:40.784+05:30 level=ERROR msg="reaper: mass-death circuit breaker tripped, reporting the pass as inconclusive" dead=14 probed=14
+time=2026-09-20T18:42:40.785+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:42:44.848+05:30 level=ERROR msg="reaper: mass-death circuit breaker tripped, reporting the pass as inconclusive" dead=14 probed=14
+time=2026-09-20T18:42:44.849+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:42:47.093+05:30 level=INFO msg="http request" id=Dhruvs-MacBook-Pro.local/8BRaXhRFLA-000006 method=GET path=/api/v1/projects status=200 bytes=277 duration=651.083µs remote=127.0.0.1:64754
+time=2026-09-20T18:42:48.701+05:30 level=DEBUG msg="agent readiness check" harness=cursor purpose=display decision=new_check duration_ms=3022 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:17:48.701Z
+time=2026-09-20T18:42:49.444+05:30 level=DEBUG msg="agent readiness check" harness=amp purpose=display decision=new_check duration_ms=2925 outcome=unknown failure_category=auth_check_inconclusive next_retry=2026-09-20T13:17:49.443Z
+time=2026-09-20T18:42:51.501+05:30 level=ERROR msg="reaper: mass-death circuit breaker tripped, reporting the pass as inconclusive" dead=14 probed=14
+time=2026-09-20T18:42:51.501+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:42:55.878+05:30 level=INFO msg="http request" id=Dhruvs-MacBook-Pro.local/8BRaXhRFLA-000005 method=DELETE path=/api/v1/projects/lab-b status=200 bytes=48 duration=37.752816291s remote=127.0.0.1:64675
+time=2026-09-20T18:42:56.213+05:30 level=ERROR msg="reaper: mass-death circuit breaker tripped, reporting the pass as inconclusive" dead=14 probed=14
+time=2026-09-20T18:42:56.213+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:42:58.946+05:30 level=ERROR msg="reaper: mass-death circuit breaker tripped, reporting the pass as inconclusive" dead=14 probed=14
+time=2026-09-20T18:42:58.947+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:43:04.020+05:30 level=ERROR msg="reaper: mass-death circuit breaker tripped, reporting the pass as inconclusive" dead=14 probed=14
+time=2026-09-20T18:43:04.020+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:43:09.867+05:30 level=ERROR msg="reaper: mass-death circuit breaker tripped, reporting the pass as inconclusive" dead=14 probed=14
+time=2026-09-20T18:43:09.867+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:43:14.476+05:30 level=INFO msg="http request" id=Dhruvs-MacBook-Pro.local/8BRaXhRFLA-000007 method=GET path=/api/v1/projects status=200 bytes=146 duration=1.311042ms remote=127.0.0.1:65320
+time=2026-09-20T18:43:15.806+05:30 level=ERROR msg="reaper: mass-death circuit breaker tripped, reporting the pass as inconclusive" dead=14 probed=14
+time=2026-09-20T18:43:15.806+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:43:18.932+05:30 level=ERROR msg="reaper: mass-death circuit breaker tripped, reporting the pass as inconclusive" dead=14 probed=14
+time=2026-09-20T18:43:18.932+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:43:23.947+05:30 level=ERROR msg="reaper: mass-death circuit breaker tripped, reporting the pass as inconclusive" dead=14 probed=14
+time=2026-09-20T18:43:23.947+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:43:29.214+05:30 level=ERROR msg="reaper: mass-death circuit breaker tripped, reporting the pass as inconclusive" dead=14 probed=14
+time=2026-09-20T18:43:29.214+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:43:35.199+05:30 level=ERROR msg="reaper: mass-death circuit breaker tripped, reporting the pass as inconclusive" dead=14 probed=14
+time=2026-09-20T18:43:35.199+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:43:38.973+05:30 level=ERROR msg="reaper: mass-death circuit breaker tripped, reporting the pass as inconclusive" dead=14 probed=14
+time=2026-09-20T18:43:38.973+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:43:39.348+05:30 level=INFO msg="http request" id=Dhruvs-MacBook-Pro.local/8BRaXhRFLA-000008 method=GET path=/api/v1/projects status=200 bytes=146 duration=710.666µs remote=127.0.0.1:49511
+time=2026-09-20T18:43:46.249+05:30 level=ERROR msg="reaper: mass-death circuit breaker tripped, reporting the pass as inconclusive" dead=14 probed=14
+time=2026-09-20T18:43:46.250+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:43:48.972+05:30 level=ERROR msg="reaper: mass-death circuit breaker tripped, reporting the pass as inconclusive" dead=14 probed=14
+time=2026-09-20T18:43:48.972+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:43:53.982+05:30 level=ERROR msg="reaper: mass-death circuit breaker tripped, reporting the pass as inconclusive" dead=14 probed=14
+time=2026-09-20T18:43:53.982+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:43:59.319+05:30 level=ERROR msg="reaper: mass-death circuit breaker tripped, reporting the pass as inconclusive" dead=14 probed=14
+time=2026-09-20T18:43:59.320+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
+time=2026-09-20T18:44:05.052+05:30 level=ERROR msg="reaper: mass-death circuit breaker tripped, reporting the pass as inconclusive" dead=14 probed=14
+time=2026-09-20T18:44:05.053+05:30 level=ERROR msg="reaper: project mass-death circuit breaker tripped, reporting the project's pass as inconclusive" project=lab-a dead=14 probed=14
