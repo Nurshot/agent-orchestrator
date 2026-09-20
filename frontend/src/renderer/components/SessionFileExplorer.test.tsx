@@ -221,7 +221,12 @@ describe("SessionFileExplorer", () => {
 		expect(screen.getByTestId("tree-changed-only")).toHaveTextContent("true");
 		expect(getMock).toHaveBeenCalledWith(
 			"/api/v1/sessions/{sessionId}/pr/{prNumber}/files",
-			expect.objectContaining({ params: { path: { sessionId: "sess-pr", prNumber: 42 } } }),
+			expect.objectContaining({
+				params: {
+					path: { sessionId: "sess-pr", prNumber: 42 },
+					query: { sourceUrl: "https://example.test/pr/42" },
+				},
+			}),
 		);
 	});
 
