@@ -2,7 +2,8 @@
 set -euo pipefail
 
 # Build the AO Coder workspace image on the Azure Coder VM and publish the Coder
-# template that references it. Run after provision-coder-azure.sh.
+# template that references it, with per-workspace resource limits. Run after
+# provision-coder-azure.sh.
 #
 # The workspace image (cloud/coder/Sandbox.Dockerfile) bakes the release-matched
 # /ao-worker and /ao binaries straight out of the control-plane image, so pass
@@ -11,10 +12,12 @@ set -euo pipefail
 #
 # Single-VM shape: the image is built locally on the VM (tag ao-coder-workspace:
 # local) and the template references that tag, so the Coder provisioner - which
-# shares the VM's Docker daemon - finds it with no registry round trip.
+# shares the VM's Docker daemon - finds it with no registry round trip. The
+# template also pins per-workspace memory/cpu so one workspace cannot exhaust the
+# shared VM.
 #
-# Requires: az (logged in), aws (for the ECR pull of the CP image), ssh key from
-# provision-coder-azure.sh (--generate-ssh-keys -> ~/.ssh/id_rsa).
+# Requires: az (logged in), aws (for the ECR pull of the CP image), the ssh key
+# from provision-coder-azure.sh (--generate-ssh-keys -> ~/.ssh/id_rsa).
 
 RG="${AO_AZURE_RG:-ao-coder-azure}"
 VM="${AO_AZURE_VM:-ao-coder-azure-vm}"
@@ -24,19 +27,20 @@ AWS_REGION="${AWS_REGION:-eu-north-1}"
 CP_IMAGE="${AO_CLOUD_CP_IMAGE:?set AO_CLOUD_CP_IMAGE to the control-plane image whose worker to bake, e.g. <acct>.dkr.ecr.eu-north-1.amazonaws.com/ao-cloud-control-plane:<tag>-linux-amd64}"
 TEMPLATE_NAME="${AO_CLOUD_CODER_TEMPLATE_NAME:-ao-linux-docker}"
 WORKSPACE_IMAGE="${AO_CLOUD_CODER_WORKSPACE_IMAGE:-ao-coder-workspace:local}"
+WORKSPACE_MEMORY_MB="${AO_CLOUD_CODER_WORKSPACE_MEMORY_MB:-4096}"
+WORKSPACE_CPU_SHARES="${AO_CLOUD_CODER_WORKSPACE_CPU_SHARES:-1024}"
 CODER_ADMIN_EMAIL="${AO_CODER_ADMIN_EMAIL:-admin@ao-coder.dev}"
 TEMPLATE_DIR="${AO_CLOUD_CODER_TEMPLATE_DIR:-coder}"
 ECR_REGISTRY="${CP_IMAGE%%/*}"
 
-# The public IP is stable; az vm show is occasionally flaky for a fresh VM
-# (transient ARM ResourceNotFound), so allow an explicit override.
-IP="${AO_AZURE_VM_IP:-}"
-if [[ -z "$IP" ]]; then
-  for _ in 1 2 3; do IP="$(az vm show -g "$RG" -n "$VM" -d --query publicIps -o tsv 2>/dev/null || true)"; [[ -n "$IP" ]] && break; sleep 5; done
-fi
-[[ -n "$IP" ]] || { echo "could not resolve VM public IP; set AO_AZURE_VM_IP"; exit 1; }
+# Public IP is stable; az show is occasionally flaky for a fresh VM, so allow an
+# explicit override for both the IP (SSH) and FQDN (Coder is HTTPS-only).
+PIPNAME="$(az network public-ip list -g "$RG" --query "[?ipAddress!=null] | [0].name" -o tsv 2>/dev/null || true)"
+IP="${AO_AZURE_VM_IP:-$(az network public-ip show -g "$RG" -n "$PIPNAME" --query 'ipAddress' -o tsv 2>/dev/null || true)}"
+FQDN="${AO_AZURE_FQDN:-$(az network public-ip show -g "$RG" -n "$PIPNAME" --query 'dnsSettings.fqdn' -o tsv 2>/dev/null || true)}"
+[[ -n "$IP" && -n "$FQDN" ]] || { echo "could not resolve VM IP/FQDN; set AO_AZURE_VM_IP and AO_AZURE_FQDN"; exit 1; }
 SSHK=(-i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20)
-echo "=== Coder VM: ${IP} ==="
+echo "=== Coder VM: ${IP} (${FQDN}) ==="
 
 echo "=== copy template sources ==="
 scp "${SSHK[@]}" "${TEMPLATE_DIR}/main.tf" "${TEMPLATE_DIR}/Sandbox.Dockerfile" "${ADMIN_USER}@${IP}:/tmp/"
@@ -55,20 +59,24 @@ ssh "${SSHK[@]}" "${ADMIN_USER}@${IP}" "
   sudo docker images '${WORKSPACE_IMAGE}' --format 'built {{.Repository}}:{{.Tag}} {{.Size}}'
 "
 
-echo "=== publish the ${TEMPLATE_NAME} template ==="
-ssh "${SSHK[@]}" "${ADMIN_USER}@${IP}" "sudo TEMPLATE_NAME='${TEMPLATE_NAME}' WORKSPACE_IMAGE='${WORKSPACE_IMAGE}' ADMIN_EMAIL='${CODER_ADMIN_EMAIL}' bash -s" <<'REMOTE'
+echo "=== publish the ${TEMPLATE_NAME} template (mem=${WORKSPACE_MEMORY_MB}MB, cpu_shares=${WORKSPACE_CPU_SHARES}) ==="
+ssh "${SSHK[@]}" "${ADMIN_USER}@${IP}" "sudo FQDN='${FQDN}' TEMPLATE_NAME='${TEMPLATE_NAME}' WORKSPACE_IMAGE='${WORKSPACE_IMAGE}' MEM='${WORKSPACE_MEMORY_MB}' CPU='${WORKSPACE_CPU_SHARES}' ADMIN_EMAIL='${CODER_ADMIN_EMAIL}' bash -s" <<'REMOTE'
 set -e
 . /etc/ao-coder.env
-SESSION=$(curl -s -X POST http://localhost:3000/api/v2/users/login -H "Content-Type: application/json" \
+SESSION=$(curl -s -X POST https://$FQDN/api/v2/users/login -H "Content-Type: application/json" \
   -d "{\"email\":\"${ADMIN_EMAIL}\",\"password\":\"${CODER_ADMIN_PW}\"}" \
   | python3 -c 'import sys,json;print(json.load(sys.stdin).get("session_token",""))')
 [ -z "$SESSION" ] && { echo "LOGIN_FAILED"; exit 1; }
+mkdir -p /home/azureuser/ao-coder-template && cp /tmp/main.tf /home/azureuser/ao-coder-template/main.tf
 docker exec coder mkdir -p /tmp/ao-tmpl
 docker cp /home/azureuser/ao-coder-template/main.tf coder:/tmp/ao-tmpl/main.tf
-docker exec -e CODER_URL=http://localhost:3000 -e CODER_SESSION_TOKEN="$SESSION" coder \
-  coder templates push "$TEMPLATE_NAME" -d /tmp/ao-tmpl --variable workspace_image="$WORKSPACE_IMAGE" -y 2>&1 | tail -3
-ORG=$(curl -s -H "Coder-Session-Token: $SESSION" http://localhost:3000/api/v2/users/me | python3 -c 'import sys,json;print(json.load(sys.stdin)["organization_ids"][0])')
-TID=$(curl -s -H "Coder-Session-Token: $SESSION" "http://localhost:3000/api/v2/organizations/$ORG/templates" \
+docker exec -e CODER_URL=https://$FQDN -e CODER_SESSION_TOKEN="$SESSION" coder \
+  coder templates push "$TEMPLATE_NAME" -d /tmp/ao-tmpl \
+  --variable workspace_image="$WORKSPACE_IMAGE" \
+  --variable workspace_memory_mb="$MEM" \
+  --variable workspace_cpu_shares="$CPU" -y 2>&1 | tail -3
+ORG=$(curl -s -H "Coder-Session-Token: $SESSION" https://$FQDN/api/v2/users/me | python3 -c 'import sys,json;print(json.load(sys.stdin)["organization_ids"][0])')
+TID=$(curl -s -H "Coder-Session-Token: $SESSION" "https://$FQDN/api/v2/organizations/$ORG/templates" \
   | python3 -c "import sys,json;[print(t['id']) for t in json.load(sys.stdin) if t['name']=='$TEMPLATE_NAME']")
 if [ -n "$TID" ]; then
   grep -q "^CODER_TEMPLATE_ID=" /etc/ao-coder.env && sed -i "/^CODER_TEMPLATE_ID=/d" /etc/ao-coder.env
@@ -78,5 +86,5 @@ else echo "TEMPLATE_ID_NOT_FOUND"; fi
 REMOTE
 
 echo
-echo "Template published. AO_CLOUD_CODER_TEMPLATE_ID is stored on the VM at /etc/ao-coder.env."
-echo "Wire a NON-SHARED dogfood control plane with the values printed by provision-coder-azure.sh + the template id above."
+echo "Template published (with per-workspace limits). AO_CLOUD_CODER_TEMPLATE_ID is on the VM at /etc/ao-coder.env."
+echo "Point a NON-SHARED control plane at https://${FQDN} with that template id + the CODER_TOKEN from the VM."
