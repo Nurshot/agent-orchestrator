@@ -15,18 +15,20 @@ import (
 )
 
 const (
-	stateDirectoryName = "accounts-manager"
-	configFileName     = "config.yaml"
-	controlKeyFileName = "control.key"
-	runtimeFileName    = "runtime.json"
+	stateDirectoryName    = "accounts-manager"
+	configFileName        = "config.yaml"
+	controlKeyFileName    = "control.key"
+	managementKeyFileName = "management.key"
+	runtimeFileName       = "runtime.json"
 )
 
 type privateState struct {
-	Root       string
-	ConfigPath string
-	ControlKey string
-	ClientKey  string
-	Port       int
+	Root          string
+	ConfigPath    string
+	ControlKey    string
+	ClientKey     string
+	ManagementKey string
+	Port          int
 }
 
 type engineConfig struct {
@@ -82,17 +84,22 @@ func ensureState(stateDir string) (privateState, error) {
 	if err != nil {
 		return privateState{}, fmt.Errorf("accounts manager control key: %w", err)
 	}
+	managementKey, err := ensurePrivateKey(filepath.Join(root, managementKeyFileName))
+	if err != nil {
+		return privateState{}, fmt.Errorf("accounts manager management key: %w", err)
+	}
 	configPath := filepath.Join(root, configFileName)
 	cfg, err := loadOrCreateConfig(configPath, authDir)
 	if err != nil {
 		return privateState{}, err
 	}
 	return privateState{
-		Root:       root,
-		ConfigPath: configPath,
-		ControlKey: controlKey,
-		ClientKey:  cfg.APIKeys[0],
-		Port:       cfg.Port,
+		Root:          root,
+		ConfigPath:    configPath,
+		ControlKey:    controlKey,
+		ClientKey:     cfg.APIKeys[0],
+		ManagementKey: managementKey,
+		Port:          cfg.Port,
 	}, nil
 }
 

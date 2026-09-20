@@ -11,17 +11,19 @@ import (
 )
 
 const (
-	configFileName = "config.yaml"
-	controlKeyName = "control.key"
-	authDirName    = "auth"
+	configFileName    = "config.yaml"
+	controlKeyName    = "control.key"
+	managementKeyName = "management.key"
+	authDirName       = "auth"
 )
 
 // State is the validated private runtime configuration owned by AO.
 type State struct {
-	Root       string
-	ConfigPath string
-	ControlKey string
-	Config     *sdkconfig.Config
+	Root          string
+	ConfigPath    string
+	ControlKey    string
+	ManagementKey string
+	Config        *sdkconfig.Config
 }
 
 // LoadState loads the AO-owned runner state without accepting paths outside the
@@ -49,6 +51,15 @@ func LoadState(root string) (*State, error) {
 	if controlKey == "" {
 		return nil, fmt.Errorf("control key is empty")
 	}
+	managementPath := filepath.Join(root, managementKeyName)
+	managementBytes, err := readPrivateRegularFile(managementPath)
+	if err != nil {
+		return nil, fmt.Errorf("management key: %w", err)
+	}
+	managementKey := strings.TrimSpace(string(managementBytes))
+	if managementKey == "" {
+		return nil, fmt.Errorf("management key is empty")
+	}
 
 	configPath := filepath.Join(root, configFileName)
 	configBytes, err := readPrivateRegularFile(configPath)
@@ -64,10 +75,11 @@ func LoadState(root string) (*State, error) {
 	}
 
 	return &State{
-		Root:       root,
-		ConfigPath: configPath,
-		ControlKey: controlKey,
-		Config:     cfg,
+		Root:          root,
+		ConfigPath:    configPath,
+		ControlKey:    controlKey,
+		ManagementKey: managementKey,
+		Config:        cfg,
 	}, nil
 }
 

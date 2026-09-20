@@ -31,7 +31,10 @@ func TestEnsureStateCreatesPrivateLoopbackConfiguration(t *testing.T) {
 	if state.Port < 1 || state.Port > 65535 {
 		t.Fatalf("port = %d", state.Port)
 	}
-	if state.ControlKey == "" || state.ClientKey == "" || state.ControlKey == state.ClientKey {
+	if state.ControlKey == "" || state.ClientKey == "" || state.ManagementKey == "" {
+		t.Fatal("private keys were not generated")
+	}
+	if state.ControlKey == state.ClientKey || state.ControlKey == state.ManagementKey || state.ClientKey == state.ManagementKey {
 		t.Fatal("private keys were not generated independently")
 	}
 
@@ -39,6 +42,7 @@ func TestEnsureStateCreatesPrivateLoopbackConfiguration(t *testing.T) {
 	assertPrivateMode(t, root, 0o700)
 	assertPrivateMode(t, filepath.Join(root, "auth"), 0o700)
 	assertPrivateMode(t, filepath.Join(root, "control.key"), 0o600)
+	assertPrivateMode(t, filepath.Join(root, "management.key"), 0o600)
 	assertPrivateMode(t, filepath.Join(root, "config.yaml"), 0o600)
 
 	b, err := os.ReadFile(filepath.Join(root, "config.yaml"))
@@ -46,6 +50,9 @@ func TestEnsureStateCreatesPrivateLoopbackConfiguration(t *testing.T) {
 		t.Fatal(err)
 	}
 	config := string(b)
+	if strings.Contains(config, state.ManagementKey) {
+		t.Fatal("management key was persisted in the engine configuration")
+	}
 	for _, required := range []string{
 		"host: 127.0.0.1",
 		"auth-dir: " + filepath.Join(root, "auth"),
@@ -57,6 +64,75 @@ func TestEnsureStateCreatesPrivateLoopbackConfiguration(t *testing.T) {
 		if !strings.Contains(config, required) {
 			t.Fatalf("config missing %q:\n%s", required, config)
 		}
+	}
+}
+
+func TestEnsureStateRejectsUnsafeManagementKey(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(t *testing.T, path string)
+		want   string
+	}{
+		{
+			name: "empty",
+			mutate: func(t *testing.T, path string) {
+				t.Helper()
+				if err := os.WriteFile(path, nil, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: "empty",
+		},
+		{
+			name: "group readable",
+			mutate: func(t *testing.T, path string) {
+				t.Helper()
+				if err := os.Chmod(path, 0o640); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: "permissions",
+		},
+	}
+	if runtime.GOOS != "windows" {
+		tests = append(tests, struct {
+			name   string
+			mutate func(t *testing.T, path string)
+			want   string
+		}{
+			name: "symlink",
+			mutate: func(t *testing.T, path string) {
+				t.Helper()
+				target := filepath.Join(filepath.Dir(path), "elsewhere-management")
+				if err := os.WriteFile(target, []byte("do-not-read"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Remove(path); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(target, path); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: "regular",
+		})
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stateDir := t.TempDir()
+			if err := os.Chmod(stateDir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := ensureState(stateDir); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(stateDir, stateDirectoryName, managementKeyFileName)
+			tt.mutate(t, path)
+			if _, err := ensureState(stateDir); err == nil || !strings.Contains(strings.ToLower(err.Error()), tt.want) {
+				t.Fatalf("ensureState() error = %v, want containing %q", err, tt.want)
+			}
+		})
 	}
 }
 
