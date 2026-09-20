@@ -589,6 +589,33 @@ describe("Sidebar", () => {
 		expect(spawnMock).not.toHaveBeenCalled();
 	});
 
+	it("does not open an exited orchestrator when resume fails", async () => {
+		const user = userEvent.setup();
+		const error = new Error("resume request failed");
+		useUiStore.getState().clearGlobalToast();
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		resumeOrchestratorMock.mockRejectedValueOnce(error);
+		const exitedOrchestrator: WorkspaceSession = {
+			...session,
+			id: "proj-1-orch",
+			kind: "orchestrator",
+			status: "exited",
+			activity: { state: "exited", lastActivityAt: "2026-06-30T00:00:00Z" },
+			isTerminated: false,
+		};
+		renderSidebar({ workspaces: [{ ...workspace, sessions: [exitedOrchestrator] }] });
+
+		await user.click(screen.getByRole("button", { name: "Open Project One orchestrator" }));
+
+		await waitFor(() => expect(console.error).toHaveBeenCalledWith("Failed to resume orchestrator:", error));
+		expect(navigateMock).not.toHaveBeenCalled();
+		expect(useUiStore.getState().globalToast).toMatchObject({
+			title: "Resume agent",
+			body: "resume request failed",
+			tone: "error",
+		});
+	});
+
 	it("opens an exited orchestrator without resuming while its agent switch is active", async () => {
 		const user = userEvent.setup();
 		const switchingOrchestrator: WorkspaceSession = {

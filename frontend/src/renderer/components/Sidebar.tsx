@@ -1052,6 +1052,7 @@ const ProjectItem = memo(function ProjectItem({
 	const isProjectProvisioning = useUiStore((state) => state.provisioningProjectIds.has(workspace.id));
 	const isProjectRestarting = useUiStore((state) => state.restartingProjectIds.has(workspace.id));
 	const requestNewTask = useUiStore((state) => state.requestNewTask);
+	const showGlobalToast = useUiStore((state) => state.showGlobalToast);
 	const projectIsDragging = isDragged;
 	const isStandaloneWorkspace = workspace.kind === STANDALONE_PROJECT_KIND;
 	// Keep completed PR sessions reachable while their runtime still exists.
@@ -1136,6 +1137,12 @@ const ProjectItem = memo(function ProjectItem({
 					await queryClient.invalidateQueries({ queryKey: workspaceQueryKey });
 				} catch (err) {
 					console.error("Failed to resume orchestrator:", err);
+					showGlobalToast(
+						t("inspector.resumeAgent"),
+						err instanceof Error ? err.message : t("shell.couldNotSpawn"),
+						"error",
+					);
+					return;
 				} finally {
 					setIsSpawning(false);
 				}
