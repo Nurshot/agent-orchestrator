@@ -76,6 +76,8 @@ export function SessionFileExplorer({
 	);
 	const hasChanges = filesQuery.data?.files.some((file) => file.status !== "unmodified") ?? false;
 	const showChanges = source.kind === "workspace" && changedOnly && (!filesQuery.data || hasChanges);
+	const sourceUnavailable = source.kind === "pull_request"
+		&& (filesQuery.isError || Boolean(scmQuery.data && !scmQuery.data.some((pr) => pr.url === source.url)));
 
 	useEffect(() => {
 		setSelectedPath(null);
@@ -84,19 +86,11 @@ export function SessionFileExplorer({
 	}, [sessionId]);
 
 	useEffect(() => {
-		if (source.kind !== "pull_request" || !scmQuery.data) return;
-		if (scmQuery.data.some((pr) => pr.url === source.url)) return;
+		if (!sourceUnavailable) return;
 		setFilesSource(sessionId, WORKSPACE_SOURCE);
 		setSelectedPath(null);
 		setSourceNotice(t("files.explorer.sourceUnavailable"));
-	}, [scmQuery.data, sessionId, setFilesSource, source, t]);
-
-	useEffect(() => {
-		if (source.kind !== "pull_request" || !filesQuery.isError) return;
-		setFilesSource(sessionId, WORKSPACE_SOURCE);
-		setSelectedPath(null);
-		setSourceNotice(t("files.explorer.sourceUnavailable"));
-	}, [filesQuery.isError, sessionId, setFilesSource, source.kind, t]);
+	}, [sessionId, setFilesSource, sourceUnavailable, t]);
 
 	useEffect(() => subscribeWorkspaceFileChanges(sessionId, queryClient), [queryClient, sessionId]);
 	useEffect(() => {
@@ -260,13 +254,12 @@ export function SessionFileExplorer({
 				<ResizablePanelGroup className="min-h-0 flex-1">
 					<ResizablePanel defaultSize="26%" minSize="18%" maxSize="50%">
 						<FileTree
-							changedOnly={false}
+							changedOnly={source.kind === "pull_request"}
 							changedOnlyData={changedOnlyData}
 							filterText={filter}
 							onSelectPath={handleSelectPath}
 							selectedPath={treeSelectedPath}
 							sessionId={sessionId}
-							forceChangedOnly={source.kind === "pull_request"}
 						/>
 					</ResizablePanel>
 					<ResizableHandle />

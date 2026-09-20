@@ -10157,15 +10157,12 @@ components:
           type: array
         sessionId:
           type: string
-        source:
-          $ref: '#/components/schemas/PRFileSourceResponse'
         summary:
           $ref: '#/components/schemas/WorkspaceSummary'
         truncated:
           type: boolean
       required:
       - sessionId
-      - source
       - files
       - truncated
       - summary
@@ -10595,27 +10592,6 @@ components:
       required:
       - id
       - projectId
-      type: object
-    PRFileSourceResponse:
-      properties:
-        baseSha:
-          type: string
-        headSha:
-          type: string
-        label:
-          type: string
-        number:
-          type: integer
-        sourceBranch:
-          type: string
-        url:
-          type: string
-      required:
-      - number
-      - url
-      - label
-      - baseSha
-      - headSha
       type: object
     PRReviewState:
       properties:

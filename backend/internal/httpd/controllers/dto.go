@@ -453,20 +453,9 @@ type ListWorkspaceFilesResponse struct {
 	Behind *int `json:"behind,omitempty"`
 }
 
-// PRFileSourceResponse describes the immutable PR revision displayed in Files.
-type PRFileSourceResponse struct {
-	Number       int    `json:"number"`
-	URL          string `json:"url"`
-	Label        string `json:"label"`
-	SourceBranch string `json:"sourceBranch,omitempty"`
-	BaseSHA      string `json:"baseSha"`
-	HeadSHA      string `json:"headSha"`
-}
-
 // ListPRFilesResponse is the exact base...head changed-file set for one PR.
 type ListPRFilesResponse struct {
 	SessionID domain.SessionID       `json:"sessionId"`
-	Source    PRFileSourceResponse   `json:"source"`
 	Files     []WorkspaceFileSummary `json:"files"`
 	Truncated bool                   `json:"truncated"`
 	Summary   WorkspaceSummary       `json:"summary"`

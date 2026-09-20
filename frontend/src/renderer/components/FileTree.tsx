@@ -79,7 +79,6 @@ export function FileTree({
 	changedOnlyData,
 	selectedPath,
 	onSelectPath,
-	forceChangedOnly = false,
 }: {
 	filterText: string;
 	sessionId: string;
@@ -87,9 +86,7 @@ export function FileTree({
 	changedOnlyData: TreeNode[];
 	selectedPath: string | null;
 	onSelectPath: (node: TreeNode) => void;
-	forceChangedOnly?: boolean;
 }) {
-	changedOnly = changedOnly || forceChangedOnly;
 	const { t } = useTranslation();
 	const queryClient = useQueryClient();
 	const treeApiRef = useRef<TreeApi<TreeNode> | null>(null);

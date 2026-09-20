@@ -12,22 +12,9 @@ import (
 	"github.com/aoagents/agent-orchestrator/backend/internal/httpd/apierr"
 )
 
-// PRFileSource identifies the immutable pull-request revision shown by the
-// Files inspector. It is resolved from persisted SCM facts, never caller-
-// supplied revisions.
-type PRFileSource struct {
-	Number       int
-	URL          string
-	Label        string
-	SourceBranch string
-	BaseSHA      string
-	HeadSHA      string
-}
-
 // PRFiles is the exact base...head read model for one associated pull request.
 type PRFiles struct {
 	SessionID domain.SessionID
-	Source    PRFileSource
 	Files     []WorkspaceFileSummary
 	Truncated bool
 	Summary   WorkspaceSummary
@@ -67,7 +54,7 @@ func (s *Service) ListPRFiles(ctx context.Context, id domain.SessionID, number i
 		binary := status != WorkspaceFileDeleted && !hasTextCounts
 		files = append(files, WorkspaceFileSummary{Path: rel, PreviousPath: previous[rel], Status: status, Additions: additions, Deletions: deletions, Size: size, Binary: binary})
 	}
-	return PRFiles{SessionID: id, Source: newPRFileSource(pr), Files: files, Truncated: truncated, Summary: workspaceSummaryFromFiles(files)}, nil
+	return PRFiles{SessionID: id, Files: files, Truncated: truncated, Summary: workspaceSummaryFromFiles(files)}, nil
 }
 
 // GetPRFile returns one file and its exact base...head diff for an associated PR.
@@ -145,35 +132,27 @@ func (s *Service) GetPRFileRevision(ctx context.Context, id domain.SessionID, nu
 	if err != nil {
 		return WorkspaceFileRevision{}, unavailablePRSource()
 	}
-	status, ok := statuses[rel]
-	if !ok {
+	if _, ok := statuses[rel]; !ok {
 		return WorkspaceFileRevision{}, apierr.NotFound("PR_FILE_NOT_FOUND", "File is not part of the selected pull request")
-	}
-	if side == WorkspaceBlobAfter && status == WorkspaceFileDeleted {
-		return WorkspaceFileRevision{SessionID: id, Path: rel, Side: side, Encoding: "utf-8"}, nil
 	}
 	path, revision := rel, pr.HeadSHA
 	if side == WorkspaceBlobBefore {
-		if status == WorkspaceFileAdded {
-			return WorkspaceFileRevision{SessionID: id, Path: rel, Side: side, Encoding: "utf-8"}, nil
-		}
 		if previous[rel] != "" {
 			path = previous[rel]
 		}
 		revision = pr.BaseSHA
 	}
-	size := gitRevisionFileSize(ctx, rec.Metadata.WorkspacePath, revision, path, WorkspaceFileModified)
-	result := WorkspaceFileRevision{SessionID: id, Path: rel, Side: side, Encoding: "utf-8", Exists: true, Size: size}
-	if size > maxWorkspaceRevisionBytes {
-		result.Truncated = true
-		return result, nil
-	}
-	content, err := gitWorkspaceOutput(ctx, rec.Metadata.WorkspacePath, "show", revision+":"+path)
+	data, size, exists, truncated, err := readGitRevision(ctx, rec.Metadata.WorkspacePath, revision+":"+path)
 	if err != nil {
 		return WorkspaceFileRevision{}, unavailablePRSource()
 	}
+	result := WorkspaceFileRevision{SessionID: id, Path: rel, Side: side, Encoding: "utf-8", Exists: exists, Size: size, Truncated: truncated}
+	if !exists || truncated {
+		return result, nil
+	}
+	content := string(data)
 	result.Revision = hashWorkspaceReviewValue(content)
-	result.Binary = !utf8.ValidString(content) || strings.IndexByte(content, 0) >= 0
+	result.Binary = isBinary(data) || !utf8.Valid(data)
 	if !result.Binary {
 		result.MediaType = "text/plain"
 		result.Content = content
@@ -277,16 +256,6 @@ func ensurePRRevisionObjects(ctx context.Context, root, remote string, pr domain
 		return unavailablePRSource()
 	}
 	return nil
-}
-
-func newPRFileSource(pr domain.PullRequest) PRFileSource {
-	label := "PR #" + strconv.Itoa(pr.Number)
-	if branch := strings.TrimSpace(pr.SourceBranch); branch != "" {
-		label += " · " + branch
-	} else if title := strings.TrimSpace(pr.Title); title != "" {
-		label += " · " + title
-	}
-	return PRFileSource{Number: pr.Number, URL: pr.URL, Label: label, SourceBranch: pr.SourceBranch, BaseSHA: pr.BaseSHA, HeadSHA: pr.HeadSHA}
 }
 
 func unavailablePRSource() error {

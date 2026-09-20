@@ -584,11 +584,11 @@ func (f *fakeSessionService) ListWorkspaceFiles(_ context.Context, id domain.Ses
 	return sessionsvc.WorkspaceFiles{SessionID: id}, nil
 }
 
-func (f *fakeSessionService) ListPRFiles(_ context.Context, id domain.SessionID, number int, _ string) (sessionsvc.PRFiles, error) {
+func (f *fakeSessionService) ListPRFiles(_ context.Context, id domain.SessionID, _ int, _ string) (sessionsvc.PRFiles, error) {
 	if _, ok := f.sessions[id]; !ok {
 		return sessionsvc.PRFiles{}, apierr.NotFound("SESSION_NOT_FOUND", "Unknown session")
 	}
-	return sessionsvc.PRFiles{SessionID: id, Source: sessionsvc.PRFileSource{Number: number}}, nil
+	return sessionsvc.PRFiles{SessionID: id}, nil
 }
 
 func (f *fakeSessionService) GetPRFile(_ context.Context, id domain.SessionID, _ int, _ string, path string) (sessionsvc.WorkspaceFileDetail, error) {
@@ -2564,7 +2564,7 @@ func TestSessionsAPI_ListPRFiles(t *testing.T) {
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Source.Number != 42 || got.SessionID != "ao-1" {
+	if got.SessionID != "ao-1" {
 		t.Fatalf("response = %+v", got)
 	}
 }

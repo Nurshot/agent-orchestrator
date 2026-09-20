@@ -2159,7 +2159,6 @@ func workspaceFilesResponse(files sessionsvc.WorkspaceFiles) ListWorkspaceFilesR
 func prFilesResponse(files sessionsvc.PRFiles) ListPRFilesResponse {
 	return ListPRFilesResponse{
 		SessionID: files.SessionID,
-		Source:    PRFileSourceResponse(files.Source),
 		Files:     workspaceFileSummariesResponse(files.Files),
 		Truncated: files.Truncated,
 		Summary:   WorkspaceSummary(files.Summary),

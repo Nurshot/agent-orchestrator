@@ -3551,7 +3551,6 @@ export interface components {
         ListPRFilesResponse: {
             files: components["schemas"]["WorkspaceFileSummary"][];
             sessionId: string;
-            source: components["schemas"]["PRFileSourceResponse"];
             summary: components["schemas"]["WorkspaceSummary"];
             truncated: boolean;
         };
@@ -3720,14 +3719,6 @@ export interface components {
             id: string;
             projectId: string;
             projectName?: string;
-        };
-        PRFileSourceResponse: {
-            baseSha: string;
-            headSha: string;
-            label: string;
-            number: number;
-            sourceBranch?: string;
-            url: string;
         };
         PRReviewState: {
             latestRun?: components["schemas"]["ReviewRun"];
