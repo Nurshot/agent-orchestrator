@@ -1367,7 +1367,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ControllersLinkPreviewResponse'
+                $ref: '#/components/schemas/LinkPreviewResponse'
           description: OK
         "400":
           content:
@@ -8535,23 +8535,6 @@ components:
         disabled:
           type: boolean
       type: object
-    ControllersLinkPreviewResponse:
-      properties:
-        description:
-          type: string
-        faviconUrl:
-          type: string
-        imageUrl:
-          type: string
-        siteName:
-          type: string
-        title:
-          type: string
-        url:
-          type: string
-      required:
-      - url
-      type: object
     ControllersRequestRereviewRequest:
       properties:
         pullRequestUrl:
@@ -10149,6 +10132,23 @@ components:
       required:
       - ok
       - sessionId
+      type: object
+    LinkPreviewResponse:
+      properties:
+        description:
+          type: string
+        faviconUrl:
+          type: string
+        imageUrl:
+          type: string
+        siteName:
+          type: string
+        title:
+          type: string
+        url:
+          type: string
+      required:
+      - url
       type: object
     ListAgentAuthPlansResponse:
       properties:

@@ -383,6 +383,7 @@ var schemaNames = map[string]string{ //nolint:gosec // Public OpenAPI type names
 	"ControllersReportResponse":                   "ReportResponse",
 	"ControllersListReportsResponse":              "ListReportsResponse",
 	"ControllersClearNotificationsResponse":       "ClearNotificationsResponse",
+	"ControllersLinkPreviewResponse":              "LinkPreviewResponse",
 	"ControllersUsageHookMetadata":                "UsageHookMetadata",
 	"ControllersListUsageSessionsQuery":           "ListUsageSessionsQuery",
 	"ControllersEstimatedCostResponse":            "EstimatedCostResponse",

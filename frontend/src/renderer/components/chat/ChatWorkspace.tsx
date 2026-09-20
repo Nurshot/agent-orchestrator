@@ -328,6 +328,7 @@ export interface ChatWorkspaceProps {
 	shellError?: string;
 	/** Open an HTTP(S) link in this session's AO Browser panel. */
 	onLinkOpen?: (url: string) => void;
+	onSessionLinkOpen?: (url: string) => void;
 	/** A send or decision is in flight. */
 	busy?: boolean;
 	/** The provider's model catalog. Empty hides the model control. */
@@ -567,6 +568,7 @@ function ChatWorkspaceContent({
 	openingShell,
 	shellError,
 	onLinkOpen,
+	onSessionLinkOpen,
 	busy,
 	models,
 	onChooseSettings,

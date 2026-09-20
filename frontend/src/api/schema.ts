@@ -2974,14 +2974,6 @@ export interface components {
         ContainerReapConfig: {
             disabled?: boolean;
         };
-        ControllersLinkPreviewResponse: {
-            description?: string;
-            faviconUrl?: string;
-            imageUrl?: string;
-            siteName?: string;
-            title?: string;
-            url: string;
-        };
         ControllersRequestRereviewRequest: {
             /** @description Tracked pull request URL. Required when the session has multiple PRs. */
             pullRequestUrl?: string;
@@ -3554,6 +3546,14 @@ export interface components {
             freed?: boolean;
             ok: boolean;
             sessionId: string;
+        };
+        LinkPreviewResponse: {
+            description?: string;
+            faviconUrl?: string;
+            imageUrl?: string;
+            siteName?: string;
+            title?: string;
+            url: string;
         };
         ListAgentAuthPlansResponse: {
             plans: components["schemas"]["AgentAuthPlan"][];
@@ -6524,7 +6524,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ControllersLinkPreviewResponse"];
+                    "application/json": components["schemas"]["LinkPreviewResponse"];
                 };
             };
             /** @description Bad Request */
