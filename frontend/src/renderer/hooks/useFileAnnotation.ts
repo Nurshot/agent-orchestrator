@@ -31,7 +31,7 @@ export function useFileAnnotation(sessionId: string, source?: string): FileAnnot
 
 	useEffect(() => {
 		cancel();
-	}, [sessionId]);
+	}, [sessionId, source]);
 	useEffect(
 		() => () => {
 			if (sentTimerRef.current !== null) window.clearTimeout(sentTimerRef.current);
