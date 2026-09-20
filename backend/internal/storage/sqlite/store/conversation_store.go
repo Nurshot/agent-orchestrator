@@ -87,20 +87,27 @@ func (s *Store) CreateReviewConversation(ctx context.Context, id, reviewID strin
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 
-	if existing, err := s.qw.SelectConversationByReview(ctx, nullableString(reviewID)); err == nil {
-		return conversationToDomain(existing), nil
-	} else if !errors.Is(err, sql.ErrNoRows) {
-		return domain.ConversationRecord{}, fmt.Errorf("select conversation for review %s: %w", reviewID, err)
-	}
-
+	var conversation domain.ConversationRecord
 	rootBranchID := id + ":root"
 	if err := s.inTx(ctx, "insert reviewer conversation", func(q *gen.Queries) error {
 		review, err := q.GetReviewByID(ctx, reviewID)
 		if err != nil {
 			return fmt.Errorf("select reviewer %s: %w", reviewID, err)
 		}
-		if review.SessionID != session || review.ProjectID != project || review.InterfaceMode != string(domain.ReviewerInterfaceChat) {
+		if review.SessionID != session || review.ProjectID != project {
 			return fmt.Errorf("reviewer %s is not the current chat owner", reviewID)
+		}
+		mode := string(domain.ReviewerInterfaceChat)
+		if n, err := q.SetReviewInterfaceMode(ctx, gen.SetReviewInterfaceModeParams{InterfaceMode: mode, Column2: mode, Column3: mode, Column4: mode, UpdatedAt: now, ID: reviewID}); err != nil {
+			return err
+		} else if n != 1 {
+			return fmt.Errorf("reviewer %s is not the current chat owner", reviewID)
+		}
+		if existing, err := q.SelectConversationByReview(ctx, nullableString(reviewID)); err == nil {
+			conversation = conversationToDomain(existing)
+			return nil
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("select conversation for review %s: %w", reviewID, err)
 		}
 		if err := q.InsertReviewConversation(ctx, gen.InsertReviewConversationParams{
 			ID: id, ProjectID: optionalProjectID(project), ReviewID: nullableString(reviewID), CurrentReviewID: nullableString(reviewID),
@@ -108,14 +115,18 @@ func (s *Store) CreateReviewConversation(ctx context.Context, id, reviewID strin
 		}); err != nil {
 			return err
 		}
-		return q.InsertReviewConversationBranch(ctx, gen.InsertReviewConversationBranchParams{
+		if err := q.InsertReviewConversationBranch(ctx, gen.InsertReviewConversationBranchParams{
 			ID: rootBranchID, ConversationID: id, SessionID: nullableString(string(session)), ReviewID: nullableString(reviewID),
 			ProviderConversationID: review.ProviderConversationID, CreatedAt: now,
-		})
+		}); err != nil {
+			return err
+		}
+		conversation = domain.ConversationRecord{ID: id, Scope: domain.ConversationScopeReview, ProjectID: project, ReviewID: reviewID, SessionID: session, ActiveBranchID: rootBranchID, CreatedAt: now, UpdatedAt: now}
+		return nil
 	}); err != nil {
 		return domain.ConversationRecord{}, fmt.Errorf("insert reviewer conversation %s: %w", reviewID, err)
 	}
-	return domain.ConversationRecord{ID: id, Scope: domain.ConversationScopeReview, ProjectID: project, ReviewID: reviewID, SessionID: session, ActiveBranchID: rootBranchID, CreatedAt: now, UpdatedAt: now}, nil
+	return conversation, nil
 }
 
 // CreateProjectConversationWithContextReset rebinds an existing project

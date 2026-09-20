@@ -17,11 +17,16 @@ import (
 func (s *Store) UpsertReview(ctx context.Context, r domain.Review) error {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
-	// Existing callers predate reviewer Chat and leave the zero value here.
-	// Persist the compatible terminal surface instead of violating the durable
-	// interface-mode constraint during their normal review upsert.
 	if r.InterfaceMode == "" {
-		r.InterfaceMode = domain.ReviewerInterfaceTUI
+		existing, err := s.qw.GetReviewBySessionAndHarness(ctx, gen.GetReviewBySessionAndHarnessParams{SessionID: r.SessionID, Harness: r.Harness})
+		switch {
+		case err == nil:
+			r.InterfaceMode = domain.ReviewerInterfaceMode(existing.InterfaceMode)
+		case errors.Is(err, sql.ErrNoRows):
+			r.InterfaceMode = domain.ReviewerInterfaceTUI
+		default:
+			return fmt.Errorf("get review interface mode: %w", err)
+		}
 	}
 	return s.qw.UpsertReview(ctx, gen.UpsertReviewParams{
 		ID:                     r.ID,
