@@ -42,9 +42,10 @@ NAMESPACE="${AO_CLOUD_ECS_NAMESPACE:-ao-cloud}"
 WORKER_REPOSITORY="${AO_CLOUD_WORKER_ECR_REPOSITORY:-ao-cloud-worker}"
 LOG_GROUP="${AO_CLOUD_ECS_LOG_GROUP:-/ao-cloud/staging/sandbox}"
 # Task sizing (EC2 launch type: these are container reservations, not Fargate
-# sizes). Defaults roughly match the reconciler's 4 vCPU / 8 GiB profile.
-TASK_CPU="${AO_CLOUD_ECS_TASK_CPU:-4096}"
-TASK_MEMORY="${AO_CLOUD_ECS_TASK_MEMORY:-8192}"
+# sizes). 2 vCPU / 4 GiB matches the nodeops s-2vcpu-4gb profile and packs ~3
+# sandboxes onto a c7g.2xlarge (8 vCPU / ~15.6 GiB) instead of one per box.
+TASK_CPU="${AO_CLOUD_ECS_TASK_CPU:-2048}"
+TASK_MEMORY="${AO_CLOUD_ECS_TASK_MEMORY:-4096}"
 
 : "${AO_CLOUD_ECS_SUBNETS:?set AO_CLOUD_ECS_SUBNETS to comma-separated private subnet ids}"
 : "${AO_CLOUD_ECS_VPC_ID:?set AO_CLOUD_ECS_VPC_ID to the VPC of those subnets}"
@@ -149,12 +150,21 @@ fi
 echo "Security group ${sg_id}"
 
 # --- Launch template (Graviton, arm64 ECS-optimized AL2023) ------------------
-ami_id="$(
-	aws_cli ssm get-parameters \
-		--names /aws/service/ecs/optimized-ami/amazon-linux-2023/arm64/recommended/image_id \
-		--query 'Parameters[0].Value' --output text
-)"
-echo "arm64 ECS-optimized AMI ${ami_id}"
+# Prefer a baked AMI (stock ECS-optimized arm64 + the worker image pre-pulled) so
+# new instances start sandbox containers in seconds with no image pull. Set
+# AO_CLOUD_ECS_AMI_ID to that baked AMI; otherwise fall back to the latest stock
+# ECS-optimized arm64 AMI (first boot on each instance then pays a one-time pull).
+ami_id="${AO_CLOUD_ECS_AMI_ID:-}"
+if [[ -z "${ami_id}" ]]; then
+	ami_id="$(
+		aws_cli ssm get-parameters \
+			--names /aws/service/ecs/optimized-ami/amazon-linux-2023/arm64/recommended/image_id \
+			--query 'Parameters[0].Value' --output text
+	)"
+	echo "arm64 ECS-optimized AMI (stock) ${ami_id}"
+else
+	echo "arm64 ECS-optimized AMI (baked, AO_CLOUD_ECS_AMI_ID) ${ami_id}"
+fi
 user_data_b64="$(printf '#!/bin/bash\necho ECS_CLUSTER=%s >> /etc/ecs/ecs.config\n' "$CLUSTER" | base64)"
 lt_data="$(cat <<JSON
 {
