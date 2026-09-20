@@ -12,6 +12,20 @@ export const accountsManagerQueryKey = [
   "accounts",
 ] as const;
 
+export function selectAccountsManagerSnapshot(
+  current: AccountsManagerSnapshot | undefined,
+  incoming: AccountsManagerSnapshot,
+): AccountsManagerSnapshot {
+  if (
+    !current ||
+    !Number.isSafeInteger(current.revision) ||
+    !Number.isSafeInteger(incoming.revision)
+  ) {
+    return incoming;
+  }
+  return incoming.revision > current.revision ? incoming : current;
+}
+
 export async function fetchAccountsManager(): Promise<AccountsManagerSnapshot> {
   const { data, error } = await apiClient.GET(
     "/api/v1/accounts-manager/accounts",
@@ -38,8 +52,7 @@ export function useAccountsManagerEvents(): void {
     const apply = (snapshot: AccountsManagerSnapshot) =>
       client.setQueryData<AccountsManagerSnapshot>(
         accountsManagerQueryKey,
-        (current) =>
-          !current || snapshot.revision > current.revision ? snapshot : current,
+        (current) => selectAccountsManagerSnapshot(current, snapshot),
       );
     const connect = async (refreshFirst: boolean) => {
       if (refreshFirst)
@@ -87,10 +100,13 @@ export function useAccountsManagerEvents(): void {
   }, [client]);
 }
 
-export async function startAccountsManagerOAuth(provider: "codex" | "claude") {
+export async function startAccountsManagerOAuth(
+  provider: "codex" | "claude",
+  mode: "callback" | "device",
+) {
   const { data, error } = await apiClient.POST(
     "/api/v1/accounts-manager/oauth-sessions",
-    { body: { provider } },
+    { body: { provider, mode } },
   );
   if (error) throw new Error(apiErrorMessage(error));
   return data;

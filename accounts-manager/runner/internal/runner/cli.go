@@ -41,6 +41,18 @@ func RunCLI(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		return 0
+	case "_codex-device-login":
+		flags := flag.NewFlagSet("_codex-device-login", flag.ContinueOnError)
+		flags.SetOutput(io.Discard)
+		stateDir := flags.String("state-dir", "", "")
+		if err := flags.Parse(args[1:]); err != nil || *stateDir == "" || !filepath.IsAbs(*stateDir) || flags.NArg() != 0 {
+			return 2
+		}
+		if err := runCodexDeviceLogin(ctx, *stateDir); err != nil {
+			_, _ = fmt.Fprintln(stderr, "Codex device sign-in failed")
+			return 1
+		}
+		return 0
 	default:
 		_, _ = fmt.Fprintf(stderr, "unknown command %q\n", args[0])
 		return 2

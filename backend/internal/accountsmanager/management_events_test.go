@@ -45,6 +45,20 @@ func TestManagementClientOAuthEventStreamRejectsWrongContentType(t *testing.T) {
 	}
 }
 
+func TestDecodeOAuthEventPreservesSafeDeviceInstructions(t *testing.T) {
+	t.Parallel()
+	expiresAt := time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC)
+	event, err := decodeOAuthEvent([]byte(`{"provider":"codex","mode":"device","state":"opaque-state","status":"pending","authorizationUrl":"https://auth.openai.com/codex/device","userCode":"ABCD-EFGH","expiresAt":"` + expiresAt.Format(time.RFC3339) + `"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if event.Mode != OAuthModeDevice || event.AuthorizationURL != codexDeviceVerificationURLForTest || event.UserCode != "ABCD-EFGH" {
+		t.Fatalf("event = %#v", event)
+	}
+}
+
+const codexDeviceVerificationURLForTest = "https://auth.openai.com/codex/device"
+
 func TestManagementClientPublicIDsAreStableScopedAndOpaque(t *testing.T) {
 	t.Parallel()
 	client := NewManagementClient(staticEndpointSource{endpoint: Endpoint{BaseURL: "http://127.0.0.1:12345", ManagementToken: "management-secret"}, ready: true}, nil)

@@ -9,16 +9,20 @@ import (
 	"encoding/json"
 	"mime"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
 
 type OAuthEvent struct {
-	Provider    Provider
-	State       string
-	Status      OAuthState
-	FailureCode string
-	ExpiresAt   time.Time
+	Provider         Provider
+	Mode             OAuthMode
+	State            string
+	Status           OAuthState
+	AuthorizationURL string
+	UserCode         string
+	FailureCode      string
+	ExpiresAt        time.Time
 }
 
 // StreamOAuthEvents blocks until the authenticated runner stream closes or
@@ -94,17 +98,35 @@ func (c *ManagementClient) StreamOAuthEvents(ctx context.Context, consume func(O
 
 func decodeOAuthEvent(data []byte) (OAuthEvent, error) {
 	var raw struct {
-		Provider    string    `json:"provider"`
-		State       string    `json:"state"`
-		Status      string    `json:"status"`
-		FailureCode string    `json:"failureCode"`
-		ExpiresAt   time.Time `json:"expiresAt"`
+		Provider         string    `json:"provider"`
+		Mode             string    `json:"mode"`
+		State            string    `json:"state"`
+		Status           string    `json:"status"`
+		AuthorizationURL string    `json:"authorizationUrl"`
+		UserCode         string    `json:"userCode"`
+		FailureCode      string    `json:"failureCode"`
+		ExpiresAt        time.Time `json:"expiresAt"`
 	}
 	if json.Unmarshal(data, &raw) != nil {
 		return OAuthEvent{}, ErrInvalidResponse
 	}
-	event := OAuthEvent{Provider: Provider(strings.TrimSpace(raw.Provider)), State: strings.TrimSpace(raw.State), Status: OAuthState(strings.TrimSpace(raw.Status)), FailureCode: strings.TrimSpace(raw.FailureCode), ExpiresAt: raw.ExpiresAt}
+	event := OAuthEvent{Provider: Provider(strings.TrimSpace(raw.Provider)), Mode: OAuthMode(strings.TrimSpace(raw.Mode)), State: strings.TrimSpace(raw.State), Status: OAuthState(strings.TrimSpace(raw.Status)), AuthorizationURL: strings.TrimSpace(raw.AuthorizationURL), UserCode: strings.TrimSpace(raw.UserCode), FailureCode: strings.TrimSpace(raw.FailureCode), ExpiresAt: raw.ExpiresAt}
 	if !validProvider(event.Provider) || event.State == "" || len(event.State) > 256 || event.ExpiresAt.IsZero() {
+		return OAuthEvent{}, ErrInvalidResponse
+	}
+	if event.Mode == "" {
+		event.Mode = OAuthModeCallback
+	}
+	if event.Mode != OAuthModeCallback && !(event.Provider == ProviderCodex && event.Mode == OAuthModeDevice) {
+		return OAuthEvent{}, ErrInvalidResponse
+	}
+	if event.AuthorizationURL != "" {
+		parsed, err := url.Parse(event.AuthorizationURL)
+		if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
+			return OAuthEvent{}, ErrInvalidResponse
+		}
+	}
+	if len(event.UserCode) > 128 || (event.Mode == OAuthModeDevice && event.Status == OAuthPending && (event.AuthorizationURL == "" || event.UserCode == "")) {
 		return OAuthEvent{}, ErrInvalidResponse
 	}
 	switch event.Status {

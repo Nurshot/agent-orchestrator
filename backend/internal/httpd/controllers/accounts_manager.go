@@ -78,7 +78,7 @@ func (c *AccountsManagerController) startOAuth(w http.ResponseWriter, r *http.Re
 	if !c.decode(w, r, 16<<10, &req) {
 		return
 	}
-	session, err := c.Service.StartOAuth(r.Context(), accountsmanager.Provider(req.Provider))
+	session, err := c.Service.StartOAuth(r.Context(), accountsmanager.Provider(req.Provider), accountsmanager.OAuthMode(req.Mode))
 	if err != nil {
 		c.writeError(w, r, err)
 		return
@@ -305,5 +305,5 @@ func newAccountsManagerResponse(snapshot accountsvc.Snapshot) AccountsManagerAcc
 	return result
 }
 func newOAuthSessionResponse(s accountsvc.OAuthSession) AccountsManagerOAuthSessionResponse {
-	return AccountsManagerOAuthSessionResponse{ID: s.ID, Provider: string(s.Provider), Status: string(s.Status), FailureCode: s.FailureCode, AuthorizationURL: s.AuthorizationURL, ExpiresAt: s.ExpiresAt}
+	return AccountsManagerOAuthSessionResponse{ID: s.ID, Provider: string(s.Provider), Mode: string(s.Mode), Status: string(s.Status), FailureCode: s.FailureCode, AuthorizationURL: s.AuthorizationURL, UserCode: s.UserCode, ExpiresAt: s.ExpiresAt}
 }

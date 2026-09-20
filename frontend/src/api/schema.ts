@@ -167,7 +167,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start browser sign-in */
+        /** Start account sign-in */
         post: operations["startAccountsManagerOAuth"];
         delete?: never;
         options?: never;
@@ -185,7 +185,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Cancel browser sign-in */
+        /** Cancel account sign-in */
         delete: operations["cancelAccountsManagerOAuth"];
         options?: never;
         head?: never;
@@ -2742,9 +2742,12 @@ export interface components {
             failureCode?: string;
             id: string;
             /** @enum {string} */
+            mode: "callback" | "device";
+            /** @enum {string} */
             provider: "codex" | "claude";
             /** @enum {string} */
             status: "pending" | "completed" | "failed" | "expired";
+            userCode?: string;
         };
         AccountsManagerQuotaBucket: {
             description: string;
@@ -4530,6 +4533,8 @@ export interface components {
             sessionId: string;
         };
         StartAccountsManagerOAuthRequest: {
+            /** @enum {string} */
+            mode: "callback" | "device";
             /** @enum {string} */
             provider: "codex" | "claude";
         };

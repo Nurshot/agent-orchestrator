@@ -23,10 +23,10 @@ func TestManagementClientOAuthLifecycle(t *testing.T) {
 		switch {
 		case req.Method == http.MethodPost && req.URL.Path == "/ao/internal/oauth/start":
 			body, _ := io.ReadAll(req.Body)
-			if string(body) != `{"provider":"codex"}` {
+			if string(body) != `{"mode":"device","provider":"codex"}` {
 				t.Fatalf("start body = %s", body)
 			}
-			return managementJSONResponse(req, http.StatusOK, `{"provider":"codex","state":"opaque-state","authorizationUrl":"https://auth.example.test/start","expiresAt":"`+expiresAt.Format(time.RFC3339)+`"}`), nil
+			return managementJSONResponse(req, http.StatusOK, `{"provider":"codex","mode":"device","state":"opaque-state","authorizationUrl":"https://auth.example.test/start","userCode":"ABCD-EFGH","expiresAt":"`+expiresAt.Format(time.RFC3339)+`"}`), nil
 		case req.Method == http.MethodGet && req.URL.Path == "/ao/internal/oauth/status":
 			if req.URL.Query().Get("state") != "opaque-state" {
 				t.Fatal("status omitted state")
@@ -43,11 +43,11 @@ func TestManagementClientOAuthLifecycle(t *testing.T) {
 		&http.Client{Transport: transport},
 	)
 
-	session, err := client.StartOAuth(context.Background(), ProviderCodex)
+	session, err := client.StartOAuth(context.Background(), ProviderCodex, OAuthModeDevice)
 	if err != nil {
 		t.Fatalf("StartOAuth() error = %v", err)
 	}
-	if session.Provider != ProviderCodex || session.State != "opaque-state" || session.AuthorizationURL != "https://auth.example.test/start" || !session.ExpiresAt.Equal(expiresAt) {
+	if session.Provider != ProviderCodex || session.Mode != OAuthModeDevice || session.UserCode != "ABCD-EFGH" || session.State != "opaque-state" || session.AuthorizationURL != "https://auth.example.test/start" || !session.ExpiresAt.Equal(expiresAt) {
 		t.Fatalf("StartOAuth() = %#v", session)
 	}
 	status, err := client.GetOAuthStatus(context.Background(), session.State)
@@ -70,7 +70,7 @@ func TestManagementClientOAuthValidationAndSafeMappings(t *testing.T) {
 		&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			switch req.URL.Path {
 			case "/ao/internal/oauth/start":
-				return managementJSONResponse(req, http.StatusOK, `{"provider":"codex","state":"opaque","authorizationUrl":"http://unsafe.example.test","expiresAt":"2026-09-20T12:00:00Z"}`), nil
+				return managementJSONResponse(req, http.StatusOK, `{"provider":"codex","mode":"callback","state":"opaque","authorizationUrl":"http://unsafe.example.test","expiresAt":"2026-09-20T12:00:00Z"}`), nil
 			case "/ao/internal/oauth/status":
 				return managementJSONResponse(req, http.StatusOK, `{"status":"failed","error":"upstream-secret-error"}`), nil
 			default:
@@ -78,10 +78,10 @@ func TestManagementClientOAuthValidationAndSafeMappings(t *testing.T) {
 			}
 		})},
 	)
-	if _, err := client.StartOAuth(context.Background(), Provider("gemini")); !errors.Is(err, ErrUnsupportedProvider) {
+	if _, err := client.StartOAuth(context.Background(), Provider("gemini"), OAuthModeCallback); !errors.Is(err, ErrUnsupportedProvider) {
 		t.Fatalf("unsupported StartOAuth() error = %v", err)
 	}
-	if _, err := client.StartOAuth(context.Background(), ProviderCodex); !errors.Is(err, ErrInvalidResponse) {
+	if _, err := client.StartOAuth(context.Background(), ProviderCodex, OAuthModeCallback); !errors.Is(err, ErrInvalidResponse) {
 		t.Fatalf("unsafe URL StartOAuth() error = %v", err)
 	}
 	status, err := client.GetOAuthStatus(context.Background(), "opaque")

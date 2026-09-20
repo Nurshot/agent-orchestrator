@@ -3,6 +3,8 @@ package runner
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -17,6 +19,7 @@ import (
 
 const (
 	oauthSessionDuration   = 5 * time.Minute
+	codexDeviceDuration    = 15 * time.Minute
 	oauthTerminalRetention = time.Minute
 	oauthQueryLimit        = 16 << 10
 	oauthResponseLimit     = 1 << 20
@@ -43,27 +46,34 @@ var oauthProviders = map[string]oauthProviderConfig{
 
 type oauthRunnerSession struct {
 	provider         string
+	mode             string
 	state            string
 	authorizationURL string
+	userCode         string
 	expiresAt        time.Time
 	status           string
 	failureCode      string
 	listener         net.Listener
+	cancel           context.CancelFunc
 }
 
 type oauthSessionEvent struct {
-	Provider    string    `json:"provider"`
-	State       string    `json:"state"`
-	Status      string    `json:"status"`
-	FailureCode string    `json:"failureCode,omitempty"`
-	ExpiresAt   time.Time `json:"expiresAt"`
+	Provider         string    `json:"provider"`
+	Mode             string    `json:"mode"`
+	State            string    `json:"state"`
+	Status           string    `json:"status"`
+	AuthorizationURL string    `json:"authorizationUrl,omitempty"`
+	UserCode         string    `json:"userCode,omitempty"`
+	FailureCode      string    `json:"failureCode,omitempty"`
+	ExpiresAt        time.Time `json:"expiresAt"`
 }
 
 type oauthCoordinator struct {
-	baseURL       string
-	managementKey string
-	client        *http.Client
-	listen        func(string, string) (net.Listener, error)
+	baseURL          string
+	managementKey    string
+	client           *http.Client
+	listen           func(string, string) (net.Listener, error)
+	startCodexDevice func(context.Context) (codexDeviceLogin, error)
 
 	mu          sync.Mutex
 	sessions    map[string]*oauthRunnerSession
@@ -73,6 +83,12 @@ type oauthCoordinator struct {
 
 	observeInterval        time.Duration
 	eventHeartbeatInterval time.Duration
+}
+
+type codexDeviceLogin struct {
+	AuthorizationURL string
+	UserCode         string
+	Done             <-chan error
 }
 
 func newOAuthCoordinator(baseURL, managementKey string, client *http.Client, listen func(string, string) (net.Listener, error)) *oauthCoordinator {
@@ -117,12 +133,21 @@ func (c *oauthCoordinator) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (c *oauthCoordinator) handleStart(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Provider string `json:"provider"`
+		Mode     string `json:"mode"`
 	}
 	if err := decodeBoundedJSON(r.Body, &input); err != nil {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_request")
 		return
 	}
 	provider := strings.ToLower(strings.TrimSpace(input.Provider))
+	mode := strings.ToLower(strings.TrimSpace(input.Mode))
+	if mode == "" {
+		mode = "callback"
+	}
+	if mode != "callback" && !(provider == "codex" && mode == "device") {
+		writeOAuthError(w, http.StatusBadRequest, "unsupported_mode")
+		return
+	}
 	config, ok := oauthProviders[provider]
 	if !ok {
 		writeOAuthError(w, http.StatusBadRequest, "unsupported_provider")
@@ -130,18 +155,31 @@ func (c *oauthCoordinator) handleStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.closed {
+		c.mu.Unlock()
 		writeOAuthError(w, http.StatusServiceUnavailable, "unavailable")
 		return
 	}
 	if state := c.providers[provider]; state != "" {
+		if state == "starting" {
+			c.mu.Unlock()
+			writeOAuthError(w, http.StatusConflict, "oauth_busy")
+			return
+		}
 		if existing := c.sessions[state]; existing != nil && existing.status == "pending" && time.Now().Before(existing.expiresAt) {
+			c.mu.Unlock()
 			writeOAuthSession(w, existing)
 			return
 		}
 		delete(c.providers, provider)
 	}
+	if mode == "device" {
+		c.providers[provider] = "starting"
+		c.mu.Unlock()
+		c.startDevice(w)
+		return
+	}
+	defer c.mu.Unlock()
 
 	listener, err := c.listen("tcp", config.callbackAddr)
 	if err != nil {
@@ -174,6 +212,7 @@ func (c *oauthCoordinator) handleStart(w http.ResponseWriter, r *http.Request) {
 
 	session := &oauthRunnerSession{
 		provider:         provider,
+		mode:             mode,
 		state:            state,
 		authorizationURL: authorizationURL,
 		expiresAt:        time.Now().Add(oauthSessionDuration),
@@ -195,6 +234,77 @@ func (c *oauthCoordinator) handleStart(w http.ResponseWriter, r *http.Request) {
 	go c.expireSession(state, session.expiresAt)
 	go c.observeSession(state, session.expiresAt)
 	writeOAuthSession(w, session)
+}
+
+func (c *oauthCoordinator) startDevice(w http.ResponseWriter) {
+	clearStarting := func() {
+		c.mu.Lock()
+		if c.providers["codex"] == "starting" {
+			delete(c.providers, "codex")
+		}
+		c.mu.Unlock()
+	}
+	if c.startCodexDevice == nil {
+		clearStarting()
+		writeOAuthError(w, http.StatusServiceUnavailable, "device_login_unavailable")
+		return
+	}
+	stateBytes := make([]byte, 24)
+	if _, err := rand.Read(stateBytes); err != nil {
+		clearStarting()
+		writeOAuthError(w, http.StatusServiceUnavailable, "oauth_start_failed")
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), codexDeviceDuration)
+	login, err := c.startCodexDevice(ctx)
+	if err != nil {
+		cancel()
+		clearStarting()
+		writeOAuthError(w, http.StatusBadGateway, "oauth_start_failed")
+		return
+	}
+	authorizationURL, valid := validAuthorizationURL(login.AuthorizationURL)
+	userCode := strings.TrimSpace(login.UserCode)
+	if !valid || userCode == "" || len(userCode) > 128 || login.Done == nil {
+		cancel()
+		clearStarting()
+		writeOAuthError(w, http.StatusBadGateway, "invalid_upstream_response")
+		return
+	}
+	state := hex.EncodeToString(stateBytes)
+	session := &oauthRunnerSession{
+		provider: "codex", mode: "device", state: state,
+		authorizationURL: authorizationURL, userCode: userCode,
+		expiresAt: time.Now().Add(codexDeviceDuration), status: "pending", cancel: cancel,
+	}
+	c.mu.Lock()
+	if c.closed || c.providers["codex"] != "starting" {
+		c.mu.Unlock()
+		cancel()
+		writeOAuthError(w, http.StatusServiceUnavailable, "unavailable")
+		return
+	}
+	c.sessions[state] = session
+	c.providers[session.provider] = state
+	c.publishLocked(session)
+	c.mu.Unlock()
+	go c.awaitDeviceLogin(state, session, login.Done)
+	go c.expireSession(state, session.expiresAt)
+	writeOAuthSession(w, session)
+}
+
+func (c *oauthCoordinator) awaitDeviceLogin(state string, session *oauthRunnerSession, done <-chan error) {
+	err, open := <-done
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !open || c.sessions[state] != session || session.status != "pending" {
+		return
+	}
+	if err != nil {
+		c.finishSessionLocked(session, "failed", "authentication_failed")
+		return
+	}
+	c.finishSessionLocked(session, "completed", "")
 }
 
 func (c *oauthCoordinator) handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -221,6 +331,11 @@ func (c *oauthCoordinator) handleStatus(w http.ResponseWriter, r *http.Request) 
 		status := session.status
 		c.mu.Unlock()
 		writeOAuthStatus(w, status)
+		return
+	}
+	if session.mode == "device" {
+		c.mu.Unlock()
+		writeOAuthStatus(w, "pending")
 		return
 	}
 	c.mu.Unlock()
@@ -266,6 +381,15 @@ func (c *oauthCoordinator) handleCancel(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	c.mu.Unlock()
+	if session.mode == "device" {
+		c.mu.Lock()
+		if current := c.sessions[state]; current == session && current.status == "pending" {
+			c.finishSessionLocked(current, "expired", "cancelled")
+		}
+		c.mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 
 	query := url.Values{"state": []string{state}}
 	var ignored map[string]any
@@ -360,10 +484,15 @@ func eventFromSession(session *oauthRunnerSession) oauthSessionEvent {
 	if session == nil {
 		return oauthSessionEvent{}
 	}
-	return oauthSessionEvent{
-		Provider: session.provider, State: session.state, Status: session.status,
+	event := oauthSessionEvent{
+		Provider: session.provider, Mode: session.mode, State: session.state, Status: session.status,
 		FailureCode: session.failureCode, ExpiresAt: session.expiresAt,
 	}
+	if session.mode == "device" {
+		event.AuthorizationURL = session.authorizationURL
+		event.UserCode = session.userCode
+	}
+	return event
 }
 
 func (c *oauthCoordinator) publishLocked(session *oauthRunnerSession) {
@@ -430,6 +559,10 @@ func (c *oauthCoordinator) finishSessionLocked(session *oauthRunnerSession, stat
 	}
 	session.status = status
 	session.failureCode = failureCode
+	if session.cancel != nil {
+		session.cancel()
+		session.cancel = nil
+	}
 	c.closeListenerLocked(session)
 	delete(c.providers, session.provider)
 	c.publishLocked(session)
@@ -557,6 +690,10 @@ func (c *oauthCoordinator) Close() {
 	defer c.mu.Unlock()
 	c.closed = true
 	for _, session := range c.sessions {
+		if session.cancel != nil {
+			session.cancel()
+			session.cancel = nil
+		}
 		c.closeListenerLocked(session)
 	}
 	for subscriber := range c.subscribers {
@@ -585,8 +722,10 @@ func writeOAuthSession(w http.ResponseWriter, session *oauthRunnerSession) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"provider":         session.provider,
+		"mode":             session.mode,
 		"state":            session.state,
 		"authorizationUrl": session.authorizationURL,
+		"userCode":         session.userCode,
 		"expiresAt":        session.expiresAt,
 	})
 }

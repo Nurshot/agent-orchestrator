@@ -37,9 +37,11 @@ type Account struct {
 type OAuthSession struct {
 	ID               string
 	Provider         core.Provider
+	Mode             core.OAuthMode
 	Status           core.OAuthState
 	FailureCode      string
 	AuthorizationURL string
+	UserCode         string
 	ExpiresAt        time.Time
 	terminalAt       time.Time
 }
@@ -61,7 +63,7 @@ type Client interface {
 
 type lifecycleClient interface {
 	Client
-	StartOAuth(context.Context, core.Provider) (core.OAuthSession, error)
+	StartOAuth(context.Context, core.Provider, core.OAuthMode) (core.OAuthSession, error)
 	CancelOAuth(context.Context, string) error
 	AddAPIKey(context.Context, core.APIKeyInput) (core.CredentialSummary, error)
 	ImportCredential(context.Context, core.CredentialImport) (core.CredentialSummary, error)
@@ -86,7 +88,7 @@ type Service struct {
 func New(client Client) *Service {
 	return &Service{
 		client:      client,
-		snapshot:    Snapshot{Revision: time.Now().UnixNano(), Availability: AvailabilityStarting, Stale: true},
+		snapshot:    Snapshot{Revision: time.Now().UnixMilli(), Availability: AvailabilityStarting, Stale: true},
 		rawAccounts: make(map[string]string), rawOAuth: make(map[string]string), subscribers: make(map[chan Snapshot]struct{}),
 	}
 }
@@ -178,12 +180,12 @@ func (s *Service) Subscribe(ctx context.Context) <-chan Snapshot {
 	return updates
 }
 
-func (s *Service) StartOAuth(ctx context.Context, provider core.Provider) (OAuthSession, error) {
+func (s *Service) StartOAuth(ctx context.Context, provider core.Provider, mode core.OAuthMode) (OAuthSession, error) {
 	client, ok := s.client.(lifecycleClient)
 	if !ok {
 		return OAuthSession{}, core.ErrUnavailable
 	}
-	session, err := client.StartOAuth(ctx, provider)
+	session, err := client.StartOAuth(ctx, provider, mode)
 	if err != nil {
 		return OAuthSession{}, err
 	}
@@ -191,7 +193,7 @@ func (s *Service) StartOAuth(ctx context.Context, provider core.Provider) (OAuth
 	if err != nil {
 		return OAuthSession{}, err
 	}
-	public := OAuthSession{ID: id, Provider: session.Provider, Status: core.OAuthPending, AuthorizationURL: session.AuthorizationURL, ExpiresAt: session.ExpiresAt}
+	public := OAuthSession{ID: id, Provider: session.Provider, Mode: session.Mode, Status: core.OAuthPending, AuthorizationURL: session.AuthorizationURL, UserCode: session.UserCode, ExpiresAt: session.ExpiresAt}
 	s.mu.Lock()
 	s.rawOAuth[id] = session.State
 	s.upsertOAuthLocked(public)
@@ -314,7 +316,7 @@ func (s *Service) applyOAuthEvent(ctx context.Context, event core.OAuthEvent) {
 		s.markDegraded()
 		return
 	}
-	public := OAuthSession{ID: id, Provider: event.Provider, Status: event.Status, FailureCode: event.FailureCode, ExpiresAt: event.ExpiresAt}
+	public := OAuthSession{ID: id, Provider: event.Provider, Mode: event.Mode, Status: event.Status, FailureCode: event.FailureCode, AuthorizationURL: event.AuthorizationURL, UserCode: event.UserCode, ExpiresAt: event.ExpiresAt}
 	if event.Status != core.OAuthPending {
 		public.terminalAt = time.Now()
 	}
@@ -352,6 +354,9 @@ func (s *Service) upsertOAuthLocked(session OAuthSession) {
 		if s.snapshot.OAuthSessions[index].ID == session.ID {
 			if session.AuthorizationURL == "" {
 				session.AuthorizationURL = s.snapshot.OAuthSessions[index].AuthorizationURL
+			}
+			if session.UserCode == "" {
+				session.UserCode = s.snapshot.OAuthSessions[index].UserCode
 			}
 			s.snapshot.OAuthSessions[index] = session
 			return

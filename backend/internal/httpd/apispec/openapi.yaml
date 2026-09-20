@@ -311,7 +311,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/APIError'
           description: Service Unavailable
-      summary: Start browser sign-in
+      summary: Start account sign-in
       tags:
       - system
   /api/v1/accounts-manager/oauth-sessions/{operationId}:
@@ -332,7 +332,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/APIError'
           description: Service Unavailable
-      summary: Cancel browser sign-in
+      summary: Cancel account sign-in
       tags:
       - system
   /api/v1/accounts-manager/status:
@@ -7628,6 +7628,11 @@ components:
           type: string
         id:
           type: string
+        mode:
+          enum:
+          - callback
+          - device
+          type: string
         provider:
           enum:
           - codex
@@ -7640,9 +7645,12 @@ components:
           - failed
           - expired
           type: string
+        userCode:
+          type: string
       required:
       - id
       - provider
+      - mode
       - status
       - expiresAt
       type: object
@@ -12478,6 +12486,11 @@ components:
       type: object
     StartAccountsManagerOAuthRequest:
       properties:
+        mode:
+          enum:
+          - callback
+          - device
+          type: string
         provider:
           enum:
           - codex
@@ -12485,6 +12498,7 @@ components:
           type: string
       required:
       - provider
+      - mode
       type: object
     StartAgentAuthResponse:
       properties:

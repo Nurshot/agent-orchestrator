@@ -32,7 +32,7 @@ import { AgentProviderGroup } from "./AgentProviderGroup";
 import { SettingsSection } from "./SettingsSection";
 
 type Provider = "codex" | "claude";
-type AddMethod = "browser" | "api-key" | "json";
+type AddMethod = "device" | "browser" | "api-key" | "json";
 
 export function AccountsManagerSection({
   titleHidden,
@@ -47,7 +47,7 @@ export function AccountsManagerSection({
     claude: true,
   });
   const [adding, setAdding] = useState<Provider | null>(null);
-  const [method, setMethod] = useState<AddMethod>("browser");
+  const [method, setMethod] = useState<AddMethod>("device");
   const [secret, setSecret] = useState("");
   const [baseURL, setBaseURL] = useState("");
   const [busy, setBusy] = useState(false);
@@ -68,12 +68,18 @@ export function AccountsManagerSection({
     await cancelAccountsManagerOAuth(id);
   };
 
-  const startBrowser = async (provider: Provider) => {
+  const startOAuth = async (
+    provider: Provider,
+    mode: "device" | "callback",
+  ) => {
     setBusy(true);
     setError(null);
     try {
-      const session = await startAccountsManagerOAuth(provider);
+      const session = await startAccountsManagerOAuth(provider, mode);
       activeOAuthID.current = session.id;
+      if (!session.authorizationUrl) {
+        throw new Error("Missing authorization URL");
+      }
       try {
         await aoBridge.app.openExternal(session.authorizationUrl);
       } catch (openError) {
@@ -81,7 +87,7 @@ export function AccountsManagerSection({
         throw openError;
       }
     } catch {
-      setError("Could not start browser sign-in. Try again.");
+      setError("Could not start sign-in. Try again.");
     } finally {
       setBusy(false);
     }
@@ -197,7 +203,7 @@ export function AccountsManagerSection({
                   aria-label={`Add ${provider} account`}
                   onClick={() => {
                     setAdding(provider);
-                    setMethod("browser");
+                    setMethod(provider === "codex" ? "device" : "browser");
                     setError(null);
                   }}
                 >
@@ -218,14 +224,14 @@ export function AccountsManagerSection({
                   baseURL={baseURL}
                   setBaseURL={setBaseURL}
                   busy={busy}
-                  waiting={Boolean(waiting?.provider === provider)}
+                  waiting={waiting?.provider === provider ? waiting : undefined}
                   error={error}
                   dismissError={() => {
                     setError(null);
                     clearSensitive();
                   }}
                   close={() => void closeAdd(provider)}
-                  startBrowser={() => void startBrowser(provider)}
+                  startOAuth={(mode) => void startOAuth(provider, mode)}
                   submitKey={() => void submitKey(provider)}
                   fileRef={fileRef}
                   submitFile={(file) => void submitFile(provider, file)}
@@ -262,11 +268,11 @@ function AddAccountPanel(props: {
   baseURL: string;
   setBaseURL: (v: string) => void;
   busy: boolean;
-  waiting: boolean;
+  waiting?: AccountsManagerSnapshot["oauthSessions"][number];
   error: string | null;
   dismissError: () => void;
   close: () => void;
-  startBrowser: () => void;
+  startOAuth: (mode: "device" | "callback") => void;
   submitKey: () => void;
   fileRef: RefObject<HTMLInputElement | null>;
   submitFile: (file?: File) => void;
@@ -274,25 +280,51 @@ function AddAccountPanel(props: {
   return (
     <div className="border-b border-border bg-muted/20 p-4">
       <div className="mb-3 flex flex-wrap gap-2">
-        {(["browser", "api-key", "json"] as const).map((method) => (
+        {([
+          ...(props.provider === "codex" ? (["device"] as const) : []),
+          "browser",
+          "api-key",
+          "json",
+        ] as const).map((method) => (
           <Button
             key={method}
             size="sm"
             variant={props.method === method ? "secondary" : "ghost"}
             onClick={() => props.setMethod(method)}
           >
-            {method === "browser"
-              ? "Browser sign-in"
-              : method === "api-key"
-                ? "API key"
-                : "Credential JSON"}
+            {method === "device"
+              ? "Device sign-in"
+              : method === "browser"
+                ? "Browser sign-in"
+                : method === "api-key"
+                  ? "API key"
+                  : "Credential JSON"}
           </Button>
         ))}
       </div>
       {props.waiting ? (
-        <p className="text-sm">Waiting for sign-in…</p>
+        <DeviceOrBrowserWaiting session={props.waiting} />
+      ) : props.method === "device" ? (
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Recommended. AO will show a short code to enter on OpenAI’s secure
+            sign-in page.
+          </p>
+          <Button
+            disabled={props.busy}
+            onClick={() => props.startOAuth("device")}
+          >
+            {props.busy ? (
+              <LoaderCircle className="mr-2 size-4 animate-spin" />
+            ) : null}
+            Continue with device code
+          </Button>
+        </div>
       ) : props.method === "browser" ? (
-        <Button disabled={props.busy} onClick={props.startBrowser}>
+        <Button
+          disabled={props.busy}
+          onClick={() => props.startOAuth("callback")}
+        >
           {props.busy ? (
             <LoaderCircle className="mr-2 size-4 animate-spin" />
           ) : null}
@@ -341,6 +373,37 @@ function AddAccountPanel(props: {
       <Button className="mt-2" size="sm" variant="ghost" onClick={props.close}>
         Cancel
       </Button>
+    </div>
+  );
+}
+
+function DeviceOrBrowserWaiting({
+  session,
+}: {
+  session: AccountsManagerSnapshot["oauthSessions"][number];
+}) {
+  const userCode = session?.userCode;
+  if (!userCode) return <p className="text-sm">Waiting for sign-in…</p>;
+  return (
+    <div className="space-y-2">
+      <p className="text-sm text-muted-foreground">
+        Enter this code on the OpenAI sign-in page:
+      </p>
+      <div className="flex items-center gap-2">
+        <code className="rounded-md bg-background px-3 py-2 text-base font-semibold tracking-wider">
+          {userCode}
+        </code>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() =>
+            void navigator.clipboard.writeText(userCode).catch(() => undefined)
+          }
+        >
+          Copy
+        </Button>
+      </div>
+      <p className="text-sm">Waiting for sign-in…</p>
     </div>
   );
 }
@@ -456,7 +519,8 @@ function AccountRow({
           <>
             <Button
               size="sm"
-              variant="destructive"
+              variant="outline"
+              className="border-destructive/40 text-destructive hover:bg-destructive/10"
               disabled={busy}
               onClick={() =>
                 void action(() => removeAccountsManagerAccount(account.id))
@@ -487,7 +551,7 @@ function AccountRow({
               ? `${details.models?.length ?? 0} models${details.quota ? ` · ${details.quota}` : ""}`
               : "Loading details…"}
           </p>
-          {account.cooldowns.length ? (
+          {account.cooldowns[0]?.retryAt ? (
             <p>
               Cooldown active until{" "}
               {new Date(account.cooldowns[0].retryAt).toLocaleString()}

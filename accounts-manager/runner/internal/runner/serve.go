@@ -52,6 +52,7 @@ func Serve(ctx context.Context, stateDir string) error {
 		&http.Client{Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 		nil,
 	)
+	oauth.startCodexDevice = newCodexDeviceProcessStarter(state.Root)
 	defer oauth.Close()
 
 	previousPassword, passwordWasSet := os.LookupEnv("MANAGEMENT_PASSWORD")

@@ -701,9 +701,11 @@ type AccountsManagerAccountResponse struct {
 type AccountsManagerOAuthSessionResponse struct {
 	ID               string    `json:"id"`
 	Provider         string    `json:"provider" enum:"codex,claude"`
+	Mode             string    `json:"mode" enum:"callback,device"`
 	Status           string    `json:"status" enum:"pending,completed,failed,expired"`
 	FailureCode      string    `json:"failureCode,omitempty"`
 	AuthorizationURL string    `json:"authorizationUrl,omitempty"`
+	UserCode         string    `json:"userCode,omitempty"`
 	ExpiresAt        time.Time `json:"expiresAt"`
 }
 
@@ -717,6 +719,7 @@ type AccountsManagerAccountsResponse struct {
 
 type StartAccountsManagerOAuthRequest struct {
 	Provider string `json:"provider" enum:"codex,claude"`
+	Mode     string `json:"mode" enum:"callback,device"`
 }
 type AccountsManagerAccountIDParam struct {
 	AccountID string `path:"accountId"`

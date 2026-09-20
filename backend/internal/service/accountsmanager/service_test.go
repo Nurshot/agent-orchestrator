@@ -50,13 +50,20 @@ func TestServicePublishesSafeSnapshotsAndPreservesStaleAccounts(t *testing.T) {
 	}
 }
 
+func TestServiceRevisionIsSafeForJavaScriptClients(t *testing.T) {
+	svc := New(&fakeClient{stream: make(chan core.OAuthEvent)})
+	if revision := svc.Snapshot().Revision; revision > 1<<53-1 {
+		t.Fatalf("revision = %d, exceeds JavaScript safe integer range", revision)
+	}
+}
+
 func TestServiceMapsOAuthEventsWithoutExposingState(t *testing.T) {
 	fake := &fakeClient{stream: make(chan core.OAuthEvent, 1)}
 	svc := New(fake)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	svc.Start(ctx)
-	fake.stream <- core.OAuthEvent{Provider: core.ProviderClaude, State: "raw-state", Status: core.OAuthCompleted, ExpiresAt: time.Now().Add(time.Minute)}
+	fake.stream <- core.OAuthEvent{Provider: core.ProviderClaude, Mode: core.OAuthModeCallback, State: "raw-state", Status: core.OAuthCompleted, ExpiresAt: time.Now().Add(time.Minute)}
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
 		snapshot := svc.Snapshot()

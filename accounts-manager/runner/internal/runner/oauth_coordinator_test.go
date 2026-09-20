@@ -133,6 +133,91 @@ func TestOAuthEventsReplayPendingThenPublishCompletionWithoutSecrets(t *testing.
 	}
 }
 
+func TestCodexDeviceOAuthPublishesCodeAndCompletesWithoutUpstreamPolling(t *testing.T) {
+	t.Parallel()
+
+	done := make(chan error, 1)
+	coordinator := newOAuthCoordinator("http://127.0.0.1:12345", "management-key", &http.Client{Transport: runnerRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		t.Fatalf("device flow must not call callback management endpoints: %s", req.URL.Path)
+		return nil, errors.New("unexpected request")
+	})}, nil)
+	coordinator.startCodexDevice = func(context.Context) (codexDeviceLogin, error) {
+		return codexDeviceLogin{AuthorizationURL: codexDeviceVerificationURL, UserCode: "ABCD-EFGH", Done: done}, nil
+	}
+	defer coordinator.Close()
+
+	request := httptest.NewRequest(http.MethodPost, "/ao/internal/oauth/start", strings.NewReader(`{"provider":"codex","mode":"device"}`))
+	request.Header.Set("Authorization", "Bearer management-key")
+	response := httptest.NewRecorder()
+	coordinator.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("start status = %d body=%s", response.Code, response.Body.String())
+	}
+	var started struct {
+		Mode             string `json:"mode"`
+		AuthorizationURL string `json:"authorizationUrl"`
+		UserCode         string `json:"userCode"`
+		State            string `json:"state"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &started); err != nil {
+		t.Fatal(err)
+	}
+	if started.Mode != "device" || started.AuthorizationURL != codexDeviceVerificationURL || started.UserCode != "ABCD-EFGH" || started.State == "" {
+		t.Fatalf("started = %#v", started)
+	}
+
+	done <- nil
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		coordinator.mu.Lock()
+		status := coordinator.sessions[started.State].status
+		coordinator.mu.Unlock()
+		if status == "completed" {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("device flow did not complete")
+}
+
+func TestCodexDeviceOAuthCancellationStopsLogin(t *testing.T) {
+	t.Parallel()
+
+	cancelled := make(chan struct{})
+	coordinator := newOAuthCoordinator("http://127.0.0.1:12345", "management-key", &http.Client{}, nil)
+	coordinator.startCodexDevice = func(ctx context.Context) (codexDeviceLogin, error) {
+		done := make(chan error, 1)
+		go func() {
+			<-ctx.Done()
+			close(cancelled)
+			done <- ctx.Err()
+		}()
+		return codexDeviceLogin{AuthorizationURL: codexDeviceVerificationURL, UserCode: "ABCD-EFGH", Done: done}, nil
+	}
+	defer coordinator.Close()
+
+	start := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/ao/internal/oauth/start", strings.NewReader(`{"provider":"codex","mode":"device"}`))
+	req.Header.Set("Authorization", "Bearer management-key")
+	coordinator.ServeHTTP(start, req)
+	var session struct {
+		State string `json:"state"`
+	}
+	_ = json.Unmarshal(start.Body.Bytes(), &session)
+	cancel := httptest.NewRecorder()
+	cancelReq := httptest.NewRequest(http.MethodDelete, "/ao/internal/oauth/session?state="+session.State, nil)
+	cancelReq.Header.Set("Authorization", "Bearer management-key")
+	coordinator.ServeHTTP(cancel, cancelReq)
+	if cancel.Code != http.StatusNoContent {
+		t.Fatalf("cancel status = %d", cancel.Code)
+	}
+	select {
+	case <-cancelled:
+	case <-time.After(time.Second):
+		t.Fatal("device login context was not cancelled")
+	}
+}
+
 func TestOAuthEventsPublishCancellationAndExpiryAndHeartbeat(t *testing.T) {
 	t.Parallel()
 
