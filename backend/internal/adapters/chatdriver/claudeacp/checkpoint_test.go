@@ -127,6 +127,23 @@ func TestNativeCheckpointTurnCompanionIsNotAUserBoundary(t *testing.T) {
 			parent:    "companion",
 		},
 		{
+			name:      "meta only",
+			companion: `{"type":"user","sessionId":"native","uuid":"meta","parentUuid":"user","promptId":"prompt","isMeta":true,"message":{"content":"B"}}`,
+			parent:    "meta",
+			wantError: true,
+		},
+		{
+			name:      "turn companion only",
+			companion: `{"type":"user","sessionId":"native","uuid":"companion","parentUuid":"user","promptId":"prompt","turnCompanion":true,"message":{"content":"B"}}`,
+			parent:    "companion",
+			wantError: true,
+		},
+		{
+			name:      "tool result only",
+			companion: `{"type":"user","sessionId":"native","uuid":"tool-result","parentUuid":"user","promptId":"prompt","message":{"content":[{"type":"tool_result","tool_use_id":"tool","content":"result"}]}}`,
+			parent:    "tool-result",
+		},
+		{
 			name:      "genuine duplicate user",
 			companion: `{"type":"user","sessionId":"native","uuid":"duplicate","parentUuid":"user","promptId":"prompt","message":{"content":"B"}}`,
 			parent:    "duplicate",
