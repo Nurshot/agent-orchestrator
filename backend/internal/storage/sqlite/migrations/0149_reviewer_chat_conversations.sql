@@ -1,4 +1,4 @@
--- Durable native Chat conversations owned by reviewer rows.
+-- Durable native Chat conversations owned by reviewer rows or standalone reviews.
 --
 -- This deliberately follows the current conversation schema rather than the
 -- superseded 0129 draft: intervening migrations added provider-history and
@@ -32,7 +32,7 @@ ALTER TABLE review ADD COLUMN controller_error TEXT NOT NULL DEFAULT '';
 CREATE TABLE conversations_next (
     id TEXT PRIMARY KEY,
     scope TEXT NOT NULL CHECK (scope IN ('session', 'project', 'review')),
-    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
     session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE,
     review_id TEXT REFERENCES review(id) ON DELETE CASCADE,
     current_session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
