@@ -188,11 +188,11 @@ func TestTryAttachAuthenticatesIdentityAndRenewsLease(t *testing.T) {
 
 	s := New(Config{HTTPClient: server.Client(), Logger: slog.New(slog.NewTextHandler(os.Stderr, nil))})
 	runtimeRecord := RuntimeRecord{PID: os.Getpid(), Port: port, InstanceID: "instance-1"}
-	endpoint, ok := s.tryAttach(context.Background(), runtimeRecord, controlKey, "client-secret")
+	endpoint, ok := s.tryAttach(context.Background(), runtimeRecord, controlKey, "client-secret", "management-secret")
 	if !ok {
 		t.Fatal("tryAttach() did not accept authenticated runner")
 	}
-	if endpoint.BaseURL != server.URL || endpoint.ClientToken != "client-secret" {
+	if endpoint.BaseURL != server.URL || endpoint.ClientToken != "client-secret" || endpoint.ManagementToken != "management-secret" {
 		t.Fatalf("endpoint = %#v", endpoint)
 	}
 	if leaseCalls != 1 {
@@ -212,7 +212,7 @@ func TestTryAttachRejectsIdentityMismatch(t *testing.T) {
 	port := server.Listener.Addr().(*net.TCPAddr).Port
 
 	s := New(Config{HTTPClient: server.Client()})
-	if _, ok := s.tryAttach(context.Background(), RuntimeRecord{PID: os.Getpid(), Port: port, InstanceID: "expected"}, "control", "client"); ok {
+	if _, ok := s.tryAttach(context.Background(), RuntimeRecord{PID: os.Getpid(), Port: port, InstanceID: "expected"}, "control", "client", "management"); ok {
 		t.Fatal("tryAttach() accepted an identity mismatch")
 	}
 }
@@ -231,7 +231,7 @@ func TestTryAttachRejectsDeadRuntimePIDBeforeContactingPort(t *testing.T) {
 	port := server.Listener.Addr().(*net.TCPAddr).Port
 
 	s := New(Config{HTTPClient: server.Client(), processAlive: func(int) bool { return false }})
-	if _, ok := s.tryAttach(context.Background(), RuntimeRecord{PID: 424242, Port: port, InstanceID: "stale-instance"}, "control", "client"); ok {
+	if _, ok := s.tryAttach(context.Background(), RuntimeRecord{PID: 424242, Port: port, InstanceID: "stale-instance"}, "control", "client", "management"); ok {
 		t.Fatal("tryAttach() accepted a runtime record whose PID is dead")
 	}
 	if identityCalls != 0 {
@@ -351,7 +351,7 @@ func TestStartReattachesExistingRunnerWithoutStartingBinary(t *testing.T) {
 	s := New(Config{StateDir: stateDir, HTTPClient: server.Client()})
 	s.Start(ctx)
 	waitForStatus(t, s, StateReady, time.Second)
-	if endpoint, ok := s.Endpoint(); !ok || endpoint.BaseURL != server.URL {
+	if endpoint, ok := s.Endpoint(); !ok || endpoint.BaseURL != server.URL || endpoint.ManagementToken != state.ManagementKey {
 		t.Fatalf("endpoint = %#v, ok = %v", endpoint, ok)
 	}
 	select {
@@ -392,7 +392,7 @@ func TestMaintainSpawnedDoesNotKillRunnerWhenDaemonContextIsCancelled(t *testing
 			PID:        os.Getpid(),
 			Port:       port,
 			InstanceID: "shutdown-instance",
-		}, privateState{ControlKey: controlKey, ClientKey: "client-key"}, proc, make(chan error))
+		}, privateState{ControlKey: controlKey, ClientKey: "client-key", ManagementKey: "management-key"}, proc, make(chan error))
 	}()
 
 	select {

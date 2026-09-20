@@ -12,7 +12,10 @@ import (
 	"github.com/aoagents/agent-orchestrator/backend/internal/accountsmanager"
 )
 
-type fakeAccountsManagerStatus struct{ status accountsmanager.Status }
+type fakeAccountsManagerStatus struct {
+	status   accountsmanager.Status
+	endpoint accountsmanager.Endpoint
+}
 
 func (f fakeAccountsManagerStatus) Status() accountsmanager.Status { return f.status }
 
@@ -42,7 +45,12 @@ func TestAccountsManagerStatusResponseIsRedacted(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			router := chi.NewRouter()
-			controller := AccountsManagerController{Status: fakeAccountsManagerStatus{status: tt.status}}
+			privateEndpoint := accountsmanager.Endpoint{
+				BaseURL:         "http://127.0.0.1:54321",
+				ClientToken:     "recognizable-client-token",
+				ManagementToken: "recognizable-management-token",
+			}
+			controller := AccountsManagerController{Status: fakeAccountsManagerStatus{status: tt.status, endpoint: privateEndpoint}}
 			controller.Register(router)
 			request := httptest.NewRequest(http.MethodGet, "/accounts-manager/status", nil)
 			response := httptest.NewRecorder()
@@ -60,6 +68,11 @@ func TestAccountsManagerStatusResponseIsRedacted(t *testing.T) {
 			for _, forbidden := range []string{"url", "port", "pid", "token", "auth", "path", "error"} {
 				if strings.Contains(strings.ToLower(response.Body.String()), forbidden) {
 					t.Fatalf("response exposed forbidden word %q: %s", forbidden, response.Body.String())
+				}
+			}
+			for _, secret := range []string{privateEndpoint.BaseURL, privateEndpoint.ClientToken, privateEndpoint.ManagementToken} {
+				if strings.Contains(response.Body.String(), secret) {
+					t.Fatalf("response exposed private endpoint material")
 				}
 			}
 		})

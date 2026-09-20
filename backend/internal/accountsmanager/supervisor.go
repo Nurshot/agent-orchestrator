@@ -56,8 +56,9 @@ type Status struct {
 
 // Endpoint is private daemon-only connection material.
 type Endpoint struct {
-	BaseURL     string
-	ClientToken string
+	BaseURL         string
+	ClientToken     string
+	ManagementToken string
 }
 
 type Config struct {
@@ -139,7 +140,7 @@ func (s *Supervisor) run(ctx context.Context) {
 		return
 	}
 	if runtimeRecord, readErr := readRuntimeRecord(state.Root); readErr == nil {
-		if endpoint, ok := s.tryAttach(ctx, runtimeRecord, state.ControlKey, state.ClientKey); ok {
+		if endpoint, ok := s.tryAttach(ctx, runtimeRecord, state.ControlKey, state.ClientKey, state.ManagementKey); ok {
 			s.setReady(endpoint, runtimeRecord.UpstreamVersion)
 			s.log.Info("accounts manager attached")
 			s.maintainAttached(ctx, runtimeRecord, state)
@@ -244,7 +245,7 @@ func (s *Supervisor) awaitReady(ctx context.Context, state privateState, wait <-
 			if err != nil {
 				continue
 			}
-			if endpoint, ok := s.tryAttach(ctx, record, state.ControlKey, state.ClientKey); ok {
+			if endpoint, ok := s.tryAttach(ctx, record, state.ControlKey, state.ClientKey, state.ManagementKey); ok {
 				return record, endpoint, nil
 			}
 		}
@@ -259,7 +260,7 @@ func (s *Supervisor) maintainAttached(ctx context.Context, record RuntimeRecord,
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if _, ok := s.tryAttach(ctx, record, state.ControlKey, state.ClientKey); !ok {
+			if _, ok := s.tryAttach(ctx, record, state.ControlKey, state.ClientKey, state.ManagementKey); !ok {
 				s.setDegraded(ReasonProcessExited)
 				return
 			}
@@ -280,7 +281,7 @@ func (s *Supervisor) maintainSpawned(ctx context.Context, record RuntimeRecord, 
 			}
 			return err
 		case <-ticker.C:
-			if _, ok := s.tryAttach(ctx, record, state.ControlKey, state.ClientKey); !ok {
+			if _, ok := s.tryAttach(ctx, record, state.ControlKey, state.ClientKey, state.ManagementKey); !ok {
 				// A daemon replacement cancels ctx while an in-flight lease request
 				// may still be completing. That cancellation is not evidence that the
 				// runner failed: leave it alive for the replacement daemon to attach.
@@ -295,8 +296,8 @@ func (s *Supervisor) maintainSpawned(ctx context.Context, record RuntimeRecord, 
 	}
 }
 
-func (s *Supervisor) tryAttach(ctx context.Context, record RuntimeRecord, controlKey, clientKey string) (Endpoint, bool) {
-	if !s.alive(record.PID) || record.Port < 1 || record.Port > 65535 || record.InstanceID == "" || controlKey == "" || clientKey == "" {
+func (s *Supervisor) tryAttach(ctx context.Context, record RuntimeRecord, controlKey, clientKey, managementKey string) (Endpoint, bool) {
+	if !s.alive(record.PID) || record.Port < 1 || record.Port > 65535 || record.InstanceID == "" || controlKey == "" || clientKey == "" || managementKey == "" {
 		return Endpoint{}, false
 	}
 	baseURL := "http://127.0.0.1:" + strconv.Itoa(record.Port)
@@ -313,7 +314,7 @@ func (s *Supervisor) tryAttach(ctx context.Context, record RuntimeRecord, contro
 	if !s.requestOK(ctx, http.MethodPost, baseURL+"/ao/internal/lease", controlKey, http.StatusNoContent) {
 		return Endpoint{}, false
 	}
-	return Endpoint{BaseURL: baseURL, ClientToken: clientKey}, true
+	return Endpoint{BaseURL: baseURL, ClientToken: clientKey, ManagementToken: managementKey}, true
 }
 
 func (s *Supervisor) requestJSON(ctx context.Context, method, url, key string, dst any) bool {
