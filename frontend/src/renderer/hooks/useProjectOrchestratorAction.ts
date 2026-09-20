@@ -58,15 +58,15 @@ export function useProjectOrchestratorAction({
 		select: (mutation) => ({ status: mutation.state.status, error: mutation.state.error }),
 	});
 	const isSpawning = mutations.some((mutation) => mutation.status === "pending");
-	const latest = mutations.at(-1);
-	const error = !orchestrator && !isSpawning && latest?.status === "error" ? latest.error : null;
-	const spawnError = formatOrchestratorStartupError(
-		error ? (error instanceof Error ? error.message : t("shell.couldNotSpawn")) : startupError ?? "",
-	);
 	const resumableOrchestrator =
 		orchestrator && !orchestrator.activeAgentSwitch && sessionAgentExited(orchestrator) && project?.kind !== CLOUD_PROJECT_KIND
 			? orchestrator
 			: undefined;
+	const latest = mutations.at(-1);
+	const error = (!orchestrator || resumableOrchestrator) && !isSpawning && latest?.status === "error" ? latest.error : null;
+	const spawnError = formatOrchestratorStartupError(
+		error ? (error instanceof Error ? error.message : t("shell.couldNotSpawn")) : startupError ?? "",
+	);
 	const mutation = useMutation({
 		mutationKey,
 		mutationFn: async (mode?: "tui") => {

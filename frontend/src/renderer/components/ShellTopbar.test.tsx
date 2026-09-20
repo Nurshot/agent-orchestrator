@@ -388,6 +388,21 @@ describe("ShellTopbar orchestrator actions", () => {
 		if (!pulses) expect(indicator).not.toHaveClass("animate-status-pulse");
 	});
 
+	it("shows a rejected orchestrator resume request", async () => {
+		postMock.mockRejectedValueOnce(new Error("resume request failed"));
+		const exitedOrchestrator = {
+			...orchestrator,
+			activity: { state: "exited", lastActivityAt: "2026-06-10T00:00:00Z" },
+			status: "exited",
+		} satisfies WorkspaceSession;
+		renderTopbarSessions([worker, exitedOrchestrator], "");
+
+		await userEvent.click(screen.getByRole("button", { name: "Orchestrator, Exited" }));
+
+		expect(await screen.findByRole("alert")).toHaveTextContent("resume request failed");
+		expect(navigateMock).not.toHaveBeenCalled();
+	});
+
 	it("shows a clear Kanban button on embedded orchestrator sessions", async () => {
 		renderTopbar(orchestrator, true);
 
