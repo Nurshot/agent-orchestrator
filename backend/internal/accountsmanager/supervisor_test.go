@@ -285,6 +285,63 @@ func TestStartReattachesExistingRunnerWithoutStartingBinary(t *testing.T) {
 	}
 }
 
+func TestMaintainSpawnedDoesNotKillRunnerWhenDaemonContextIsCancelled(t *testing.T) {
+	t.Parallel()
+
+	const controlKey = "shutdown-control"
+	leaseStarted := make(chan struct{})
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	mux.HandleFunc("/ao/internal/identity", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer "+controlKey {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(controlIdentity{Service: serviceName, InstanceID: "shutdown-instance"})
+	})
+	mux.HandleFunc("/ao/internal/lease", func(_ http.ResponseWriter, r *http.Request) {
+		close(leaseStarted)
+		<-r.Context().Done()
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	port := server.Listener.Addr().(*net.TCPAddr).Port
+
+	ctx, cancel := context.WithCancel(context.Background())
+	proc := &recordingManagedProcess{killed: make(chan struct{}, 1)}
+	done := make(chan error, 1)
+	s := New(Config{HTTPClient: server.Client()})
+	go func() {
+		done <- s.maintainSpawned(ctx, RuntimeRecord{
+			PID:        os.Getpid(),
+			Port:       port,
+			InstanceID: "shutdown-instance",
+		}, privateState{ControlKey: controlKey, ClientKey: "client-key"}, proc, make(chan error))
+	}()
+
+	select {
+	case <-leaseStarted:
+		cancel()
+	case <-time.After(leaseInterval + 2*time.Second):
+		cancel()
+		t.Fatal("lease renewal did not begin")
+	}
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("maintainSpawned() error = %v, want nil during daemon shutdown", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("maintainSpawned did not stop after daemon cancellation")
+	}
+	select {
+	case <-proc.killed:
+		t.Fatal("daemon shutdown killed the runner instead of leaving it available for reattach")
+	default:
+	}
+}
+
 func TestCrashedRunnerBecomesDegradedAndRestarts(t *testing.T) {
 	t.Parallel()
 
@@ -327,6 +384,18 @@ func TestCrashedRunnerBecomesDegradedAndRestarts(t *testing.T) {
 type fakeManagedProcess struct{}
 
 func (fakeManagedProcess) Kill() error { return nil }
+
+type recordingManagedProcess struct {
+	killed chan struct{}
+}
+
+func (p *recordingManagedProcess) Kill() error {
+	select {
+	case p.killed <- struct{}{}:
+	default:
+	}
+	return nil
+}
 
 func waitForStatus(t *testing.T, supervisor *Supervisor, want State, timeout time.Duration) {
 	t.Helper()

@@ -183,6 +183,7 @@ func (s *Supervisor) run(ctx context.Context) {
 				s.log.Info("accounts manager ready")
 				runErr := s.maintainSpawned(ctx, record, state, proc, wait)
 				if ctx.Err() != nil {
+					s.log.Debug("accounts manager supervisor stopped; runner left available for reattach")
 					return
 				}
 				if time.Since(startedAt) >= stableRunReset {
@@ -207,6 +208,11 @@ func (s *Supervisor) run(ctx context.Context) {
 
 func launchRunnerProcess(binary, stateRoot string) (managedProcess, <-chan error, error) {
 	cmd := exec.Command(binary, "serve", "--state-dir", stateRoot) //nolint:gosec // explicit packaged binary path and fixed argv.
+	// Electron stops the daemon by signalling its process group and a dev
+	// terminal may close the daemon's controlling session. Give the runner an
+	// independent session so a replacement daemon can reattach during the
+	// lease window instead of the desktop restart killing both processes.
+	configureRunnerProcess(cmd)
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 	if err := cmd.Start(); err != nil {
@@ -275,6 +281,13 @@ func (s *Supervisor) maintainSpawned(ctx context.Context, record RuntimeRecord, 
 			return err
 		case <-ticker.C:
 			if _, ok := s.tryAttach(ctx, record, state.ControlKey, state.ClientKey); !ok {
+				// A daemon replacement cancels ctx while an in-flight lease request
+				// may still be completing. That cancellation is not evidence that the
+				// runner failed: leave it alive for the replacement daemon to attach.
+				if ctx.Err() != nil {
+					return nil
+				}
+				s.log.Warn("accounts manager control check failed; stopping runner")
 				_ = proc.Kill()
 				return errors.New("runner control check failed")
 			}
