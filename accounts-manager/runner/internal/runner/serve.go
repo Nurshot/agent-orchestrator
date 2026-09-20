@@ -46,6 +46,13 @@ func Serve(ctx context.Context, stateDir string) error {
 		RunnerVersion: Version,
 		EngineVersion: UpstreamVersion,
 	}, state.ControlKey, lease)
+	oauth := newOAuthCoordinator(
+		fmt.Sprintf("http://127.0.0.1:%d", state.Config.Port),
+		state.ManagementKey,
+		&http.Client{Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
+		nil,
+	)
+	defer oauth.Close()
 
 	previousPassword, passwordWasSet := os.LookupEnv("MANAGEMENT_PASSWORD")
 	if err = os.Setenv("MANAGEMENT_PASSWORD", state.ManagementKey); err != nil {
@@ -66,6 +73,9 @@ func Serve(ctx context.Context, stateDir string) error {
 		WithServerOptions(sdkapi.WithRouterConfigurator(func(router *gin.Engine, _ *handlers.BaseAPIHandler, _ *sdkconfig.Config) {
 			router.GET("/ao/internal/identity", gin.WrapH(control))
 			router.POST("/ao/internal/lease", gin.WrapH(control))
+			router.POST("/ao/internal/oauth/start", gin.WrapH(oauth))
+			router.GET("/ao/internal/oauth/status", gin.WrapH(oauth))
+			router.DELETE("/ao/internal/oauth/session", gin.WrapH(oauth))
 		})).
 		Build()
 	if err != nil {
