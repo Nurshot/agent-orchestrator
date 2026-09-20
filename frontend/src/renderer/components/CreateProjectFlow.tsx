@@ -74,9 +74,7 @@ export type CloneProjectInput = Pick<CloneRepositorySelection, "remoteUrl" | "de
 export type PreparedProjectInput = Pick<
 	CreateProjectInput,
 	"path" | "clonePreparationId" | "defaultBranch" | "asWorkspace"
-> & {
-	repositorySetup?: "NOT_A_GIT_REPO" | "PROJECT_UNBORN" | null;
-};
+>;
 
 const LAST_CLONE_DESTINATION_KEY = "ao.clone.lastDestinationParent";
 const LAST_IMPORT_REMOTE_URL_KEY = "ao.import.lastRemoteUrl";
@@ -188,8 +186,9 @@ export function CreateProjectFlow({
 	openSignal?: number;
 	// Home-page action cards: each new nonce jumps straight to clone/local/workspace.
 	sourceSignal?: { source: ProjectSource; nonce: number } | null;
-	// Onboarding hands off folder/git setup to this flow while keeping its own UI shell.
-	onboardingTrigger?: { kind: "folder" | "clone"; remoteUrl?: string; nonce: number };
+	// Onboarding hands its two project rows to this flow, which owns the picker,
+	// the validator and any git preparation, while keeping its own UI shell.
+	onboardingTrigger?: { kind: "folder" | "clone"; nonce: number };
 	prepareOnly?: { onPrepared: (input: PreparedProjectInput) => void };
 	variant?: "default" | "onboarding";
 }) {
@@ -535,10 +534,6 @@ export function CreateProjectFlow({
 		}
 		setError(null);
 		setCloneSelection(null);
-		setCloneDetails((current) => ({
-			...current,
-			remoteUrl: onboardingTrigger.remoteUrl?.trim() ?? current.remoteUrl,
-		}));
 		setCloneDialogOpen(true);
 	}, [onboardingTrigger]);
 
@@ -814,6 +809,16 @@ export function CreateProjectFlow({
 					label,
 				})}
 			<CreateProjectFlowBackdrop open={modePickerOpen || cloneDialogOpen || folderDialogOpen || (selectedPath !== null && !prepareOnly) || createProgress.open || childTransitioning || projectImportOpen} />
+			{/* Onboarding hides the source picker but still needs the validator's
+			    answer on screen: a rejected folder otherwise reports only to
+			    screen readers. */}
+			{hideSourcePicker && error && !folderPickerOpen && selectedPath === null && (
+				<div className="flex w-full max-w-[520px] flex-col items-center">
+					<p className="text-caption leading-body text-error" role="status">
+						{error}
+					</p>
+				</div>
+			)}
 			{hasModePicker && embedded && !hideSourcePicker && !modePickerOpen && !cloneDialogOpen && selectedPath === null && (
 				<div className="flex w-full flex-col items-center gap-3">
 					{cloudEnabled && offering === "cloud" ? (
@@ -1049,7 +1054,7 @@ async function validateImportFolder(path: string, importKind: "project" | "works
 	return data;
 }
 
-export function importValidationMessage(result: ImportValidationResult): string {
+function importValidationMessage(result: ImportValidationResult): string {
 	if (result.blockingErrors.length === 0) return "This folder cannot be imported yet.";
 	return result.blockingErrors.map(importBlockingErrorLabel).join(" ");
 }

@@ -18,7 +18,6 @@ describe("runOnboardingFinish", () => {
 		const createProject = vi.fn().mockResolvedValue(undefined);
 		const outcome = await runOnboardingFinish(request, {
 			createProject,
-			initializeProjectRepository: vi.fn(),
 		});
 
 		expect(outcome).toEqual({ ok: true });
@@ -35,21 +34,10 @@ describe("runOnboardingFinish", () => {
 	it("leaves onboarding incomplete and reports the reason when the project fails", async () => {
 		const outcome = await runOnboardingFinish(request, {
 			createProject: vi.fn().mockRejectedValue(new Error("clone failed: repository not found")),
-			initializeProjectRepository: vi.fn(),
 		});
 
 		expect(outcome).toEqual({ message: "clone failed: repository not found", ok: false });
 		expect(hasCompletedOnboarding()).toBe(false);
-	});
-
-	it("prepares a repository that still needs git setup before registering it", async () => {
-		const initializeProjectRepository = vi.fn().mockResolvedValue(undefined);
-		await runOnboardingFinish({ ...request, repositorySetup: "PROJECT_UNBORN" }, {
-			createProject: vi.fn().mockResolvedValue(undefined),
-			initializeProjectRepository,
-		});
-
-		expect(initializeProjectRepository).toHaveBeenCalledWith("/tmp/acme/project");
 	});
 
 	it("survives storage being unavailable", () => {

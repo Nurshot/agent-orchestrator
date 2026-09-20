@@ -957,7 +957,6 @@ function ShellLayout() {
 		void (async () => {
 			const outcome = await runOnboardingFinish(onboardingFinishRequest, {
 				createProject,
-				initializeProjectRepository,
 			});
 			if (outcome.ok) {
 				clearOnboardingFinishError();

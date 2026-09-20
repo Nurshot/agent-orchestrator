@@ -20,7 +20,6 @@ export function hasCompletedOnboarding(): boolean {
 }
 
 export type OnboardingFinishDeps = {
-	initializeProjectRepository: (path: string) => Promise<unknown>;
 	createProject: (input: {
 		asWorkspace?: boolean;
 		clonePreparationId?: string;
@@ -43,9 +42,6 @@ export async function runOnboardingFinish(
 	deps: OnboardingFinishDeps,
 ): Promise<OnboardingFinishOutcome> {
 	try {
-		if (request.repositorySetup) {
-			await deps.initializeProjectRepository(request.path);
-		}
 		await deps.createProject({
 			asWorkspace: request.asWorkspace,
 			clonePreparationId: request.clonePreparationId,

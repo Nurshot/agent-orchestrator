@@ -1,4 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowUp, CircleDashed, Loader2 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -12,7 +13,7 @@ import { OnboardingProjectSetup } from "./OnboardingProjectSetup";
 import { OnboardingCloudStep } from "./OnboardingCloudStep";
 import { OnboardingGitHubStep } from "./OnboardingGitHubStep";
 import { AuthTerminalPanel } from "./AuthTerminalPanel";
-import { refreshAgentsIfStale, useAgentsQuery, type AgentCatalog } from "../hooks/useAgentsQuery";
+import { agentsQueryKey, refreshAgentsIfStale, useAgentsQuery } from "../hooks/useAgentsQuery";
 import { useHarnessSetup } from "../hooks/useHarnessSetup";
 import { useDaemonStatus } from "../hooks/useDaemonStatus";
 import { useCloudGate } from "../hooks/useCloudGate";
@@ -132,7 +133,7 @@ export function OnboardingPage() {
 	useDaemonStatus();
 	const harnessSetup = useHarnessSetup();
 	const { cloudEnabled } = useCloudGate();
-	const [freshAgentCatalog, setFreshAgentCatalog] = useState<AgentCatalog | null>(null);
+	const queryClient = useQueryClient();
 	const [step, setStep] = useState<Step>("welcome");
 	// The GitHub checks run from the first step's mount, so that page opens
 	// already knowing its state; polling only runs while the page is showing.
@@ -141,7 +142,6 @@ export function OnboardingPage() {
 	const [workerAgent, setWorkerAgent] = useState<string | null>(null);
 	const [hoveredOrchestrator, setHoveredOrchestrator] = useState<string | null>(null);
 	const [hoveredWorker, setHoveredWorker] = useState<string | null>(null);
-	const [projectMode, setProjectMode] = useState<"folder" | "git">("folder");
 	const [preparedProject, setPreparedProject] = useState<PreparedProjectInput | null>(null);
 	const [agentCheckIndicatorTimedOut, setAgentCheckIndicatorTimedOut] = useState(false);
 	const stepIndex = STEPS.indexOf(step);
@@ -150,7 +150,7 @@ export function OnboardingPage() {
 		STAGES.findIndex((stage) => stage.includes(step)),
 	);
 	const details = STEP_DETAILS[step];
-	const agentCatalog = freshAgentCatalog ?? agentsQuery.data;
+	const agentCatalog = agentsQuery.data;
 	const agents = useMemo(() => {
 		const fallbackAgents = AGENT_OPTIONS.map((id) => unknownAgentReadiness(id, agentLabel(id)));
 		const isCatalogKnown = Boolean(agentCatalog);
@@ -211,10 +211,13 @@ export function OnboardingPage() {
 	useEffect(() => {
 		// Match the task composer: probe when this agent-picking surface opens so
 		// a newly installed or authenticated harness is reflected immediately.
+		// The result goes into the cache rather than a local snapshot, so the
+		// invalidation an install triggers still lands: a snapshot would win over
+		// every later fetch and leave the new agent unselectable until reload.
 		void refreshAgentsIfStale().then((catalog) => {
-			if (catalog) setFreshAgentCatalog(catalog);
+			if (catalog) queryClient.setQueryData(agentsQueryKey, catalog);
 		});
-	}, []);
+	}, [queryClient]);
 
 	// A failed handoff comes back here with its request still in the store.
 	// Restore the choices that produced it so the next attempt does not make the
@@ -230,7 +233,6 @@ export function OnboardingPage() {
 			clonePreparationId: onboardingFinishRequest.clonePreparationId,
 			defaultBranch: onboardingFinishRequest.defaultBranch,
 			path: onboardingFinishRequest.path,
-			repositorySetup: onboardingFinishRequest.repositorySetup ?? null,
 		});
 		setOrchestratorAgent(onboardingFinishRequest.orchestratorAgent);
 		setWorkerAgent(onboardingFinishRequest.workerAgent);
@@ -381,9 +383,7 @@ export function OnboardingPage() {
 							{step === "project" && (
 								<div className="flex w-full flex-col items-center gap-4">
 									<OnboardingProjectSetup
-										mode={projectMode}
-										onModeChange={setProjectMode}
-									onPrepared={(project) => {
+										onPrepared={(project) => {
 										setPreparedProject(project);
 										if (project) setStep("orchestrator");
 									}}

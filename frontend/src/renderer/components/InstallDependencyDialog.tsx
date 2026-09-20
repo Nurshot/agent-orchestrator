@@ -425,7 +425,7 @@ function InstallAction({
 	);
 }
 
-function ManualCommand({ command, t }: { command: string; t: TFunction }) {
+export function ManualCommand({ command, t }: { command: string; t: TFunction }) {
 	const [copied, setCopied] = useState(false);
 	const resetTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 

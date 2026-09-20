@@ -2,6 +2,7 @@ import { Check, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { useGitHubSetup } from "../hooks/useGitHubSetup";
 import { AuthTerminalPanel } from "./AuthTerminalPanel";
+import { ManualCommand } from "./InstallDependencyDialog";
 import { SetupList, SetupRow } from "./SetupList";
 import { GitHubMarkIcon } from "./icons";
 
@@ -12,6 +13,10 @@ export function OnboardingGitHubStep({ setup }: { setup: ReturnType<typeof useGi
 	const { t } = useTranslation();
 	const installFailed = setup.job?.status === "failed" || setup.job?.status === "unsupported" || setup.job?.status === "interrupted";
 	const installDetail = setup.installError ?? (installFailed ? setup.job?.error : undefined);
+	// Linux cannot install gh for the user and says so with an unsupported job
+	// plus the command that would work. Retrying only repeats that answer, so the
+	// step has to hand the command over.
+	const manualCommand = setup.job?.status === "unsupported" ? setup.job.command : undefined;
 
 	if (!setup.gh) {
 		return (
@@ -63,6 +68,7 @@ export function OnboardingGitHubStep({ setup }: { setup: ReturnType<typeof useGi
 					{installDetail}
 				</p>
 			) : null}
+			{manualCommand ? <ManualCommand command={manualCommand} t={t} /> : null}
 			{setup.signInError ? (
 				<p className="px-4 text-caption leading-snug text-destructive" role="alert">
 					{setup.signInError}

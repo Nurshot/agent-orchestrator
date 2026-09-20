@@ -75,7 +75,6 @@ export type OnboardingFinishRequest = {
 	clonePreparationId?: string;
 	defaultBranch?: string;
 	asWorkspace?: boolean;
-	repositorySetup?: "NOT_A_GIT_REPO" | "PROJECT_UNBORN" | null;
 	nonce: number;
 };
 
