@@ -4817,6 +4817,7 @@ func TestSpawnOrchestrator_UsesCoordinatorPrompt(t *testing.T) {
 		"Unrelated tools remain allowed",
 		"AO desktop Browser panel",
 		"agent.browsers.get(\"iab\")",
+		"Other browser connectors and browser MCPs",
 		"same live page the user sees",
 		"Browser network capture is optional and off by default",
 		"never enable it for routine browser actions",
@@ -4980,7 +4981,9 @@ func TestSystemPrompt_AppendsConfidentialityGuard(t *testing.T) {
 				!strings.Contains(sp, "Unrelated tools remain allowed") {
 				t.Fatalf("%s: system prompt missing scoped AO operation routing contract:\n%s", tc.name, sp)
 			}
-			if !strings.Contains(sp, "AO desktop Browser panel") || !strings.Contains(sp, "agent.browsers.get(\"iab\")") {
+			if !strings.Contains(sp, "AO desktop Browser panel") ||
+				!strings.Contains(sp, "agent.browsers.get(\"iab\")") ||
+				!strings.Contains(sp, "Other browser connectors and browser MCPs") {
 				t.Fatalf("%s: system prompt missing AO browser routing guidance:\n%s", tc.name, sp)
 			}
 			if !strings.Contains(sp, "Static file targets passed to `ao preview`") ||

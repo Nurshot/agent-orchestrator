@@ -4289,7 +4289,7 @@ func (m *Manager) aoSkillPointer() string {
 		"## AO desktop Browser panel\n\n" +
 		"For frontend work, read `" + previewFile + "` before previewing or starting an app. Static file targets passed to `ao preview` are relative to the session workspace root, regardless of the shell's current directory: use `ao preview README.md`, not `../README.md`. AO serves workspace files through its existing confined loopback preview; do not use `file://` or start a server just to display static files. Never create or modify `package.json` or install dependencies solely to display static files. Do not create `.ao/launch.json` unless the user asks. Automatically open the primary requested browser-displayable artifact immediately after creating or materially updating it, but do not replace an active application preview with a supporting asset. " +
 		"For page inspection or interaction, read `" + browserFile + "` and use `ao browser` from this AO session. Browser network capture is optional and off by default; follow that guide and never enable it for routine browser actions. " +
-		"Codex/host in-app browser connectors and `agent.browsers.get(\"iab\")` are separate runtimes that cannot control AO's page. " +
+		"Other browser connectors and browser MCPs—including Codex/host connectors and `agent.browsers.get(\"iab\")`—cannot control AO's page. " +
 		"`ao browser` operates the same live page the user sees in that panel."
 }
 
