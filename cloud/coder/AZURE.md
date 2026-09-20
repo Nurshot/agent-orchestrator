@@ -94,7 +94,16 @@ Handled + validated live in `swedencentral`:
 - **Restart resilience** - Caddy/Coder/Postgres are `--restart unless-stopped`
   and recover automatically on a VM reboot (verified: workspace provisions again
   post-reboot).
-- **NSG** - inbound limited to 22 (SSH) + 80/443.
+- **NSG** - steady state is inbound **80/443 only**. SSH (22) is needed only for
+  the one-time template build; restrict it with `AO_AZURE_SSH_SOURCE` at
+  provision time, or close it afterward (done on the live deployment - day-2
+  admin is via `az vm run-command`, no SSH). Re-open 22 briefly only to rebake
+  the image.
+- **Worker SHA fast path** - the workspace image bakes `/ao-worker` from
+  `AO_CLOUD_CP_IMAGE`; the CP you wire up must run that same image or the coder
+  bootstrap falls back to the slow PTY upload. Re-run
+  provision-coder-azure-template.sh with the new `AO_CLOUD_CP_IMAGE` whenever the
+  CP image changes (the Azure analogue of publish-coder-workspace.sh on AWS).
 
 Deferred (production-scale, **not** blockers for a bounded customer test):
 
@@ -106,6 +115,13 @@ Deferred (production-scale, **not** blockers for a bounded customer test):
   scale to more than one VM or want VM-recreation resilience.
 - **Multi-VM autoscale.** One VM (4 vCPU / 16 GB) holds a handful of memory-
   capped workspaces; add hosts / a bigger VM only at higher concurrency.
+- **Rotate the Coder admin token.** The CP↔Coder token in `/etc/ao-coder.env` is
+  admin-scoped and long-lived (`CODER_MAX_ADMIN_TOKEN_LIFETIME=8760h`); rotate it
+  (`coder tokens create` + update the `ao-cloud/staging/coder` secret) periodically
+  or on suspicion of VM compromise.
+- **SSH host-key pinning.** provision-coder-azure-template.sh uses
+  `StrictHostKeyChecking=no`; for a rebake over an untrusted network, pin the host
+  key first (it carries a short-lived, read-only ECR pull token via stdin).
 
 ## Teardown
 

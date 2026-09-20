@@ -52,24 +52,25 @@ aws ecr get-login-password --region "$AWS_REGION" \
 echo "=== build workspace image ${WORKSPACE_IMAGE} (bakes worker from ${CP_IMAGE}) ==="
 ssh "${SSHK[@]}" "${ADMIN_USER}@${IP}" "
   set -e
+  # Always scrub the ECR credential, even if the build fails partway.
+  trap 'sudo rm -f /root/.docker/config.json ~/.docker/config.json' EXIT
   mkdir -p ~/ao-coder-template && cp /tmp/main.tf /tmp/Sandbox.Dockerfile ~/ao-coder-template/
   sudo DOCKER_BUILDKIT=1 docker build --build-arg AO_CONTROL_PLANE_IMAGE='${CP_IMAGE}' \
     -t '${WORKSPACE_IMAGE}' -f ~/ao-coder-template/Sandbox.Dockerfile ~/ao-coder-template
-  sudo rm -f /root/.docker/config.json ~/.docker/config.json
   sudo docker images '${WORKSPACE_IMAGE}' --format 'built {{.Repository}}:{{.Tag}} {{.Size}}'
 "
 
 echo "=== publish the ${TEMPLATE_NAME} template (mem=${WORKSPACE_MEMORY_MB}MB, cpu_shares=${WORKSPACE_CPU_SHARES}) ==="
-ssh "${SSHK[@]}" "${ADMIN_USER}@${IP}" "sudo FQDN='${FQDN}' TEMPLATE_NAME='${TEMPLATE_NAME}' WORKSPACE_IMAGE='${WORKSPACE_IMAGE}' MEM='${WORKSPACE_MEMORY_MB}' CPU='${WORKSPACE_CPU_SHARES}' ADMIN_EMAIL='${CODER_ADMIN_EMAIL}' bash -s" <<'REMOTE'
+ssh "${SSHK[@]}" "${ADMIN_USER}@${IP}" "sudo FQDN='${FQDN}' TEMPLATE_NAME='${TEMPLATE_NAME}' WORKSPACE_IMAGE='${WORKSPACE_IMAGE}' MEM='${WORKSPACE_MEMORY_MB}' CPU='${WORKSPACE_CPU_SHARES}' ADMIN_EMAIL='${CODER_ADMIN_EMAIL}' ADMINHOME='/home/${ADMIN_USER}' bash -s" <<'REMOTE'
 set -e
 . /etc/ao-coder.env
 SESSION=$(curl -s -X POST https://$FQDN/api/v2/users/login -H "Content-Type: application/json" \
   -d "{\"email\":\"${ADMIN_EMAIL}\",\"password\":\"${CODER_ADMIN_PW}\"}" \
   | python3 -c 'import sys,json;print(json.load(sys.stdin).get("session_token",""))')
 [ -z "$SESSION" ] && { echo "LOGIN_FAILED"; exit 1; }
-mkdir -p /home/azureuser/ao-coder-template && cp /tmp/main.tf /home/azureuser/ao-coder-template/main.tf
+mkdir -p "$ADMINHOME/ao-coder-template" && cp /tmp/main.tf "$ADMINHOME/ao-coder-template/main.tf"
 docker exec coder mkdir -p /tmp/ao-tmpl
-docker cp /home/azureuser/ao-coder-template/main.tf coder:/tmp/ao-tmpl/main.tf
+docker cp "$ADMINHOME/ao-coder-template/main.tf" coder:/tmp/ao-tmpl/main.tf
 docker exec -e CODER_URL=https://$FQDN -e CODER_SESSION_TOKEN="$SESSION" coder \
   coder templates push "$TEMPLATE_NAME" -d /tmp/ao-tmpl \
   --variable workspace_image="$WORKSPACE_IMAGE" \

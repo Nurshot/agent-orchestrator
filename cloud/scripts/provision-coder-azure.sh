@@ -28,7 +28,12 @@ VM="${AO_AZURE_VM:-ao-coder-azure-vm}"
 VM_SIZE="${AO_AZURE_VM_SIZE:-Standard_D4s_v5}"
 VM_IMAGE="${AO_AZURE_VM_IMAGE:-Ubuntu2204}"
 ADMIN_USER="${AO_AZURE_ADMIN_USER:-azureuser}"
-DNS_LABEL="${AO_AZURE_DNS_LABEL:-ao-coder-$RANDOM}"
+DNS_LABEL_OVERRIDE="${AO_AZURE_DNS_LABEL:-}"   # empty => reuse existing label, else generate once
+# Restrict who can reach SSH (22). SSH is only needed for the one-time template
+# build (provision-coder-azure-template.sh). Default to a CIDR you control; leave
+# unset only if you will close 22 immediately after provisioning (the running
+# deployment needs only 443 + `az vm run-command` for admin).
+SSH_SOURCE="${AO_AZURE_SSH_SOURCE:-}"
 CODER_IMAGE="${AO_CODER_IMAGE:-ghcr.io/coder/coder:latest}"
 CODER_ADMIN_EMAIL="${AO_CODER_ADMIN_EMAIL:-admin@ao-coder.dev}"
 CODER_ADMIN_USERNAME="${AO_CODER_ADMIN_USERNAME:-aoadmin}"
@@ -43,25 +48,43 @@ if ! az vm show -g "$RG" -n "$VM" -o none 2>/dev/null; then
   # Retry: az vm create occasionally races on the auto-created NIC
   # (ResourceNotFound ...VMNic) even though the VM ends up created; a retry is
   # idempotent because the second attempt finds the resources and completes.
+  created=""
   for attempt in 1 2 3; do
     if az vm create -g "$RG" -n "$VM" \
         --image "$VM_IMAGE" --size "$VM_SIZE" \
         --admin-username "$ADMIN_USER" --generate-ssh-keys \
         --public-ip-sku Standard --nsg-rule SSH \
         --tags purpose=ao-coder-azure managed-by=provision-coder-azure -o none; then
-      break
+      created=1; break
     fi
     echo "vm create attempt ${attempt} failed (transient NIC race); retrying in 10s..."
     sleep 10
   done
+  [ -n "$created" ] || { echo "VM creation failed after 3 attempts"; exit 1; }
 fi
 
 say "DNS label -> stable FQDN (for the TLS cert)"
 PIPNAME="$(az network public-ip list -g "$RG" --query "[?ipAddress!=null] | [0].name" -o tsv)"
-az network public-ip update -g "$RG" -n "$PIPNAME" --dns-name "$DNS_LABEL" -o none
+# Sticky label: reuse the label already on the IP so re-runs keep the same FQDN
+# (regenerating it would break the wired CP and force a fresh Let's Encrypt cert).
+EXISTING_LABEL="$(az network public-ip show -g "$RG" -n "$PIPNAME" --query 'dnsSettings.domainNameLabel' -o tsv 2>/dev/null || true)"
+DNS_LABEL="${DNS_LABEL_OVERRIDE:-${EXISTING_LABEL:-ao-coder-$RANDOM}}"
+if [ "$DNS_LABEL" != "$EXISTING_LABEL" ]; then
+  az network public-ip update -g "$RG" -n "$PIPNAME" --dns-name "$DNS_LABEL" -o none
+fi
 FQDN="$(az network public-ip show -g "$RG" -n "$PIPNAME" --query 'dnsSettings.fqdn' -o tsv)"
 IP="$(az network public-ip show -g "$RG" -n "$PIPNAME" --query 'ipAddress' -o tsv)"
 say "FQDN ${FQDN} (${IP})"
+
+# Lock SSH down if a source CIDR was provided (default az rule is world-open).
+if [ -n "$SSH_SOURCE" ]; then
+  NSG0="$(az network nsg list -g "$RG" --query '[0].name' -o tsv)"
+  az network nsg rule update -g "$RG" --nsg-name "$NSG0" -n default-allow-ssh \
+    --source-address-prefixes "$SSH_SOURCE" -o none 2>/dev/null || true
+  say "SSH restricted to ${SSH_SOURCE}"
+else
+  say "WARNING: SSH (22) is OPEN to the internet (key-only). Set AO_AZURE_SSH_SOURCE, or after provisioning close it: az network nsg rule delete -g ${RG} --nsg-name <nsg> -n default-allow-ssh (admin then via 'az vm run-command')."
+fi
 
 say "open NSG ports 80/443 (Coder is HTTPS-only via Caddy; 3000 stays unpublished)"
 NSG="$(az network nsg list -g "$RG" --query '[0].name' -o tsv)"
@@ -78,6 +101,7 @@ az vm run-command invoke -g "$RG" -n "$VM" --command-id RunShellScript --scripts
 say "bring up Caddy (auto-TLS) + Coder + Postgres (idempotent; secrets persisted on the VM)"
 az vm run-command invoke -g "$RG" -n "$VM" --command-id RunShellScript --scripts '
 set -e
+umask 077   # so /etc/ao-coder.env is never briefly world-readable between create and chmod
 ENVF=/etc/ao-coder.env
 grep -q "^PGPW=" "$ENVF" 2>/dev/null || { echo "PGPW=$(openssl rand -hex 16)" >> "$ENVF"; chmod 600 "$ENVF"; }
 . "$ENVF"
@@ -113,6 +137,7 @@ curl -fsS -o /dev/null -w "https://$FQDN/healthz: %{http_code}\n" https://$FQDN/
 say "create first admin + long-lived API token (via the API, idempotent; stored on the VM)"
 az vm run-command invoke -g "$RG" -n "$VM" --command-id RunShellScript --scripts '
 set -e
+umask 077
 ENVF=/etc/ao-coder.env; . "$ENVF"
 FQDN="'"$FQDN"'"
 grep -q "^CODER_ADMIN_PW=" "$ENVF" || echo "CODER_ADMIN_PW=$(openssl rand -hex 16)" >> "$ENVF"
