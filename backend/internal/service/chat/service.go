@@ -157,6 +157,13 @@ func conversationOwner(cfg StartConfig) domain.ConversationOwner {
 	return domain.SessionConversationOwner(cfg.SessionID)
 }
 
+func providerHostID(cfg StartConfig) domain.SessionID {
+	if owner := conversationOwner(cfg); owner.Kind == domain.ConversationOwnerReview {
+		return domain.SessionID("review-" + owner.ID)
+	}
+	return cfg.SessionID
+}
+
 // StartConfig opens a controller for a session.
 type StartConfig = ports.ChatControllerStart
 
@@ -557,9 +564,10 @@ func (s *Service) Start(ctx context.Context, cfg StartConfig) (*Controller, erro
 	}
 
 	var conv ports.ChatConversation
+	hostID := providerHostID(cfg)
 	if cfg.ProviderConversationID != "" {
 		conv, err = driver.Resume(ctx, ports.ChatResumeConfig{
-			SessionID:              cfg.SessionID,
+			SessionID:              hostID,
 			ProviderConversationID: cfg.ProviderConversationID,
 			DataDir:                cfg.DataDir,
 			WorkspacePath:          cfg.WorkspacePath,
@@ -577,7 +585,7 @@ func (s *Service) Start(ctx context.Context, cfg StartConfig) (*Controller, erro
 	} else {
 		conv, err = driver.Start(ctx, ports.ChatStartConfig{
 			ProviderIDsScoped:     providerBoundaryID != "" || activeBranch.ProviderIDsScoped,
-			SessionID:             cfg.SessionID,
+			SessionID:             hostID,
 			DataDir:               cfg.DataDir,
 			WorkspacePath:         cfg.WorkspacePath,
 			Env:                   cfg.Env,
@@ -875,7 +883,9 @@ func (s *Service) Start(ctx context.Context, cfg StartConfig) (*Controller, erro
 	cfg.ProviderHandoff = nil
 	cfg.ProviderScopeID = ""
 	cfg.HistoryMode = ports.ChatHistoryImport
-	s.startConfigs[cfg.SessionID] = cloneStartConfig(cfg)
+	if owner.Kind == domain.ConversationOwnerSession {
+		s.startConfigs[cfg.SessionID] = cloneStartConfig(cfg)
+	}
 	controller.start()
 	s.mu.Unlock()
 
