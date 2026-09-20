@@ -342,11 +342,18 @@ export function TaskComposer({
 				selectionMode: modelCatalogQuery.data.selectionMode,
 			}
 		: undefined;
-	const catalogDefaultOption = modelCatalogQuery.data?.models?.find((item) => item.isDefault)?.id ?? "";
+	// Prefer the project worker setup, then the catalog's marked default, then
+	// the first listed model/mode — never leave the picker on an empty
+	// "let the agent choose" row, which is not a spawnable selection.
+	const catalogModels = modelCatalogQuery.data?.models ?? [];
+	const catalogDefaultOption =
+		catalogModels.find((item) => item.isDefault)?.id ?? catalogModels[0]?.id ?? "";
 	const catalogUsesModes = modelCatalogQuery.data?.selectionMode === "mode";
 	const defaultModelForSelectedAgent =
 		projectModelForSelectedAgent || (catalogUsesModes ? "" : catalogDefaultOption);
 	const defaultModeForSelectedAgent = projectModeForSelectedAgent || (catalogUsesModes ? catalogDefaultOption : "");
+	const selectedModel = model || defaultModelForSelectedAgent;
+	const selectedMode = mode || defaultModeForSelectedAgent;
 
 	const selectedAgentLabel = agentCatalog?.agents.find((item) => item.id === selectedAgent)?.label || selectedAgent;
 	const requiresTuiFallback =
@@ -393,12 +400,11 @@ export function TaskComposer({
 	) => {
 		if (!projectId || isSubmitting) return;
 
-		const cleanModel = model.trim();
-		const cleanMode = mode.trim();
-		const requestedModel =
-			modelTouched && (cleanModel !== defaultModelForSelectedAgent || cleanMode !== defaultModeForSelectedAgent)
-				? cleanModel || cleanMode || undefined
-				: undefined;
+		const cleanModel = selectedModel.trim();
+		const cleanMode = selectedMode.trim();
+		// Same rule as agent: the visible selection is authoritative, whether
+		// it came from project setup or the catalog default.
+		const requestedModel = cleanModel || cleanMode || undefined;
 
 		setIsSubmitting(true);
 		setError(undefined);
@@ -479,8 +485,8 @@ export function TaskComposer({
 				agentLabel: selectedAgentLabel,
 				projectId: isStandalone ? "" : (projectId ?? ""),
 				disabled: isSubmitting,
-				value: model,
-				mode,
+				value: selectedModel,
+				mode: selectedMode,
 				catalog: modelCatalog,
 				fetching: modelCatalogQuery.isFetching,
 				loading:
@@ -560,8 +566,21 @@ function TaskModelPicker({
 		? t("newTask.letAgentChoose", { agent: agentLabel })
 		: t("settings.models.agentDefault");
 
-	// Only spin while a genuine model fetch is in flight (an agent is selected and
-	// its catalog is loading).
+	// No agent selected: there is nothing loading and no model to choose yet, so
+	// show a clear "select an agent" placeholder, never a spinner. This returns
+	// before the loading check so a no-agent state can never render one.
+	if (agentId === "") {
+		return (
+			<span
+				className="composer-chip composer-toolbar-option w-full cursor-not-allowed justify-start opacity-50"
+				aria-disabled="true"
+				aria-label={t("newTask.model")}
+			>
+				<span className="truncate text-settings-muted">{t("newTask.selectAgent")}</span>
+			</span>
+		);
+	}
+
 	if (loading) {
 		return (
 			<span
@@ -581,33 +600,16 @@ function TaskModelPicker({
 		);
 	}
 
-	// No agent selected: models depend on the agent, so there is nothing loading
-	// and no model to choose yet. Show a static disabled placeholder, never a
-	// spinner (the previous "Loading models…" here was misleading). This stays a
-	// non-interactive span, not the model combobox, so no model can be picked
-	// before an agent is.
-	if (agentId === "") {
-		return (
-			<span
-				className="composer-chip composer-toolbar-option w-full cursor-not-allowed justify-start opacity-50"
-				aria-label={t("newTask.model")}
-			>
-				<span className="truncate text-settings-muted">{noOverrideLabel}</span>
-			</span>
-		);
-	}
-
 	if (catalog?.selectionMode === "mode") {
-		const options = [
-			{ value: "__default__", label: noOverrideLabel },
-			...(catalog.models ?? []).map((item) => ({ value: item.id, label: item.label })),
-		];
-		const visibleModeLabel = mode ? (options.find((option) => option.value === mode)?.label ?? mode) : noOverrideLabel;
+		const options = (catalog.models ?? []).map((item) => ({ value: item.id, label: item.label }));
+		const visibleModeLabel = mode
+			? (options.find((option) => option.value === mode)?.label ?? mode)
+			: (options[0]?.label ?? noOverrideLabel);
 		return (
 			<SettingsOptionMenu
 				aria-label={t("newTask.model")}
-				disabled={disabled}
-				value={mode || "__default__"}
+				disabled={disabled || options.length === 0}
+				value={mode || options[0]?.value || ""}
 				options={options}
 				triggerClassName="composer-chip composer-toolbar-option w-full justify-between"
 				menuAlign="start"
@@ -616,7 +618,7 @@ function TaskModelPicker({
 						{visibleModeLabel}
 					</span>
 				)}
-				onChange={(nextMode) => onModeChange(nextMode === "__default__" ? "" : nextMode)}
+				onChange={onModeChange}
 			/>
 		);
 	}
@@ -645,6 +647,7 @@ function TaskModelPicker({
 			onRefresh={onRefresh}
 			disabled={disabled || agentId === ""}
 			emptyLabel={fetching ? t("settings.models.loading") : noOverrideLabel}
+			requireSelection
 			onChange={selectCatalogModel}
 			onCustom={selectCustomModel}
 			compact
@@ -652,7 +655,7 @@ function TaskModelPicker({
 			triggerClassName="composer-chip composer-toolbar-option w-full justify-between"
 			menuAlign="start"
 			renderTrigger={(label) => {
-				const visibleLabel = value ? label : noOverrideLabel;
+				const visibleLabel = value ? label : (displayModels[0]?.label ?? noOverrideLabel);
 				return (
 					<span className="min-w-0 truncate text-control text-foreground" title={visibleLabel}>
 						{visibleLabel}
