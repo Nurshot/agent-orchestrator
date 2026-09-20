@@ -4,14 +4,11 @@ import { Play } from "lucide-react";
 import { aoBridge } from "../lib/bridge";
 import { apiClient, apiErrorMessage } from "../lib/api-client";
 import { workspaceQueryKey } from "../hooks/useWorkspaceQuery";
+import { useCanResumeAgent } from "../hooks/useCanResumeAgent";
 import { usesPreviewWorkspaceData as usePreviewData } from "../lib/preview-mode";
 import { cn } from "../lib/utils";
-import { sessionAgentExited, type WorkspaceSession } from "../types/workspace";
+import type { WorkspaceSession } from "../types/workspace";
 import { Button } from "./ui/button";
-
-export function canResumeAgent(session: WorkspaceSession): boolean {
-	return sessionAgentExited(session) && !session.activeAgentSwitch && !session.cloud;
-}
 
 /**
  * Relaunches an agent that exited inside a still-live session. Distinct from
@@ -21,13 +18,16 @@ export function canResumeAgent(session: WorkspaceSession): boolean {
  */
 export function ResumeAgentControl({
 	className,
+	containerClassName,
 	session,
 }: {
 	className?: string;
+	containerClassName?: string;
 	session: WorkspaceSession;
 }) {
 	const { t } = useTranslation();
 	const queryClient = useQueryClient();
+	const canResume = useCanResumeAgent(session);
 	const resume = useMutation({
 		mutationFn: async () => {
 			if (usePreviewData) return;
@@ -56,10 +56,10 @@ export function ResumeAgentControl({
 	// Cloud sessions re-provision through the control plane (useRestoreSession),
 	// not this local-daemon route — the local daemon has never heard of them and
 	// would answer "Unknown session".
-	if (!canResumeAgent(session)) return null;
+	if (!canResume) return null;
 
 	const error = resume.error instanceof Error ? resume.error.message : null;
-	return (
+	const control = (
 		<>
 			<Button
 				className={cn("shrink-0", className)}
@@ -79,4 +79,5 @@ export function ResumeAgentControl({
 			) : null}
 		</>
 	);
+	return containerClassName ? <div className={containerClassName}>{control}</div> : control;
 }

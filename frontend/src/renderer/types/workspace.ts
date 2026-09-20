@@ -315,7 +315,7 @@ export function sessionIsActive(session: WorkspaceSession): boolean {
  * Not `sessionIsActive`, which reports row liveness and calls this state alive.
  */
 export function sessionAgentExited(session: WorkspaceSession | undefined): boolean {
-	return session?.activity?.state === "exited" && session.isTerminated !== true;
+	return Boolean(session && session.activity?.state === "exited" && sessionIsActive(session));
 }
 
 export function sessionNeedsAttention(session: WorkspaceSession): boolean {

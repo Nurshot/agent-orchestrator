@@ -44,7 +44,7 @@ import { formatTimeCompact } from "../lib/format-time";
 import { AgentAvatar } from "./AgentAvatar";
 import { OrchestratorChildrenSection } from "./OrchestratorChildrenSection";
 import { ProductExternalLink } from "./ProductExternalLink";
-import { canResumeAgent, ResumeAgentControl } from "./ResumeAgentControl";
+import { ResumeAgentControl } from "./ResumeAgentControl";
 import {
 	sessionScmSummaryQueryKey,
 	useSessionScmSummary,
@@ -322,11 +322,11 @@ const SummaryView = memo(function SummaryView({
 			activity={
 				<>
 					<ActivityTimeline prs={prSummaries} session={session} />
-					{canResumeAgent(session) ? (
-						<div className="mt-3 border-t border-(--color-border-settings-input) pt-3">
-							<ResumeAgentControl className="w-full" session={session} />
-						</div>
-					) : null}
+					<ResumeAgentControl
+						className="w-full"
+						containerClassName="mt-3 border-t border-(--color-border-settings-input) pt-3"
+						session={session}
+					/>
 				</>
 			}
 			activityTitle={t("inspector.activity")}

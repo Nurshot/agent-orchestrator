@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useMutation, useMutationState, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import { CLOUD_PROJECT_KIND, hasConfiguredOrchestratorAgent, sessionAgentExited, type WorkspaceSession } from "../types/workspace";
+import { CLOUD_PROJECT_KIND, hasConfiguredOrchestratorAgent, type WorkspaceSession } from "../types/workspace";
 import { cloudSessionsQueryKey, workspaceQueryKey, type WorkspaceScope } from "./useWorkspaceQuery";
 import { spawnCloudOrchestrator } from "../lib/cloud-orchestrator";
 import {
@@ -14,6 +14,7 @@ import {
 import { formatOrchestratorStartupError } from "../lib/orchestrator-startup-error";
 import { addRendererExceptionStep, captureRendererEvent, captureRendererException } from "../lib/telemetry";
 import { useUiStore } from "../stores/ui-store";
+import { useCanResumeAgent } from "./useCanResumeAgent";
 
 export function useProjectOrchestratorAction({
 	projectId,
@@ -41,6 +42,7 @@ export function useProjectOrchestratorAction({
 	}, [routeKey]);
 	const isProjectRestarting = useUiStore((state) => projectId ? state.restartingProjectIds.has(projectId) : false);
 	const isProvisioning = useUiStore((state) => projectId ? state.provisioningProjectIds.has(projectId) : false);
+	const canResumeOrchestrator = useCanResumeAgent(orchestrator);
 	const startupError = useUiStore((state) => projectId ? state.orchestratorStartupErrors[projectId] : undefined);
 	const setStartupError = useUiStore((state) => state.setOrchestratorStartupError);
 	const previousProjectId = useRef(projectId);
@@ -59,7 +61,7 @@ export function useProjectOrchestratorAction({
 	});
 	const isSpawning = mutations.some((mutation) => mutation.status === "pending");
 	const resumableOrchestrator =
-		orchestrator && !orchestrator.activeAgentSwitch && sessionAgentExited(orchestrator) && project?.kind !== CLOUD_PROJECT_KIND
+		orchestrator && canResumeOrchestrator && project?.kind !== CLOUD_PROJECT_KIND
 			? orchestrator
 			: undefined;
 	const latest = mutations.at(-1);

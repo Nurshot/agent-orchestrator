@@ -85,6 +85,7 @@ vi.mock("../lib/api-client", () => ({
 		) => getMock(path, options),
 		POST: (...args: unknown[]) => postMock(...args),
 	},
+	hasTrustedApiBaseUrl: () => false,
 	apiErrorMessage: (_error: unknown, fallback: string) => fallback,
 }));
 

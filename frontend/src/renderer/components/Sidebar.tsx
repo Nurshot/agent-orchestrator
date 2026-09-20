@@ -58,7 +58,6 @@ import { IS_DEV } from "../lib/is-dev";
 import {
 	hasConfiguredOrchestratorAgent,
 	newestActiveOrchestrator,
-	sessionAgentExited,
 	openPRs,
 	type WorkspaceSession,
 	type WorkspaceSummary,
@@ -72,6 +71,7 @@ import { getSessionStatusDotView } from "../lib/session-presentation";
 import { deriveSessionAgentSwitchPresentation } from "../lib/agent-switch-presentation";
 import { aoBridge } from "../lib/bridge";
 import { useCommandPaletteEnabled } from "../hooks/useCommandPaletteEnabled";
+import { useCanResumeAgent } from "../hooks/useCanResumeAgent";
 import { cloudSessionsQueryKey, workspaceQueryKey } from "../hooks/useWorkspaceQuery";
 import { usePinSession, useUnpinSession } from "../hooks/usePinSession";
 import { spawnCloudOrchestrator } from "../lib/cloud-orchestrator";
@@ -1116,6 +1116,7 @@ const ProjectItem = memo(function ProjectItem({
 	// The project's live orchestrator (if any) backs the hover Orchestrator
 	// button: navigate to it when present, otherwise spawn one first.
 	const orchestrator = newestActiveOrchestrator(workspace.sessions);
+	const canResumeOrchestrator = useCanResumeAgent(orchestrator);
 	const toggleDisclosure = () => {
 		hasInteractedWithDisclosure.current = true;
 		onToggle(workspace.id);
@@ -1130,7 +1131,7 @@ const ProjectItem = memo(function ProjectItem({
 		if (!expanded) toggleDisclosure();
 		if (orchestrator) {
 			// Mirrors useProjectOrchestratorAction; both launchers must stay in step.
-			if (!orchestrator.activeAgentSwitch && sessionAgentExited(orchestrator) && workspace.kind !== "cloud") {
+			if (canResumeOrchestrator && workspace.kind !== "cloud") {
 				setIsSpawning(true);
 				try {
 					await resumeOrchestrator(orchestrator.id);
