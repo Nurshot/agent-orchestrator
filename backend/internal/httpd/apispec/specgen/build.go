@@ -2044,7 +2044,7 @@ func sessionOperations() []operation {
 		{
 			method: http.MethodGet, path: "/api/v1/sessions/{sessionId}/pr/{prNumber}/files", id: "listSessionPRFiles", tag: "sessions",
 			summary:    "List the exact base-to-head changed files for an associated pull request",
-			pathParams: []any{controllers.SessionIDParam{}, controllers.PRNumberParam{}},
+			pathParams: []any{controllers.SessionIDParam{}, controllers.PRNumberParam{}, controllers.PRFilesQuery{}},
 			resps: []respUnit{
 				{http.StatusOK, controllers.ListPRFilesResponse{}},
 				{http.StatusBadRequest, envelope.APIError{}},

@@ -11058,7 +11058,10 @@ export interface operations {
     };
     listSessionPRFiles: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Stable URL of the selected associated pull request. */
+                sourceUrl?: string;
+            };
             header?: never;
             path: {
                 /** @description Session identifier, e.g. project-1. */

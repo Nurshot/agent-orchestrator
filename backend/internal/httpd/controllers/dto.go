@@ -213,6 +213,12 @@ type WorkspaceFileRevisionQuery struct {
 	SourceURL        string `query:"sourceUrl,omitempty" description:"Stable URL of the selected associated pull request."`
 }
 
+// PRFilesQuery selects the associated pull request when multiple providers or
+// repositories can have the same pull-request number.
+type PRFilesQuery struct {
+	SourceURL string `query:"sourceUrl,omitempty" description:"Stable URL of the selected associated pull request."`
+}
+
 // WorkspaceSearchQuery is the query string accepted by the workspace path search.
 type WorkspaceSearchQuery struct {
 	Query  string `query:"query" required:"true" description:"Case-insensitive path substring."`

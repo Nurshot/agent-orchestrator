@@ -5114,6 +5114,12 @@ paths:
           description: Associated pull request number.
           minimum: 1
           type: integer
+      - description: Stable URL of the selected associated pull request.
+        in: query
+        name: sourceUrl
+        schema:
+          description: Stable URL of the selected associated pull request.
+          type: string
       responses:
         "200":
           content:
