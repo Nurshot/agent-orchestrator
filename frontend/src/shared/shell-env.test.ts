@@ -92,6 +92,11 @@ describe("buildDaemonEnv", () => {
 		expect(env.SHELL).toBe("/bin/zsh");
 	});
 
+	it("keeps the configured login shell when the Finder environment probe fails", () => {
+		const env = buildDaemonEnv({ ...minimalProcessEnv, SHELL: "/bin/sh" }, null, {}, "/bin/zsh");
+		expect(env.SHELL).toBe("/bin/zsh");
+	});
+
 	it("still produces a PATH containing the floor when shellEnv is null", () => {
 		const env = buildDaemonEnv(minimalProcessEnv, null, {});
 		for (const dir of FALLBACK_PATH_DIRS) {

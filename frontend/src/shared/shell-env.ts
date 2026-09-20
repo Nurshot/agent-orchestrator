@@ -189,12 +189,17 @@ export function buildDaemonEnv(
 	processEnv: NodeJS.ProcessEnv,
 	shellEnv: Record<string, string> | null,
 	overrides: Record<string, string>,
+	configuredLoginShell?: string,
 ): NodeJS.ProcessEnv {
 	const merged: NodeJS.ProcessEnv = { TERM: "xterm-256color", ...(shellEnv ?? {}), ...processEnv };
 	merged.PATH = withFallbackPath(shellEnv?.PATH ?? processEnv.PATH);
 	// Electron may carry launchd's generic SHELL=/bin/sh. The probe records the
-	// executable it actually ran, which must win for daemon children.
+	// executable it actually ran, which must win for daemon children. Keep the
+	// account shell even when that probe fails or times out.
+	const configured = configuredLoginShell?.trim();
+	const processShell = processEnv.SHELL?.trim();
 	if (shellEnv?.SHELL) merged.SHELL = shellEnv.SHELL;
+	else if (configured && (!processShell || processShell === "/bin/sh")) merged.SHELL = configured;
 	merged.TERM = normalizeTerm(merged.TERM);
 	return { ...merged, ...overrides };
 }
