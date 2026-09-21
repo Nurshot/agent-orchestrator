@@ -37,6 +37,9 @@ type fakeStore struct {
 	// insertErr instead of recording the caller's run.
 	insertErr              error
 	insertErrWinnerAtFront bool
+	recoverableReviews     []domain.Review
+	recoverableReviewsErr  error
+	recoveryErrors         map[string]string
 }
 
 func (f *fakeStore) UpsertReview(_ context.Context, r domain.Review) error {
@@ -297,6 +300,18 @@ func (f *fakeStore) ListRunningReviewRunsBySession(_ context.Context, sessionID 
 	return out, nil
 }
 
+func (f *fakeStore) ListRecoverableChatReviews(context.Context) ([]domain.Review, error) {
+	return f.recoverableReviews, f.recoverableReviewsErr
+}
+
+func (f *fakeStore) RecordReviewChatControllerError(_ context.Context, id, message string, _ time.Time) (bool, error) {
+	if f.recoveryErrors == nil {
+		f.recoveryErrors = make(map[string]string)
+	}
+	f.recoveryErrors[id] = message
+	return true, nil
+}
+
 type fakeSessions struct {
 	rec domain.SessionRecord
 	ok  bool
@@ -530,6 +545,16 @@ func seedReviewWorker(t *testing.T, st *sqlite.Store, worker domain.SessionRecor
 }
 
 // --- tests ---
+
+func TestRecoverChatReviewersRequiresStoreRecoveryQuery(t *testing.T) {
+	want := errors.New("recovery query unavailable")
+	store := &fakeStore{recoverableReviewsErr: want}
+	eng := newEngineForTest(store, fakeSessions{}, fakePRs{}, fakeProjects{}, &fakeLauncher{})
+
+	if err := eng.RecoverChatReviewers(context.Background()); !errors.Is(err, want) {
+		t.Fatalf("RecoverChatReviewers() error = %v, want %v", err, want)
+	}
+}
 
 func TestTriggerSpawnsNewReviewerAndRecordsRunAfterLaunch(t *testing.T) {
 	store := &fakeStore{}

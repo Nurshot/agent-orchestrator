@@ -50,12 +50,6 @@ type Store interface {
 	GetReviewRunBySessionPRSHAAndHarness(ctx stdctx.Context, id domain.SessionID, prURL, targetSHA string, harness domain.ReviewerHarness) (domain.ReviewRun, bool, error)
 	ListReviewRunsBySession(ctx stdctx.Context, id domain.SessionID) ([]domain.ReviewRun, error)
 	ListRunningReviewRunsBySession(ctx stdctx.Context, id domain.SessionID) ([]domain.ReviewRun, error)
-}
-
-// recoverableChatReviewStore is the optional persistence extension used for
-// durable reviewer-chat recovery. Keeping it narrow avoids making the regular
-// review engine depend on chat-only storage in focused tests.
-type recoverableChatReviewStore interface {
 	ListRecoverableChatReviews(ctx stdctx.Context) ([]domain.Review, error)
 	RecordReviewChatControllerError(ctx stdctx.Context, id, message string, now time.Time) (bool, error)
 }
@@ -665,18 +659,14 @@ func (e *Engine) RestoreReviewer(ctx stdctx.Context, workerID domain.SessionID) 
 // review row. It must not re-resolve the worker's current reviewer preference:
 // that preference may have changed since this particular reviewer started.
 func (e *Engine) RecoverChatReviewers(ctx stdctx.Context) error {
-	store, ok := e.store.(recoverableChatReviewStore)
-	if !ok {
-		return nil
-	}
-	reviews, err := store.ListRecoverableChatReviews(ctx)
+	reviews, err := e.store.ListRecoverableChatReviews(ctx)
 	if err != nil {
 		return err
 	}
 	var recoveryErrors []error
 	for _, review := range reviews {
 		if _, restoreErr := e.restoreRecoverableChatReviewer(ctx, review); restoreErr != nil {
-			if _, recordErr := store.RecordReviewChatControllerError(ctx, review.ID, restoreErr.Error(), e.clock()); recordErr != nil {
+			if _, recordErr := e.store.RecordReviewChatControllerError(ctx, review.ID, restoreErr.Error(), e.clock()); recordErr != nil {
 				recoveryErrors = append(recoveryErrors, fmt.Errorf("record reviewer %s recovery error: %w", review.ID, recordErr))
 			}
 			recoveryErrors = append(recoveryErrors, fmt.Errorf("recover reviewer %s: %w", review.ID, restoreErr))
