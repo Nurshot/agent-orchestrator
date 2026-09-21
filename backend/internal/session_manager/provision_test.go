@@ -381,7 +381,7 @@ func TestResolveSpawnAgentConfigValidatesAndResetsDependentTuning(t *testing.T) 
 	}
 }
 
-func TestResolveChatAgentConfigDropsEffortForNonCodexHarnesses(t *testing.T) {
+func TestResolveSpawnAgentConfigKeepsEffortForSupportedNonCodexChatHarnesses(t *testing.T) {
 	catalogCalls := 0
 	m := &Manager{modelCatalog: tuningCatalog{calls: &catalogCalls, catalog: ports.AgentModelCatalog{Models: []ports.AgentModelInfo{
 		{ID: "sonnet", IsDefault: true},
@@ -393,8 +393,8 @@ func TestResolveChatAgentConfigDropsEffortForNonCodexHarnesses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resolved.Effort != "" {
-		t.Fatalf("Claude Code effort = %q, want provider default", resolved.Effort)
+	if resolved.Effort != "high" {
+		t.Fatalf("Claude Code effort = %q, want high", resolved.Effort)
 	}
 	if catalogCalls != 0 {
 		t.Fatalf("Claude Code model catalog calls = %d, want 0", catalogCalls)

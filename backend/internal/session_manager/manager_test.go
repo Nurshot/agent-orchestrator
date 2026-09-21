@@ -1703,20 +1703,23 @@ func TestSpawnModelPersisted(t *testing.T) {
 func TestSpawnTUIValidatesEffortBeforeProvisioning(t *testing.T) {
 	tests := []struct {
 		name    string
+		harness domain.AgentHarness
 		effort  string
 		catalog tuningCatalog
 		wantErr error
 	}{
 		{
-			name:   "supported",
-			effort: "high",
+			name:    "supported",
+			harness: domain.HarnessCodex,
+			effort:  "high",
 			catalog: tuningCatalog{catalog: ports.AgentModelCatalog{Models: []ports.AgentModelInfo{
 				{ID: "gpt-test", IsDefault: true, Efforts: []string{"low", "high"}},
 			}}},
 		},
 		{
-			name:   "unsupported",
-			effort: "extreme",
+			name:    "unsupported",
+			harness: domain.HarnessCodex,
+			effort:  "extreme",
 			catalog: tuningCatalog{catalog: ports.AgentModelCatalog{Models: []ports.AgentModelInfo{
 				{ID: "gpt-test", IsDefault: true, Efforts: []string{"low", "high"}},
 			}}},
@@ -1724,16 +1727,24 @@ func TestSpawnTUIValidatesEffortBeforeProvisioning(t *testing.T) {
 		},
 		{
 			name:    "catalog unavailable",
+			harness: domain.HarnessCodex,
 			effort:  "high",
 			catalog: tuningCatalog{err: errors.New("catalog offline")},
 			wantErr: ports.ErrModelCapabilitiesUnavailable,
+		},
+		{
+			name:    "harness does not support TUI effort",
+			harness: domain.HarnessClaudeCode,
+			effort:  "max",
+			catalog: tuningCatalog{},
+			wantErr: ports.ErrUnsupportedEffort,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			st := newFakeStore()
 			st.projects["mer"] = domain.ProjectRecord{ID: "mer", Config: domain.ProjectConfig{
-				Worker: domain.RoleOverride{Harness: domain.HarnessCodex},
+				Worker: domain.RoleOverride{Harness: tt.harness},
 			}}
 			agent := &recordingAgent{}
 			runtime := &fakeRuntime{}
@@ -1745,7 +1756,7 @@ func TestSpawnTUIValidatesEffortBeforeProvisioning(t *testing.T) {
 			manager.SetModelCatalog(tt.catalog)
 
 			rec, _, _, err := manager.Spawn(ctx, ports.SpawnConfig{
-				ProjectID: "mer", Kind: domain.KindWorker, RequestedMode: domain.SessionModeTUI,
+				ProjectID: "mer", Kind: domain.KindWorker, Harness: tt.harness, RequestedMode: domain.SessionModeTUI,
 				AgentConfig: ports.AgentConfig{Model: "gpt-test", Effort: tt.effort}, EffortOverride: true,
 			})
 			if tt.wantErr != nil {

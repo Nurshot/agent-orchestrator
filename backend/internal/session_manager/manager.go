@@ -943,6 +943,9 @@ func (m *Manager) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Sess
 			mode = domain.SessionModeTUI
 		}
 	}
+	if err := validateSpawnEffortSupport(cfg.Harness, mode, agentConfig.Effort); err != nil {
+		return domain.SessionRecord{}, 0, 0, fmt.Errorf("spawn: %w", err)
+	}
 	cfg.RequestedMode = mode
 
 	// A chat session runs no agent inside a terminal runtime, so the terminal
@@ -1162,7 +1165,6 @@ func (m *Manager) resolveSpawnAgentConfig(ctx context.Context, cfg ports.SpawnCo
 		resolved.Effort = requested.Effort
 	}
 	if cfg.Harness != domain.HarnessCodex {
-		resolved.Effort = ""
 		return resolved, nil
 	}
 	if m.modelCatalog == nil {
@@ -1206,6 +1208,19 @@ func (m *Manager) resolveSpawnAgentConfig(ctx context.Context, cfg ports.SpawnCo
 		return ports.AgentConfig{}, fmt.Errorf("%w %q for model %q", ports.ErrUnsupportedEffort, resolved.Effort, modelID)
 	}
 	return resolved, nil
+}
+
+func validateSpawnEffortSupport(harness domain.AgentHarness, mode domain.SessionMode, effort string) error {
+	if strings.TrimSpace(effort) == "" || harness == domain.HarnessCodex {
+		return nil
+	}
+	if mode == domain.SessionModeChat {
+		switch harness {
+		case domain.HarnessClaudeCode, domain.HarnessOpenCode, domain.HarnessPi:
+			return nil
+		}
+	}
+	return fmt.Errorf("%w %q for harness %q in %s mode", ports.ErrUnsupportedEffort, effort, harness, mode)
 }
 
 func containsString(values []string, value string) bool {
