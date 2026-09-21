@@ -53,6 +53,37 @@ for (const file of fs.readdirSync(changelogDirectory).filter((name) => name.ends
 		if (/github\.com\/[^/]+\/[^/]+\/commit\/[a-f0-9]+/i.test(raw)) {
 			errors.push(`${file}: raw commit links are not allowed in the public changelog`);
 		}
+
+		const headings = [...raw.matchAll(/^## (.+)$/gm)];
+		const supportingSections = new Set(["Improvements", "Bug fixes", "Learn more", "Maintenance"]);
+		const featureHeadings = headings.filter(
+			(match) => !supportingSections.has(match[1].replace(/\s*<PRBadge.*$/, "").trim()),
+		);
+		if (featureHeadings.length > 4) {
+			errors.push(`${file}: contains more than four major feature sections`);
+		}
+		if (!headings.some((match) => match[1].trim() === "Learn more")) {
+			errors.push(`${file}: missing Learn more section`);
+		}
+
+		const images = [...raw.matchAll(/^!\[([^\]]+)\]\(([^)]+)\)\s*$/gm)];
+		if (images.length > 1) {
+			errors.push(`${file}: weekly entries may contain at most one product image`);
+		}
+		const firstSupportingSection = headings
+			.filter((match) => supportingSections.has(match[1].trim()))
+			.map((match) => match.index)
+			.filter((index) => index !== undefined)
+			.sort((a, b) => a - b)[0];
+		if (
+			firstSupportingSection !== undefined &&
+			images.some((match) => match.index !== undefined && match.index > firstSupportingSection)
+		) {
+			errors.push(
+				`${file}: product media must support a major feature before the Improvements section`,
+			);
+		}
+
 		const references = [
 			...raw.matchAll(/github\.com\/[^/]+\/[^/]+\/pull\/(\d+)/gm),
 		].map((match) => Number(match[1]));

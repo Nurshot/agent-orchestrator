@@ -6,7 +6,7 @@ Each published update should contain only:
 
 1. A short, specific weekly headline.
 2. Up to four major features explained in customer-friendly language.
-3. A real screenshot or short product demo when one materially improves the explanation.
+3. At most one real screenshot or short product demo, reserved for a major user-facing workflow when it materially improves the explanation. Do not add media for routine improvements or bug fixes.
 4. Pull request references for traceability.
 5. Smaller improvements grouped by product area.
 6. Concise bug-fix summaries grouped by product area.
@@ -15,4 +15,4 @@ Each published update should contain only:
 
 Do not publish raw commit hashes, exhaustive engineering activity, internal-only work, duplicated or reverted changes, or feature-flagged work that users cannot access.
 
-The scheduled workflow opens a draft pull request. A human editor owns the headline, explanations, media selection, final grouping, and decision to publish.
+Place optional media directly inside the major feature it demonstrates, before the Improvements section. The scheduled workflow opens a draft pull request. A human editor owns the headline, explanations, media selection, final grouping, and decision to publish.
