@@ -339,19 +339,6 @@ func resolvePerfRepo(t *testing.T) (repo string, cleanup func()) {
 	return dir, nil
 }
 
-func (d *daemon) callTimed(timeout time.Duration, method, path string, body, out any) (int, error) {
-	status, raw, err := d.callTimedRaw(timeout, method, path, body)
-	if err != nil {
-		return status, err
-	}
-	if out != nil && len(raw) > 0 {
-		if err := json.Unmarshal(raw, out); err != nil {
-			return status, fmt.Errorf("decode %s: %w\n%s", path, err, raw)
-		}
-	}
-	return status, nil
-}
-
 func (d *daemon) callTimedRaw(timeout time.Duration, method, path string, body any) (int, []byte, error) {
 	client := &http.Client{Timeout: timeout}
 	var reader io.Reader
