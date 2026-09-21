@@ -255,6 +255,28 @@ describe("useBrowserView", () => {
 		expect(result.current.viewId).toBe("42:sess-1");
 	});
 
+	it("keeps bounds revisions increasing when the same native view remounts", async () => {
+		const bridge = setupBridge();
+		const firstSlot = createSlot();
+		const first = renderHook(() => useBrowserView({ sessionId: "sess-1", active: true, poppedOut: false }));
+
+		await waitFor(() => expect(first.result.current.viewId).toBe("42:sess-1"));
+		act(() => first.result.current.slotRef(firstSlot));
+		await waitFor(() => expect(bridge.setBounds).toHaveBeenCalled());
+		first.unmount();
+		const firstRevision = Math.max(...bridge.setBounds.mock.calls.map(([input]) => input.revision));
+
+		bridge.setBounds.mockClear();
+		const secondSlot = createSlot();
+		const second = renderHook(() => useBrowserView({ sessionId: "sess-1", active: true, poppedOut: false }));
+		await waitFor(() => expect(second.result.current.viewId).toBe("42:sess-1"));
+		act(() => second.result.current.slotRef(secondSlot));
+		await waitFor(() => expect(bridge.setBounds).toHaveBeenCalled());
+
+		expect(bridge.setBounds.mock.calls.every(([input]) => input.revision > firstRevision)).toBe(true);
+		second.unmount();
+	});
+
 	it("keeps an active blank target live", async () => {
 		const bridge = setupBridge();
 		const slot = createSlot();
