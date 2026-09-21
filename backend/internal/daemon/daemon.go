@@ -57,6 +57,7 @@ import (
 	linkpreviewsvc "github.com/aoagents/agent-orchestrator/backend/internal/service/linkpreview"
 	notificationsvc "github.com/aoagents/agent-orchestrator/backend/internal/service/notification"
 	prsvc "github.com/aoagents/agent-orchestrator/backend/internal/service/pr"
+	"github.com/aoagents/agent-orchestrator/backend/internal/service/processstats"
 	projectsvc "github.com/aoagents/agent-orchestrator/backend/internal/service/project"
 	settingssvc "github.com/aoagents/agent-orchestrator/backend/internal/service/settings"
 	"github.com/aoagents/agent-orchestrator/backend/internal/service/systemcheck"
@@ -777,6 +778,7 @@ func Run() error {
 		Agents:             agentSvc,
 		CodexAccounts:      agentSvc,
 		SystemChecks:       systemChecks,
+		ProcessStats:       processstats.New(),
 		Installer:          systemInstall,
 		Sessions:           sessionSvc,
 		DesktopWorkspaces:  sessionSvc,

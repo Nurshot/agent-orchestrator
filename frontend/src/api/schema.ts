@@ -2423,6 +2423,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/system/processes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List AO-owned processes and resident memory */
+        get: operations["getSystemProcesses"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/system/requirements": {
         parameters: {
             query?: never;
@@ -3709,6 +3726,17 @@ export interface components {
             agent: components["schemas"]["AgentInfo"];
             installed: boolean;
             supported: boolean;
+        };
+        ProcessInfo: {
+            group: string;
+            /** Format: int32 */
+            pid: number;
+            rssBytes: number;
+            sessionId?: string;
+        };
+        ProcessSnapshot: {
+            processes: components["schemas"]["ProcessInfo"][];
+            totalRssBytes: number;
         };
         Project: {
             agent?: string;
@@ -13538,6 +13566,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    getSystemProcesses: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProcessSnapshot"];
                 };
             };
             /** @description Internal Server Error */

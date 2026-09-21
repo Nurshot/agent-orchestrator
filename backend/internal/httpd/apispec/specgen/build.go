@@ -18,6 +18,7 @@ import (
 	"github.com/aoagents/agent-orchestrator/backend/internal/httpd/controllers"
 	"github.com/aoagents/agent-orchestrator/backend/internal/httpd/envelope"
 	importsvc "github.com/aoagents/agent-orchestrator/backend/internal/service/importer"
+	"github.com/aoagents/agent-orchestrator/backend/internal/service/processstats"
 	projectsvc "github.com/aoagents/agent-orchestrator/backend/internal/service/project"
 )
 
@@ -145,6 +146,8 @@ func schemaName(_ reflect.Type, defaultName string) string {
 // by projectOperations(). Add an entry when a new contract type is introduced;
 // the drift test fails until the spec is regenerated, which flags the gap.
 var schemaNames = map[string]string{ //nolint:gosec // Public OpenAPI type names include reset-credit contracts; no credential value is stored here.
+	"ProcessstatsSnapshot":                                 "ProcessSnapshot",
+	"ProcessstatsProcess":                                  "ProcessInfo",
 	"ControllersSettingsResponse":                          "SettingsResponse",
 	"ControllersDesktopWorkspaceLocationResponse":          "DesktopWorkspaceLocationResponse",
 	"ControllersUpdateSessionInterfaceRequest":             "UpdateSessionInterfaceRequest",
@@ -631,6 +634,11 @@ func identityOperations() []operation {
 // the fixed system/install target allowlist.
 func systemOperations() []operation {
 	return []operation{
+		{
+			method: http.MethodGet, path: "/api/v1/system/processes", id: "getSystemProcesses", tag: "system",
+			summary: "List AO-owned processes and resident memory",
+			resps:   []respUnit{{http.StatusOK, processstats.Snapshot{}}, {http.StatusInternalServerError, envelope.APIError{}}, {http.StatusNotImplemented, envelope.APIError{}}},
+		},
 		{
 			method: http.MethodGet, path: "/api/v1/system/requirements", id: "getSystemRequirements", tag: "system",
 			summary: "Check local machine readiness (git, tmux, agent harness, gh)",

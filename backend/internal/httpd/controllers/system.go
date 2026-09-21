@@ -8,6 +8,7 @@ import (
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/httpd/apispec"
 	"github.com/aoagents/agent-orchestrator/backend/internal/httpd/envelope"
+	"github.com/aoagents/agent-orchestrator/backend/internal/service/processstats"
 	"github.com/aoagents/agent-orchestrator/backend/internal/service/shellterm"
 	"github.com/aoagents/agent-orchestrator/backend/internal/service/systemcheck"
 )
@@ -22,14 +23,29 @@ type SystemChecker interface {
 
 // SystemController owns the /system routes.
 type SystemController struct {
-	Checks SystemChecker
+	Checks    SystemChecker
+	Processes processstats.Reader
 }
 
 // Register mounts the system requirements route on the supplied router.
 func (c *SystemController) Register(r chi.Router) {
 	r.Get("/system/requirements", c.requirements)
+	r.Get("/system/processes", c.processes)
 	r.Get("/system/github-auth", c.githubAuth)
 	r.Post("/system/github-auth/terminal", c.openGitHubAuthTerminal)
+}
+
+func (c *SystemController) processes(w http.ResponseWriter, r *http.Request) {
+	if c.Processes == nil {
+		apispec.NotImplemented(w, r, http.MethodGet, "/api/v1/system/processes")
+		return
+	}
+	snapshot, err := c.Processes.Snapshot(r.Context())
+	if err != nil {
+		envelope.WriteError(w, r, err)
+		return
+	}
+	envelope.WriteJSON(w, http.StatusOK, snapshot)
 }
 
 func (c *SystemController) openGitHubAuthTerminal(w http.ResponseWriter, r *http.Request) {

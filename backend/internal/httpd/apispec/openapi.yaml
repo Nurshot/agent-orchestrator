@@ -7102,6 +7102,31 @@ paths:
         target
       tags:
       - system
+  /api/v1/system/processes:
+    get:
+      operationId: getSystemProcesses
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessSnapshot'
+          description: OK
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Internal Server Error
+        "501":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Not Implemented
+      summary: List AO-owned processes and resident memory
+      tags:
+      - system
   /api/v1/system/requirements:
     get:
       operationId: getSystemRequirements
@@ -10558,6 +10583,36 @@ components:
       - agent
       - supported
       - installed
+      type: object
+    ProcessInfo:
+      properties:
+        group:
+          type: string
+        pid:
+          format: int32
+          type: integer
+        rssBytes:
+          minimum: 0
+          type: integer
+        sessionId:
+          type: string
+      required:
+      - pid
+      - rssBytes
+      - group
+      type: object
+    ProcessSnapshot:
+      properties:
+        processes:
+          items:
+            $ref: '#/components/schemas/ProcessInfo'
+          type: array
+        totalRssBytes:
+          minimum: 0
+          type: integer
+      required:
+      - processes
+      - totalRssBytes
       type: object
     Project:
       properties:
