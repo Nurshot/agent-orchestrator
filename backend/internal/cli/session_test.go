@@ -263,7 +263,7 @@ func TestSessionList_EnrichesPRColumnsAndKeepsFallbackFacts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("session ls failed: %v\nstderr=%s", err, errOut)
 	}
-	for _, want := range []string{"SESSION", "BRANCH", "THREADS", "demo-1", "feat/INT-1327", "#3", "passing", "approved", "2", "working", "5m ago", "demo-2", "#2", "failing", "changes_requested"} {
+	for _, want := range []string{"SESSION", "ROLE", "BRANCH", "THREADS", "demo-1", "worker", "feat/INT-1327", "#3", "passing", "approved", "2", "working", "5m ago", "demo-2", "#2", "failing", "changes_requested"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("output missing %q:\n%s", want, out)
 		}
@@ -372,6 +372,10 @@ func TestSessionList_AllIncludesOrchestratorsWithoutHiddenHint(t *testing.T) {
 	}
 	if !strings.Contains(out, "demo-1") || !strings.Contains(out, "demo-2") {
 		t.Fatalf("output missing worker or orchestrator session:\n%s", out)
+	}
+	fields := strings.Join(strings.Fields(out), " ")
+	if !strings.Contains(fields, "demo-1 worker") || !strings.Contains(fields, "demo-2 orchestrator") {
+		t.Fatalf("output does not distinguish worker and orchestrator roles:\n%s", out)
 	}
 	if strings.Contains(out, "orchestrator session hidden") {
 		t.Fatalf("output reports hidden orchestrators with --all:\n%s", out)
