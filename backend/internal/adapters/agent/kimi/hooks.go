@@ -2,12 +2,15 @@ package kimi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/pelletier/go-toml/v2"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/agent/hookutil"
 	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
@@ -132,8 +135,9 @@ func installKimiConfigHooks(cfg ports.WorkspaceHookConfig) error {
 }
 
 type kimiConfigSeedSource struct {
-	home   string
-	config []byte
+	home       string
+	configPath string
+	config     []byte
 }
 
 func kimiSeedSource() (*kimiConfigSeedSource, error) {
@@ -149,44 +153,72 @@ func kimiSeedSource() (*kimiConfigSeedSource, error) {
 			if home.legacyKeyring != (pass == 1) {
 				continue
 			}
-			path := filepath.Join(home.path, "config.toml")
-			data, err := os.ReadFile(path) //nolint:gosec // user Kimi config used only as a seed for AO-managed home.
-			if errors.Is(err, os.ErrNotExist) {
-				if !home.legacyKeyring {
-					credentialPath := filepath.Join(home.path, "credentials", "kimi-code.json")
-					status, found, credentialErr := kimiCredentialsAuthStatus(credentialPath)
-					if credentialErr != nil {
-						return nil, fmt.Errorf("read source Kimi credentials %s: %w", credentialPath, credentialErr)
+			for _, configName := range []string{"config.toml", "config.json"} {
+				path := filepath.Join(home.path, configName)
+				data, err := os.ReadFile(path) //nolint:gosec // user Kimi config used only as a seed for AO-managed home.
+				if errors.Is(err, os.ErrNotExist) {
+					if !home.legacyKeyring {
+						credentialPath := filepath.Join(home.path, "credentials", "kimi-code.json")
+						status, found, credentialErr := kimiCredentialsAuthStatus(credentialPath)
+						if credentialErr != nil {
+							return nil, fmt.Errorf("read source Kimi credentials %s: %w", credentialPath, credentialErr)
+						}
+						if found && status == ports.AgentAuthStatusAuthorized {
+							return &kimiConfigSeedSource{home: home.path}, nil
+						}
 					}
-					if found && status == ports.AgentAuthStatusAuthorized {
-						return &kimiConfigSeedSource{home: home.path}, nil
-					}
+					continue
 				}
-				continue
-			}
-			if err != nil {
-				return nil, fmt.Errorf("read source Kimi config %s: %w", path, err)
-			}
-			if kimiConfigHasAPIKey(data) {
-				return &kimiConfigSeedSource{home: home.path, config: data}, nil
-			}
-			status, found, err := kimiConfigAuthStatusForHome(path, home.legacyKeyring)
-			if err != nil {
-				return nil, fmt.Errorf("read source Kimi auth %s: %w", path, err)
-			}
-			if found && status == ports.AgentAuthStatusAuthorized {
-				return &kimiConfigSeedSource{home: home.path, config: data}, nil
+				if err != nil {
+					return nil, fmt.Errorf("read source Kimi config %s: %w", path, err)
+				}
+				if kimiConfigHasAPIKey(data) {
+					config, err := kimiSeedConfigData(path, data)
+					if err != nil {
+						return nil, err
+					}
+					return &kimiConfigSeedSource{home: home.path, configPath: path, config: config}, nil
+				}
+				status, found, err := kimiConfigAuthStatusForHome(path, home.legacyKeyring)
+				if err != nil {
+					return nil, fmt.Errorf("read source Kimi auth %s: %w", path, err)
+				}
+				if found && status == ports.AgentAuthStatusAuthorized {
+					config, err := kimiSeedConfigData(path, data)
+					if err != nil {
+						return nil, err
+					}
+					return &kimiConfigSeedSource{home: home.path, configPath: path, config: config}, nil
+				}
 			}
 		}
 	}
 	return nil, nil
 }
 
+func kimiSeedConfigData(path string, data []byte) ([]byte, error) {
+	if !strings.EqualFold(filepath.Ext(path), ".json") {
+		return data, nil
+	}
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("decode source Kimi config %s: %w", path, err)
+	}
+	encoded, err := toml.Marshal(config)
+	if err != nil {
+		return nil, fmt.Errorf("encode source Kimi config %s as TOML: %w", path, err)
+	}
+	return encoded, nil
+}
+
 func seedKimiCredentials(targetHome string, source *kimiConfigSeedSource) error {
 	if source == nil {
 		return nil
 	}
-	sourceConfigPath := filepath.Join(source.home, "config.toml")
+	sourceConfigPath := source.configPath
+	if sourceConfigPath == "" {
+		sourceConfigPath = filepath.Join(source.home, "config.toml")
+	}
 	sourcePaths, err := kimiConfigOAuthCredentialPaths(sourceConfigPath)
 	if err != nil {
 		return fmt.Errorf("read source Kimi config %s: %w", sourceConfigPath, err)
@@ -259,8 +291,7 @@ func kimiSeedConfig(targetPath string, existing []byte, source *kimiConfigSeedSo
 	if len(source.config) == 0 {
 		return nil, false
 	}
-	sourcePath := filepath.Join(source.home, "config.toml")
-	if sameKimiConfigPath(sourcePath, targetPath) {
+	if sameKimiConfigPath(source.configPath, targetPath) {
 		return nil, false
 	}
 	return source.config, true
