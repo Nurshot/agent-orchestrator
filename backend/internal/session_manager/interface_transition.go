@@ -815,13 +815,7 @@ func (m *Manager) preflightInterfaceTarget(
 	if err != nil {
 		return err
 	}
-	config := effectiveAgentConfig(rec.Harness, rec.Kind, project.Config)
-	// Refresh the model from the session's own persisted selection so the
-	// preflight validates the exact restore command the rebuild will run
-	// (ChatUI model changes must survive the handoff).
-	if model := strings.TrimSpace(rec.Metadata.Model); model != "" {
-		config.Model = model
-	}
+	config := restoredAgentConfig(rec, project.Config)
 	var cmd []string
 	if transition.NativeConversationID == "" {
 		cmd, _, _, err = freshLaunchArgv(ctx, agent, rec.ID, rec.Metadata.WorkspacePath,

@@ -222,6 +222,34 @@ describe("HarnessSettingsSection", () => {
 		expect(openExternal).toHaveBeenCalledWith("https://example.test/login");
 	});
 
+	// A credential AO could not validate must read as neutral, never as logged
+	// in — a revoked key is indistinguishable from a working one on disk, and
+	// rendering it green is what let a 401-ing agent look ready. The re-check
+	// action has to stay reachable from this state too, or a user with an
+	// unverified credential has no way to ask again.
+	it("renders a configured but unverified credential as neutral, not as logged in", async () => {
+		const configuredCatalog = {
+			agents: catalog.agents.map((agent) => agent.id === "claude-code"
+				? { ...agent, authentication: { ...agent.authentication, state: "configured", reasonCode: "auth_configured_unverified" }, effectiveReadiness: "unknown" }
+				: agent),
+		};
+		vi.mocked(apiClient.GET).mockImplementation(async (path) => {
+			if (path === "/api/v1/agents/readiness") return { data: configuredCatalog } as never;
+			if (path === "/api/v1/agents/installers") return { data: plans } as never;
+			if (path === "/api/v1/agents/install-jobs") return { data: { jobs: [] } } as never;
+			if (path === "/api/v1/agents/auth-plans") {
+				return { data: { plans: [{ agentId: "claude-code", action: "login", launchMode: "documentation", available: true, documentationUrl: "https://example.test/login" }] } } as never;
+			}
+			return { data: undefined } as never;
+		});
+		renderSection();
+		const row = (await screen.findByText("Claude Code")).closest('[data-agent="claude-code"]') as HTMLElement;
+		await waitFor(() => expect(row).toHaveTextContent("Configured, unverified"));
+		expect(row).not.toHaveTextContent("Logged in");
+		expect(await within(row).findByRole("button", { name: "Login" })).toBeInTheDocument();
+		expect(await within(row).findByRole("button", { name: "Check login" })).toBeInTheDocument();
+	});
+
 	it("shows checking instead of configured while an authorized observation is refreshing", async () => {
 		const checking = catalogWithInstalled("claude-code");
 		checking.agents[0].authentication.state = "authorized";
@@ -633,7 +661,8 @@ describe("HarnessSettingsSection", () => {
 		const claudeRow = (await screen.findByText("Claude Code")).closest('[data-agent="claude-code"]') as HTMLElement;
 
 		expect(await within(claudeRow).findByRole("button", { name: "Login" })).toBeEnabled();
-		expect(within(claudeRow).getAllByRole("button")).toHaveLength(1);
+		expect(within(claudeRow).getByRole("button", { name: "Check login" })).toBeEnabled();
+		expect(within(claudeRow).getAllByRole("button")).toHaveLength(2);
 		expect(within(claudeRow).queryByRole("button", { name: "Reinstall" })).not.toBeInTheDocument();
 	});
 
@@ -717,7 +746,7 @@ describe("HarnessSettingsSection", () => {
 		await waitFor(() => expect(apiClient.POST).toHaveBeenCalledWith("/api/v1/agents/readiness/ensure", {
 			body: { agentIds: ["codex"], purpose: "settings" },
 		}));
-		await waitFor(() => expect(row).toHaveTextContent("Unknown"));
+		await waitFor(() => expect(row).toHaveTextContent("Login status unknown"));
 		expect(within(row).queryByRole("button", { name: "Install" })).not.toBeInTheDocument();
 		await waitFor(() => expect(installerFetches).toBe(2));
 	});
@@ -750,7 +779,7 @@ describe("HarnessSettingsSection", () => {
 		const row = (await screen.findByText("Codex")).closest('[data-agent="codex"]') as HTMLElement;
 		await userEvent.click(await within(row).findByRole("button", { name: "Install" }));
 
-		await waitFor(() => expect(row).toHaveTextContent(authentication === "authorized" ? "Configured" : "Signed out"));
+		await waitFor(() => expect(row).toHaveTextContent(authentication === "authorized" ? "Configured" : "Not logged in"));
 		await waitFor(() => expect(selector).toHaveTextContent(authentication === "authorized" ? /^ready$/ : /^not_ready$/));
 		expect(client.getQueryData<AgentReadiness>(agentReadinessQueryKey)?.agents).toEqual([initial.agents[0], updated]);
 		expect(screen.getByTestId("originating-selector")).toBe(selector);

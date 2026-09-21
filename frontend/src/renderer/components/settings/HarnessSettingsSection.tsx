@@ -44,6 +44,7 @@ const AUTH_STATE_RANK = {
 	authorized: 0,
 	not_applicable: 0,
 	unauthorized: 1,
+	configured: 2,
 	unknown: 2,
 } as const;
 type AuthTerminalWorkflow = {
@@ -366,7 +367,11 @@ export function HarnessSettingsSection({
 		setAuthWorkflow((current) => current?.terminal.handleId === workflow.terminal.handleId ? { ...current, phase: "verifying", reason: undefined } : current);
 		const result = await checkAuth(workflow.agentId, { fresh: true });
 		if (authWorkflowRef.current?.terminal.handleId !== workflow.terminal.handleId) return;
-		if (result?.agent.authStatus === "authorized") {
+		// A completed interactive login is the evidence here, and after it the
+		// CLI reports credentials present — which AO records as "configured",
+		// never "authorized", since it still has not reached the provider.
+		// Requiring "authorized" would leave the login terminal open forever.
+		if (result?.agent.authStatus === "authorized" || result?.agent.authStatus === "configured") {
 			try {
 				await closeAuthTerminal(workflow.terminal.handleId);
 			} catch (error) {
@@ -515,7 +520,11 @@ export function HarnessSettingsSection({
 									? (authPlan.reason ?? t("settings.harness.authFailed"))
 									: authStatus === "unauthorized"
 										? (isSetupAction ? t("settings.harness.notConfigured") : t("settings.harness.notLoggedIn"))
-										: isSetupAction ? t("settings.harness.configurationUnknown") : t("settings.harness.loginUnknown");
+										// A credential exists but nothing has proven it works. It reads as
+										// neutral, never as logged in: a revoked key looks identical on disk.
+										: authStatus === "configured"
+											? t("settings.harness.loginUnverified")
+											: isSetupAction ? t("settings.harness.configurationUnknown") : t("settings.harness.loginUnknown");
 					const methodLabel = installMethodLabel(selectedMethod, plan?.method);
 					const availableMethodsLabel = availableMethods.length > 0
 						? new Intl.ListFormat(i18n.resolvedLanguage ?? "en", { style: "short", type: "conjunction" }).format(availableMethods.map((method) => installMethodLabel(method) ?? method.label))
@@ -537,10 +546,22 @@ export function HarnessSettingsSection({
 						) : !authPlan && authPlans.isPending ? (
 							<LoaderCircle className="size-4 animate-spin text-settings-muted" aria-hidden="true" />
 						) : authPlan && authPlan.action !== "instructions" ? (
-							<Button data-harness-primary-action="" data-terminal-focus-handoff="true" disabled={!authPlan.available || authState?.pending || Boolean(authWorkflow)} size="sm" onClick={() => void startAuth(agentId)}>
-								{authState?.pending ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : null}
-								{authState?.pending ? t("settings.harness.loggingIn") : isSetupAction ? t("settings.harness.setup") : t("settings.harness.login")}
-							</Button>
+							<>
+								{authStatus === "authorized" && !readinessAuthFailed && !authState?.error ? (
+									<span className="inline-flex items-center gap-1 text-xs font-medium text-success"><Check className="size-4" aria-hidden="true" />{isSetupAction ? t("settings.harness.configured") : t("settings.harness.loggedIn")}</span>
+								) : (
+									<Button data-harness-primary-action="" data-terminal-focus-handoff="true" disabled={!authPlan.available || authState?.pending || Boolean(authWorkflow)} size="sm" onClick={() => void startAuth(agentId)}>
+										{authState?.pending ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : null}
+										{authState?.pending ? t("settings.harness.loggingIn") : isSetupAction ? t("settings.harness.setup") : t("settings.harness.login")}
+									</Button>
+								)}
+								{authPlan.available && (authStatus === "unknown" || authStatus === "unauthorized" || authStatus === "configured") ? (
+									<Button disabled={authState?.checking} size="sm" variant="outline" onClick={() => void checkAuth(agentId)}>
+										{authState?.checking ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <RefreshCw aria-hidden="true" />}
+										{authState?.checking ? t("settings.harness.checkingLogin") : isSetupAction ? t("settings.harness.checkConfiguration") : t("settings.harness.checkLogin")}
+									</Button>
+								) : null}
+							</>
 						) : null;
 					return (
 						<div
