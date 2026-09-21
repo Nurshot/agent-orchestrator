@@ -56,7 +56,15 @@ resource "coder_agent" "main" {
       cp -rT /etc/skel ~ 2>/dev/null || true
       touch ~/.init_done
     fi
+    # Warm ALL harnesses into the page cache during the boot window so the first
+    # real launch is snappy. codex launches via a Node shim that then exec's a
+    # large native binary; left cold, that adds ~10s to first frame on a freshly
+    # booted VM. claude is a single binary and was already warmed here - which is
+    # exactly why claude sessions felt instant while codex/cursor lagged. Warm
+    # all three so the terminal is snappy regardless of the selected harness.
     claude --version || true
+    codex --version || true
+    cursor-agent --version || true
   EOT
 
   env = {
