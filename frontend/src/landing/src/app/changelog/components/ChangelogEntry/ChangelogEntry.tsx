@@ -66,7 +66,7 @@ export async function ChangelogEntry({ entry }: ChangelogEntryProps) {
 			{/* Body. Curated entries compile as MDX (custom components); GitHub
 			    release bodies are plain Markdown, rendered without the MDX compiler
 			    so arbitrary text can never be parsed as MDX. */}
-			<div className="prose prose-invert max-w-none prose-headings:font-medium prose-headings:tracking-[-0.5px] prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-4 prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-3 prose-p:text-muted-foreground prose-p:leading-relaxed prose-li:text-muted-foreground prose-strong:text-foreground prose-a:text-foreground prose-a:underline prose-a:underline-offset-4 hover:prose-a:text-muted-foreground prose-hr:border-border prose-hr:my-8">
+			<div className="prose prose-invert max-w-none prose-headings:font-medium prose-headings:tracking-[-0.5px] prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-4 prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-3 prose-p:text-muted-foreground prose-p:leading-relaxed prose-li:text-muted-foreground prose-strong:font-medium prose-strong:text-foreground prose-a:text-foreground prose-a:underline prose-a:underline-offset-4 hover:prose-a:text-muted-foreground prose-hr:border-border prose-hr:my-8">
 				{entry.source === "release" ? (
 					<ReactMarkdown remarkPlugins={[remarkGfm]}>{entry.content}</ReactMarkdown>
 				) : (
