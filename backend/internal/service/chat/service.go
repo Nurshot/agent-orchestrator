@@ -1382,7 +1382,13 @@ func (s *Service) PreflightChat(
 	if err != nil {
 		return err
 	}
-	return capabilityAdmissionError(harness, caps, permissions)
+	if err := capabilityAdmissionError(harness, caps, permissions); err != nil {
+		return err
+	}
+	if validator, ok := driver.(ports.ChatLaunchValidator); ok {
+		return validator.ValidateLaunch(permissions)
+	}
+	return nil
 }
 
 func capabilityAdmissionError(
