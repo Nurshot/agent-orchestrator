@@ -1,0 +1,46 @@
+---
+title: "Weekly update — Jun 22, 2026 to Jun 28, 2026"
+description: "What changed in Agent Orchestrator this week: 8 features, 22 fixes."
+date: "2026-06-28"
+rangeStart: "2026-06-22"
+rangeEnd: "2026-06-28"
+historical: true
+---
+
+## Features
+
+- **Add examples to ao preview --help** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/388" />
+- **Ao start fetches + opens the desktop app; deprecate npm as an app channel (Track A)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2201" />
+- **Ao start fetch/open for Windows and Linux (T6/T7)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2204" />
+- **Add blank Global Settings page** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2218" />
+- **Dashboard legacy-migration popup + app-state migration marker** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2219" />
+- **Channel-aware auto-update runtime + nightly pipeline** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2221" />
+- **Electron-updater feed publishing + macOS signing (#2220)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2226" />
+- **Global Settings (migration + update channel) + ao start download progress** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2235" />
+
+---
+
+**Bug fixes**
+
+- **Attach to a serving daemon instead of spawning a doomed child** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/373" />
+- **Add clear, reuse defaults, force refresh, local files (#379)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/380" />
+- **Normalize terminal keyboard shortcuts** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/381" />
+- **Set deb maker bin to executableName so Linux .deb builds** [`851d3a8`](https://github.com/Untrivial-ai/agent-orchestrator/commit/851d3a88e63b1924814a5d9b600b913cfa012974)
+- **Don't tear down browser views after window destroyed** [`e20c23a`](https://github.com/Untrivial-ai/agent-orchestrator/commit/e20c23a89eeddfb07a8d491b1f9ccafdea89b0f8)
+- **Fall back to ephemeral port on conflict + harden teardown** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/386" />
+- **Make preview browser deterministic** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/384" />
+- **Swallow EPIPE on std streams (Windows GUI launch crash)** [`a6ebabd`](https://github.com/Untrivial-ai/agent-orchestrator/commit/a6ebabda68ee587072efc23cd903edcc397dfafa)
+- **Recover login-shell env so the daemon finds zellij/credentials** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/389" />
+- **Keep terminal input sources explicit** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/383" />
+- **Stop console-window flashing on Windows** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/399" />
+- **Handle Squirrel startup events + CI smoke-install the Windows build** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/398" />
+- **Avoid duplicate terminal paste shortcuts** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/400" />
+- **Package Windows via NSIS instead of Squirrel** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/403" />
+- **Refine notification bell count** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2180" />
+- **Hide backend subprocess windows on Windows** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2179" />
+- **Stop orchestrator id-increment + OS-native daemon liveness link** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2185" />
+- **Clip preview view to its panel column so it can't render out of bounds** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2203" />
+- **Treat run-file removal as stopped in ao stop** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2215" />
+- **Decouple Intel runner from publish-feed (#2237)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2240" />
+- **Bundle app-update.yml so electron-updater can install (forge omits it)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2244" />
+- **Enable allowPrerelease on the nightly channel** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2265" />

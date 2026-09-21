@@ -1,0 +1,100 @@
+---
+title: "Weekly update — Apr 13, 2026 to Apr 19, 2026"
+description: "What changed in Agent Orchestrator this week: 9 features, 75 fixes."
+date: "2026-04-19"
+rangeStart: "2026-04-13"
+rangeEnd: "2026-04-19"
+historical: true
+---
+
+## Features
+
+- **Install-aware ao update, startup notifier, doctor version check** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1156" />
+- **Add canonical lifecycle persistence foundation** [`d466118`](https://github.com/Untrivial-ai/agent-orchestrator/commit/d466118450c7fd700a4d0d2356847a7bef8eee09)
+- **Add explicit agent reporting for workflow coordination (Stage 3)** [`cab0a26`](https://github.com/Untrivial-ai/agent-orchestrator/commit/cab0a2656d9d457d55c42122694e1273d81294dc)
+- **Expose split lifecycle truth in dashboard** [`7072143`](https://github.com/Untrivial-ai/agent-orchestrator/commit/707214313848d36d874a5d55050bb85733c8b2f3)
+- **Unify session detail auditability and lifecycle stability (#123 #124 #126)** [`28ce462`](https://github.com/Untrivial-ai/agent-orchestrator/commit/28ce462ef08d1ccafc3b334339294235c2510cf6)
+- **Make agent reports collapsible** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/132" />
+- **Collapse attention zones to 4 with 5-zone feature flag** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1202" />
+- **Bounded detecting state + centralized transitions + report watcher** [`89c17f4`](https://github.com/Untrivial-ai/agent-orchestrator/commit/89c17f49f495bfcd574cc00ba08a981ebb9118c3)
+- **Terminal layout, mobile UX, sidebar &amp; instant session navigation** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1278" />
+
+---
+
+**Bug fixes**
+
+- **Skip liveness check on spawning sessions in enrichSessionWithRuntimeState** [`baa6e70`](https://github.com/Untrivial-ai/agent-orchestrator/commit/baa6e70792a0732200c670415c969169bd087965)
+- **Update comment and add regression test for spawning guard** [`8ff2582`](https://github.com/Untrivial-ai/agent-orchestrator/commit/8ff258213b92d678d91e40f7f309ff4c572082f6)
+- **Stop writing broken yaml when `ao start` runs in a new folder** [`17ea240`](https://github.com/Untrivial-ai/agent-orchestrator/commit/17ea240f689900ccc8a994c7a7499c37e5482c68)
+- **Guard tracker inference for projects without repo** [`7de9a98`](https://github.com/Untrivial-ai/agent-orchestrator/commit/7de9a981fe9df7d7d70f5796c42ff7036a032344)
+- **Address review — verify dashboard process before kill, restore exit on SIGINT** [`e666c88`](https://github.com/Untrivial-ai/agent-orchestrator/commit/e666c88098da55af14b76accb2bbfe3110af1551)
+- **Prevent duplicate YAML entry when `ao start` detects already-running instance** [`cea7bfa`](https://github.com/Untrivial-ai/agent-orchestrator/commit/cea7bfa51cce436a933b5bb1f79191585f375484)
+- **Fix flaky multi-project test by setting non-interactive caller** [`24a2919`](https://github.com/Untrivial-ai/agent-orchestrator/commit/24a29194eb26bb536760d11ef2e21ff8ddf91243)
+- **Prompt user for repo when remote is not auto-detected** [`4c31685`](https://github.com/Untrivial-ai/agent-orchestrator/commit/4c316855841db73acc13715fb9bac24a7ce3c820)
+- **Hyperlink CI check chips to GitHub workflow runs in session detail** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1196" />
+- **Harden prompt template validation** [`c977be1`](https://github.com/Untrivial-ai/agent-orchestrator/commit/c977be1be5007faf34f88d55486c5ef426ef6a9d)
+- **Scope node types to node packages** [`9bed49d`](https://github.com/Untrivial-ai/agent-orchestrator/commit/9bed49d453ae482674865c782a5f245ed34a7349)
+- **Classify activity by payload.type for wrapped event_msg** [`df9f3c8`](https://github.com/Untrivial-ai/agent-orchestrator/commit/df9f3c8b5dae1870ae711bab77c19f4033f4d59d)
+- **Address cursor bugbot comments on readJsonlPrefixLines** [`64b6a2e`](https://github.com/Untrivial-ai/agent-orchestrator/commit/64b6a2ec7287c8c32206ce2f8c60aee4c4c60739)
+- **Terminal button deep-links to terminal section** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1218" />
+- **Link passing CI check chips to their check run URL** [`16aa089`](https://github.com/Untrivial-ai/agent-orchestrator/commit/16aa089b91bb8b323a28c5bbda2ba59c8fde9e5b)
+- **Add restore button to session detail page for killed/terminated sessions** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1207" />
+- **Align prompt asset test/build tooling** [`02d2c75`](https://github.com/Untrivial-ai/agent-orchestrator/commit/02d2c756c1dd67dae805005169646a8477f4d61d)
+- **Clean up signal listeners when dashboard exits** [`47e1478`](https://github.com/Untrivial-ai/agent-orchestrator/commit/47e14782d134df9226b94e5d73c4d5abdadd050d)
+- **Address review — use exit handler, verify PIDs, filter kills** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/645" />
+- **Address all 9 review comments from @illegalcall** [`c8af50f`](https://github.com/Untrivial-ai/agent-orchestrator/commit/c8af50fac28f6f6d576c01db3520c3d3fd440300)
+- **Update autoCreateConfig test to use isGitRepo: true** [`d63231a`](https://github.com/Untrivial-ai/agent-orchestrator/commit/d63231a6ea747c1224ebee8f796ddf0aa1a1792a)
+- **Guard lifecycle-manager poll path against spawning race condition** [`a7b0c85`](https://github.com/Untrivial-ai/agent-orchestrator/commit/a7b0c8567a06bcc1178168eb1866055adf0eeafb)
+- **Address PR review feedback** [`05a3491`](https://github.com/Untrivial-ai/agent-orchestrator/commit/05a34913e390001d92f95690d4b4b3c409345501)
+- **Address follow-up review comments from @illegalcall** [`9db0945`](https://github.com/Untrivial-ai/agent-orchestrator/commit/9db0945b0efdffe5e40fae9525034cc84ef044d0)
+- **Mock isHumanCaller as false in autoCreateConfig test** [`e685db9`](https://github.com/Untrivial-ai/agent-orchestrator/commit/e685db9d8869b08500a92dc6c330c77040be419f)
+- **Use vi.spyOn for isHumanCaller after restoreAllMocks** [`101a725`](https://github.com/Untrivial-ai/agent-orchestrator/commit/101a72553008c9dc6c2af69e0f31d794141fbf9a)
+- **Anchor repo regex and widen remote detection for GitLab** [`536e38b`](https://github.com/Untrivial-ai/agent-orchestrator/commit/536e38b7e60aa9e0aea098f479a3bd4071b05f40)
+- **Handle undefined return from clack text() prompt** [`bd417aa`](https://github.com/Untrivial-ai/agent-orchestrator/commit/bd417aa670433839f0171ed638b268f12c9b6b17)
+- **Address lifecycle review feedback** [`81d88c4`](https://github.com/Untrivial-ai/agent-orchestrator/commit/81d88c441294fc83c6e6d9ca1786b68536ac3bec)
+- **Add agents.md file for restore command** [`179c0a6`](https://github.com/Untrivial-ai/agent-orchestrator/commit/179c0a6083ff38689e89eaa7946d9d75d984dbb1)
+- **Harden prompt template rendering** [`b853fe3`](https://github.com/Untrivial-ai/agent-orchestrator/commit/b853fe30805083f03f6097cb2afe43ef50f1ec14)
+- **Validate template placeholders before render** [`4f687dd`](https://github.com/Untrivial-ai/agent-orchestrator/commit/4f687dd59eb7a4d302ad174cca80a9d1affa4345)
+- **Honor live startup evidence in recovery** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/95" />
+- **Migrate from deprecated xterm@5.x to @xterm/xterm** [`83d13ed`](https://github.com/Untrivial-ai/agent-orchestrator/commit/83d13eda9802c59c9d9b2058d0d1ed5c2d347f09)
+- **Upgrade @xterm/xterm from v5 to v6** [`a086763`](https://github.com/Untrivial-ai/agent-orchestrator/commit/a086763234bb4e18daf9898b6c4d4269bd539673)
+- **Clarify xterm type import comment in DirectTerminal** [`a1394f9`](https://github.com/Untrivial-ai/agent-orchestrator/commit/a1394f91fc149d957f4bb585693eeba0e48e5695)
+- **Tighten agent-report contract per PR review** [`593eec4`](https://github.com/Untrivial-ai/agent-orchestrator/commit/593eec441a7719b3fb04d1308c3e2f8598c49f13)
+- **Use kind for orchestrator skip; honest report-surfacing copy** [`0093e2b`](https://github.com/Untrivial-ai/agent-orchestrator/commit/0093e2b4e4fa910b02a9ff871456156b0a249437)
+- **Resolve three Next.js build warnings in web package** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1087" />
+- **Decouple PR truth from worker session policy** [`a45eb32`](https://github.com/Untrivial-ai/agent-orchestrator/commit/a45eb322bb54b5ccb612ad009910a273de17a79d)
+- **Keep active PR sessions in working lane** [`690242e`](https://github.com/Untrivial-ai/agent-orchestrator/commit/690242e379b6728d48d19a8cc509e6852a16d6e1)
+- **Keep closed-unmerged sessions actionable** [`08667c8`](https://github.com/Untrivial-ai/agent-orchestrator/commit/08667c8cb529a804cffaff484eccac4b17f6afa9)
+- **Prevent sidebar flash on session detail pages** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1232" />
+- **Remove unused observability helper arg** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/121" />
+- **Address final lifecycle review findings** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/122" />
+- **Address PR review feedback for session audit trail** [`1cbf657`](https://github.com/Untrivial-ai/agent-orchestrator/commit/1cbf6579c29fe0791c3bf902e62cc721ee91b643)
+- **Require fresh runtime evidence for unavailable-activity downgrade** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/129" />
+- **Address PR review feedback** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/131" />
+- **Address PR review comments for lifecycle transitions** [`7b82374`](https://github.com/Untrivial-ai/agent-orchestrator/commit/7b82374ca82bef9c9b49c166acd99fc8475c0169)
+- **Set detectingEscalatedAt for time-based escalation too** [`0ab62c8`](https://github.com/Untrivial-ai/agent-orchestrator/commit/0ab62c8f13b96921e41d3f1c1d4a800531d756d8)
+- **Remove unused TERMINAL_STATUSES import** [`5f3cdf4`](https://github.com/Untrivial-ai/agent-orchestrator/commit/5f3cdf4e5efddef15476509b85962544050dce49)
+- **Address PR #1300 review feedback** [`79c7ef8`](https://github.com/Untrivial-ai/agent-orchestrator/commit/79c7ef85a66d5552d62d6b3ab5c5ed740389c5b9)
+- **Address PR #1300 requested changes** [`bcdda4b`](https://github.com/Untrivial-ai/agent-orchestrator/commit/bcdda4b9baddf9cbbdbba7eff9514bdb06bac24c)
+- **Address PR #1300 lifecycle regressions** [`8a94c5b`](https://github.com/Untrivial-ai/agent-orchestrator/commit/8a94c5b0e645eda26acc0c9afe19bc4e7541b492)
+- **Preserve partial lifecycle payloads for PR #1300 review** [`76ae4ef`](https://github.com/Untrivial-ai/agent-orchestrator/commit/76ae4ef426c8658fd6e9d3f5aaf28904aa30018b)
+- **Finish PR #1300 major follow-up fixes** [`db340fa`](https://github.com/Untrivial-ai/agent-orchestrator/commit/db340fad88c8b6a504efec71e84937d7b657ef7e)
+- **Address PR #1300 review follow-up comments** [`89efcbe`](https://github.com/Untrivial-ai/agent-orchestrator/commit/89efcbe1ec3a558e08d0dc5cfe7a9c8ad40c7b13)
+- **Improve agent plugin cost accounting and restore safety** [`b0d0994`](https://github.com/Untrivial-ai/agent-orchestrator/commit/b0d0994efd0dcd510e8335b94bb0dd8e9f5b0186)
+- **Register codex web activity plugin** [`bd72392`](https://github.com/Untrivial-ai/agent-orchestrator/commit/bd7239257f417b8ef82ef2274e113e4d69bc0a31)
+- **Close remaining pr1300 follow-ups** [`51c3fd9`](https://github.com/Untrivial-ai/agent-orchestrator/commit/51c3fd9b4b89b0eb6434c72c9dd43007804637e3)
+- **Deep clone runtime handle data** [`4dac245`](https://github.com/Untrivial-ai/agent-orchestrator/commit/4dac245b8121d9d5a01aa70b37aa0cfde77c99c4)
+- **Address pr review follow-ups** [`7bc98aa`](https://github.com/Untrivial-ai/agent-orchestrator/commit/7bc98aa387f74de1d8fa3f50ee5b4904922f437c)
+- **Prefer live orchestrators in worker navigation** [`611ded4`](https://github.com/Untrivial-ai/agent-orchestrator/commit/611ded42ca1d7e7ed9b83fe0b2f1501a942427ba)
+- **Relax codex restore approval mode** [`3ba526d`](https://github.com/Untrivial-ai/agent-orchestrator/commit/3ba526d282e55cbbb4ffa1a44fa723e1a7a75659)
+- **Close failed startup lock writes** [`27135ea`](https://github.com/Untrivial-ai/agent-orchestrator/commit/27135eab0e242bf208c8817b7bcfc8926f0ab9cc)
+- **Reuse orchestrator sessions across ao start; fix dashboard id mismatch** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1075" />
+- **Address #1306 review follow-ups** [`bb5dcf0`](https://github.com/Untrivial-ai/agent-orchestrator/commit/bb5dcf0af710ea14550bfcda7dc9d39dac893f7e)
+- **Restore permissionless codex workers with bypass** [`350c5c0`](https://github.com/Untrivial-ai/agent-orchestrator/commit/350c5c08e84f30e529178045047ca8e1b7b45d5b)
+- **Select matching gitleaks binary for arm64 runners** [`f4916be`](https://github.com/Untrivial-ai/agent-orchestrator/commit/f4916bea63d2be6d0a70cab2fdac5202aa25b638)
+- **Address follow-up review regressions** [`6b15e68`](https://github.com/Untrivial-ai/agent-orchestrator/commit/6b15e68fc341382bf4afcfedff134fa8f003e9ca)
+- **Address pr-review regressions** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1306" />
+- **Remove session detail lifecycle and audit panels** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1324" />
+- **Restore terminal cell metrics after xterm v6 upgrade** [`ca85eb5`](https://github.com/Untrivial-ai/agent-orchestrator/commit/ca85eb5e617e7f6f38e5193d6d5696c362170fb8)
+- **Address PR #1352 review comments** [`76d30e3`](https://github.com/Untrivial-ai/agent-orchestrator/commit/76d30e386b8f7ec2ac918c3f476c8523c5bbc726)
+- **Address pr-review findings on #1352** [`3be86e7`](https://github.com/Untrivial-ai/agent-orchestrator/commit/3be86e7dd18eaa3ed30b7f84506322310f059369)

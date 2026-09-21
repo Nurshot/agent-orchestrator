@@ -38,7 +38,11 @@ function previousBoundary(entries, endDate) {
 		.map((entry) => dateOnly(entry.data.rangeEnd ?? entry.data.date))
 		.filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date) && date < endDate)
 		.sort();
-	if (candidates.length > 0) return candidates.at(-1);
+	if (candidates.length > 0) {
+		const nextDate = new Date(`${candidates.at(-1)}T00:00:00Z`);
+		nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+		return nextDate.toISOString().slice(0, 10);
+	}
 
 	const fallback = new Date(`${endDate}T00:00:00Z`);
 	fallback.setUTCDate(fallback.getUTCDate() - 7);

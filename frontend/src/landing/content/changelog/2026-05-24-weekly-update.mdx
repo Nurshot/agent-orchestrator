@@ -1,0 +1,45 @@
+---
+title: "Weekly update — May 18, 2026 to May 24, 2026"
+description: "What changed in Agent Orchestrator this week: 10 features, 19 fixes."
+date: "2026-05-24"
+rangeStart: "2026-05-18"
+rangeEnd: "2026-05-24"
+historical: true
+---
+
+## Features
+
+- **Emit plugin-internal activity events for distinct failure shapes** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1699" />
+- **Activity events for recovery, metadata corruption, agent-report** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1692" />
+- **Record activity events for API mutation routes** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1695" />
+- **Activity events for webhooks and mux WebSocket (#1656)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1693" />
+- **Record activity events for config, plugin-registry, and storage migration** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1696" />
+- **Round out session-manager activity events (#1657)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1697" />
+- **Wire activity events into CLI commands and supervisor lifecycle** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1698" />
+- **Make notifier system robust with manual harness and desktop setup** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1736" />
+- **Support AO_PUBLIC_URL for reverse-proxied dashboards** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1757" />
+- **Add Grok agent plugin** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1862" />
+
+---
+
+**Bug fixes**
+
+- **Fall back to local config when global config is missing in project supervisor** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1809" />
+- **Show Restore button for every exited session, including pr_merged** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1909" />
+- **Make Done/Terminated dashboard section scrollable (#1923)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1925" />
+- **Bound project page wrapper so dashboard body scrolls (closes #1923)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1929" />
+- **Harden activity detection against 5 real-world edge cases** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1932" />
+- **List all 27 linked packages in dummy changeset** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1882" />
+- **Externalize ao-core and better-sqlite3 from Next.js bundle** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1944" />
+- **Repair nightly updates and snapshots** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1960" />
+- **Remove XDA chip from terminal header** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1963" />
+- **Orchestrate ao update lifecycle + drop misleading ao stop picker (closes #1970, closes #1972)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1973" />
+- **Close codex JSONL streams on abort** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1977" />
+- **Self-heal node-pty spawn-helper** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1978" />
+- **Break circular links in DegradedProjectState — Back to project and Open dashboard view both point to current page** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1868" />
+- **Use thread id for JSONL lookup** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1992" />
+- **Use persisted session agent for enrichment** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1996" />
+- **Simplify orchestrator session header** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1981" />
+- **Include all publishable packages** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1997" />
+- **Use json import for manifest metadata** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2040" />
+- **Align first-run project identity** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2039" />

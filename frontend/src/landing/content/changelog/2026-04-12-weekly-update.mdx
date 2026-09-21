@@ -1,0 +1,146 @@
+---
+title: "Weekly update — Apr 6, 2026 to Apr 12, 2026"
+description: "What changed in Agent Orchestrator this week: 20 features, 110 fixes."
+date: "2026-04-12"
+rangeStart: "2026-04-06"
+rangeEnd: "2026-04-12"
+historical: true
+---
+
+## Features
+
+- **Add multiplexed WebSocket protocol and mux server** [`2e5ee30`](https://github.com/Untrivial-ai/agent-orchestrator/commit/2e5ee30fcfecae6afce3bb9b08b0220c56d17ea6)
+- **Add MuxProvider React context for persistent WebSocket** [`9458c83`](https://github.com/Untrivial-ai/agent-orchestrator/commit/9458c83849f785b3eece27a2973a42df6f7cac6e)
+- **Single-socket — multiplex terminals + sessions over one WebSocket** [`4684b75`](https://github.com/Untrivial-ai/agent-orchestrator/commit/4684b75def759dd6def354dc3c99bdb03821abc2)
+- **Support external tracker, scm, and notifier plugins from config** [`ebe6408`](https://github.com/Untrivial-ai/agent-orchestrator/commit/ebe640858628475014ff28ca78a2d886de57e3c2)
+- **Enforce reserved fields in notifier configs and improve loader error handling** [`4645f65`](https://github.com/Untrivial-ai/agent-orchestrator/commit/4645f6574bba810a97089e716f75be9eb4e2f213)
+- **Unify plugin config cleaning and enforce reserved fields for tracker and scm** [`3e6d2f9`](https://github.com/Untrivial-ai/agent-orchestrator/commit/3e6d2f97be03d1dddd6938389c2b7c72ca54ebcb)
+- **Event-driven live tab titles and favicons via SSE** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/848" />
+- **Support multiple concurrent orchestrators with isolated worktrees** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/870" />
+- **Add global loading.tsx with spinner for route transitions** [`6bfc239`](https://github.com/Untrivial-ai/agent-orchestrator/commit/6bfc239af081bfe0448d24d302e3b3f5405e8e4b)
+- **Add session loading.tsx with spinner for route transitions** [`fa73a9f`](https://github.com/Untrivial-ai/agent-orchestrator/commit/fa73a9fb7f757d3b78268d54db987ed7bd73ed82)
+- **Add global not-found.tsx for 404 handling** [`694332d`](https://github.com/Untrivial-ai/agent-orchestrator/commit/694332d789ba19d3bede673cb1130cbc51dfb535)
+- **Add session-specific not-found.tsx for 404 handling** [`d956c52`](https://github.com/Untrivial-ai/agent-orchestrator/commit/d956c52eef8a4cec3a2d048ea1cbf167bd1c8263)
+- **Add dashboard error boundaries** [`eeda416`](https://github.com/Untrivial-ai/agent-orchestrator/commit/eeda416055076570eac5741937f6feff36d94edb)
+- **Add json output to session ls** [`f19f46b`](https://github.com/Untrivial-ai/agent-orchestrator/commit/f19f46b30e30a0099b58b9008db5cb583fb104d4)
+- **Stable session titles via pinnedSummary metadata** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/946" />
+- **Support prompt-driven sessions without a tracker issue** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/974" />
+- **Add Cursor agent CLI support** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1060" />
+- **Hide orchestrator sessions from `ao session ls` by default** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1088" />
+- **Prevent macOS idle sleep while AO is running** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1072" />
+- **Enhance AGENTS.md handling** [`3b8a819`](https://github.com/Untrivial-ai/agent-orchestrator/commit/3b8a819529637c1deee6e52f5ada284f4fc078c5)
+
+---
+
+**Bug fixes**
+
+- **Use TERMINAL_STATUSES in lifecycle poll accounting** [`41c967a`](https://github.com/Untrivial-ai/agent-orchestrator/commit/41c967a39656e2da798940ec4856a6abd37f38ab)
+- **Return 400 for invalid verify API payloads** [`95ca1c1`](https://github.com/Untrivial-ai/agent-orchestrator/commit/95ca1c1e21be22a20b486faeadc778b8e0c2274f)
+- **Robust prompt delivery with retries and CLI warnings** [`3d1913e`](https://github.com/Untrivial-ai/agent-orchestrator/commit/3d1913e690c333e8ea64ca825880662a7495d374)
+- **Resolve prompt delivery persistence and false warnings** [`f07aedf`](https://github.com/Untrivial-ai/agent-orchestrator/commit/f07aedfa58eb770f66f883f44947b7e21855f39f)
+- **Address bugbot review — heartbeat, shutdown, runtime config, cleanup** [`f2986bf`](https://github.com/Untrivial-ai/agent-orchestrator/commit/f2986bf86365dd45ad01c82e4e88b4b6454017d5)
+- **Address bugbot review issues from second pass** [`b9d21d1`](https://github.com/Untrivial-ai/agent-orchestrator/commit/b9d21d1f18ff4e3b7dcddf9017a8f1de28ab31cd)
+- **Address third-pass bugbot review issues** [`1de9387`](https://github.com/Untrivial-ai/agent-orchestrator/commit/1de9387465073c4e22a834a5f2131862973ca3d0)
+- **Handle optional plugin field in CLI and web packages** [`f9d991d`](https://github.com/Untrivial-ai/agent-orchestrator/commit/f9d991d4fdb11f26ba63aa57d2d58a4a68d5be87)
+- **Address fourth-pass bugbot review issues** [`3eda33e`](https://github.com/Untrivial-ai/agent-orchestrator/commit/3eda33ea74ee6e343d707fefe57149d3dad65103)
+- **Address fifth-pass bugbot review issues** [`926a235`](https://github.com/Untrivial-ai/agent-orchestrator/commit/926a2351793287681a77f54e11d32acdb02d9e5d)
+- **Address Copilot review feedback on external plugin support** [`470e537`](https://github.com/Untrivial-ai/agent-orchestrator/commit/470e53780dea4f291a003729bdb2a3a0b6f3cb89)
+- **Address sixth-pass bugbot review issues** [`5e8b67c`](https://github.com/Untrivial-ai/agent-orchestrator/commit/5e8b67ca277c3ab1caef5d0957d72c47c9cb33d6)
+- **Process empty muxSessions array to detect session removal** [`1f9fd03`](https://github.com/Untrivial-ai/agent-orchestrator/commit/1f9fd03066fa0a506d4b48cf1ee7482e81d98de1)
+- **Remove unused import and add missing location field** [`dfe879d`](https://github.com/Untrivial-ai/agent-orchestrator/commit/dfe879d7c24529455288407d01dae78da52a1b1e)
+- **Address seventh-pass bugbot review issues** [`c418f85`](https://github.com/Untrivial-ai/agent-orchestrator/commit/c418f852e2742bb1d08c1e80143d2f44f9816d7a)
+- **Address remaining PR review comments** [`8e4f4f6`](https://github.com/Untrivial-ai/agent-orchestrator/commit/8e4f4f6380d9d30700951ab772d15f8efcc9ede8)
+- **Prevent SSE effect from re-running on every mux snapshot** [`2da6906`](https://github.com/Untrivial-ai/agent-orchestrator/commit/2da6906be8a33967bf747addfca4851ee9394e9a)
+- **Address cursor bugbot review comments** [`40f4efa`](https://github.com/Untrivial-ai/agent-orchestrator/commit/40f4efaca4c5d09f448b7895a772bc7ba3b5a706)
+- **Address eighth-pass bugbot review issues** [`b04137f`](https://github.com/Untrivial-ai/agent-orchestrator/commit/b04137f6bc94026ec3738deaaca329174db4dfd7)
+- **Prevent duplicate buffer replay on reconnect and remove stale terminals ref** [`78e5712`](https://github.com/Untrivial-ai/agent-orchestrator/commit/78e57125554e661850ae5ee81bd970c5254f07d1)
+- **Fix abortController clobber, heartbeat off-by-one, and remove dead close()** [`a9ee9ea`](https://github.com/Untrivial-ai/agent-orchestrator/commit/a9ee9eac7b4fe1180f09f54c460292a68ecc6c18)
+- **Import mux protocol types from shared file and guard error send** [`5e39b55`](https://github.com/Untrivial-ai/agent-orchestrator/commit/5e39b5546181ba2c3e6152b1ec00845ec758d7f0)
+- **Preserve multi-word plugin names from package specifiers** [`b936114`](https://github.com/Untrivial-ai/agent-orchestrator/commit/b936114e52834c8b1817572ee8ccf3ceae55537b)
+- **Remove duplicate cleanup from error handler** [`44ff40c`](https://github.com/Untrivial-ai/agent-orchestrator/commit/44ff40c0ca5a5a01ee92ad98b5c32b9798026770)
+- **Prevent one project's bad config from breaking shared plugin** [`1396d07`](https://github.com/Untrivial-ai/agent-orchestrator/commit/1396d07900c96d377e4dfe525030e5444288b6ec)
+- **Isolate subscriber callbacks in pty.onData with try-catch** [`faa1bfa`](https://github.com/Untrivial-ai/agent-orchestrator/commit/faa1bfa8d6473e74c0b1bb349136caa32949bcdc)
+- **Ensure notifier config is passed when manifest name differs** [`986c499`](https://github.com/Untrivial-ai/agent-orchestrator/commit/986c499acb3963ab87329ad2014663bcd5aabf6b)
+- **Cap PTY re-attach attempts to prevent unbounded respawn loop** [`3ae8c9d`](https://github.com/Untrivial-ai/agent-orchestrator/commit/3ae8c9d2bf436d558bbd580b04dfc15eb3005ae7)
+- **Remove muxStatus from fullscreen-resize effect deps** [`469382c`](https://github.com/Untrivial-ai/agent-orchestrator/commit/469382ccdc518f3a19f7cbba86308b7e299c3256)
+- **Re-send terminal dimensions on mux reconnect** [`44acb6d`](https://github.com/Untrivial-ai/agent-orchestrator/commit/44acb6d1db710f3cd93efb9228398ed92528b9cc)
+- **Ensure consistent temp plugin name generation** [`e799c01`](https://github.com/Untrivial-ai/agent-orchestrator/commit/e799c01086f93cace8c109aa543ac54762527223)
+- **Return idle state for freshly spawned sessions with no JSONL file** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/891" />
+- **Address illegalcall review comments** [`c92c5eb`](https://github.com/Untrivial-ai/agent-orchestrator/commit/c92c5ebaff92a64cfae9f3a56233942a3355e542)
+- **Prevent ao start from spawning duplicate orchestrators** [`9d4d341`](https://github.com/Untrivial-ai/agent-orchestrator/commit/9d4d3412fa182edf16c11f048ab3a77f7e4cf601)
+- **Handle invalid and future dates in formatRelativeTime** [`8125846`](https://github.com/Untrivial-ai/agent-orchestrator/commit/81258468cedb5f99cb6918b11d690320e9220f22)
+- **Remove unused projects prop from OrchestratorSelector** [`672f2ad`](https://github.com/Untrivial-ai/agent-orchestrator/commit/672f2ad6f0ffbd345b21048be7d7494a9709f20b)
+- **Wrap session listing in try/catch for proper error handling** [`2e32d3a`](https://github.com/Untrivial-ai/agent-orchestrator/commit/2e32d3a351c8bf9f605cb3353a9768ec25924699)
+- **Auto-select orchestrator when --no-dashboard is used** [`95b6c54`](https://github.com/Untrivial-ai/agent-orchestrator/commit/95b6c54287f5eda9123368efe29e85346bab7f41)
+- **Correct tmux target fallback and deduplicate orchestrator listing** [`9c0245a`](https://github.com/Untrivial-ai/agent-orchestrator/commit/9c0245a33a590397115db0aaedcdcd2674b3a8cd)
+- **Clean up OrchestratorSelector tests and add spawn resilience** [`1116363`](https://github.com/Untrivial-ai/agent-orchestrator/commit/1116363a9b6b09a532225a8675b28638a87d8fe8)
+- **Restore local type defs in mux-websocket and add coverage tests** [`87c6613`](https://github.com/Untrivial-ai/agent-orchestrator/commit/87c661332e476479373275586c0963e7046045cc)
+- **Replicate terminal session filtering** [`074b7f2`](https://github.com/Untrivial-ai/agent-orchestrator/commit/074b7f2ef0a1c9414036853c238673f66dd8a472)
+- **Polish shimmer states, terminal PR inference, and gitignore .gstack** [`67371d2`](https://github.com/Untrivial-ai/agent-orchestrator/commit/67371d2c6f805b547cf1d3e9fc8fa5c2e269b099)
+- **Stabilize isolated workspace checks** [`ab8250f`](https://github.com/Untrivial-ai/agent-orchestrator/commit/ab8250fe7dc1de0de07a29e13feb4a3a28a302d8)
+- **Resolve ao-core vitest subpaths** [`fb11b60`](https://github.com/Untrivial-ai/agent-orchestrator/commit/fb11b60b112edc737bbe80724e8774b2bd6740b8)
+- **Prevent retry storms and stale refresh on project switch** [`c473088`](https://github.com/Untrivial-ai/agent-orchestrator/commit/c473088373b719b7628d30ec4aa085552bbc5622)
+- **Preserve session view on polling errors and add missing link mock** [`c1feb90`](https://github.com/Untrivial-ai/agent-orchestrator/commit/c1feb90fe22acd741a7e3b06cbc75fbc87cfdab4)
+- **Wrap session broadcast subscriber callbacks in try-catch** [`6f3aec7`](https://github.com/Untrivial-ai/agent-orchestrator/commit/6f3aec703e7be379d8bf742d2e7b675d1f0c1a56)
+- **Prevent OOM in web coverage by splitting tests and raising heap limit** [`0478804`](https://github.com/Untrivial-ai/agent-orchestrator/commit/047880435c00b66551a15d4068bf3fd39a233ef0)
+- **Guard polling 404 with hasLoadedSessionRef and add missing link mock** [`19deb05`](https://github.com/Untrivial-ai/agent-orchestrator/commit/19deb059ab707e020f4f723b03caddfd9e220f4c)
+- **Guard polling 404 with hasLoadedSessionRef and add missing link mock** [`1560067`](https://github.com/Untrivial-ai/agent-orchestrator/commit/156006764b0a23872ca2c6a1871e9fe5cbe3cdb9)
+- **Remove mux test file that causes OOM in coverage runs** [`11103f0`](https://github.com/Untrivial-ai/agent-orchestrator/commit/11103f0e9e8cbb57c95813351fc24ca4083790ae)
+- **Restore done/terminated sessions column on kanban board** [`5a5624f`](https://github.com/Untrivial-ai/agent-orchestrator/commit/5a5624f154f0ac5cb9980e81d7b7e9113af513e9)
+- **Restore done/terminated sessions column on kanban board** [`61721f8`](https://github.com/Untrivial-ai/agent-orchestrator/commit/61721f8e69d41cae8f3225291cc07b9c9afa97d5)
+- **Remove done from kanban/mobile arrays to prevent double rendering** [`c1f6d00`](https://github.com/Untrivial-ai/agent-orchestrator/commit/c1f6d00c59167b4b98de16c46779253048c6749f)
+- **Remove done from kanban/mobile arrays to prevent double rendering** [`57667a9`](https://github.com/Untrivial-ai/agent-orchestrator/commit/57667a96b571e56c1c74a78cc886d557fca5fe65)
+- **Reduce GitHub API rate limiting from batch enrichment bypass** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/906" />
+- **Mux additions trigger refresh; cli: read version from package.json** [`1fa88cd`](https://github.com/Untrivial-ai/agent-orchestrator/commit/1fa88cdf9db0cbfad26b19eca45f5a0cda85527b)
+- **Forward allSessionPrefixes in resolveSessionRole** [`1531a91`](https://github.com/Untrivial-ai/agent-orchestrator/commit/1531a914c0cc7273fe81872911a9b0479c95f9bd)
+- **Allow external notifier with manifest name matching built-in** [`b4c1083`](https://github.com/Untrivial-ai/agent-orchestrator/commit/b4c108338fd7139ca536af5f278cd02471cdf89c)
+- **Resolve notifier aliases in lifecycle routing** [`4d22931`](https://github.com/Untrivial-ai/agent-orchestrator/commit/4d22931180b15c05eb7fd951ab549385d42f751a)
+- **Avoid json work in session ls default path** [`8f85528`](https://github.com/Untrivial-ai/agent-orchestrator/commit/8f8552817f93716a4d2f61212741d2b6b909278a)
+- **Remove desktop notifications from default configs** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/962" />
+- **Ao start navigates to session page instead of orchestrator selection** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/958" />
+- **Consolidate spawn output into single message, add dashboard caveat** [`5322220`](https://github.com/Untrivial-ai/agent-orchestrator/commit/5322220f6ed93bea4d690bdd04c43c5987cba5c0)
+- **Remove CLI instructions from empty state, clean up misleading UI text** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/957" />
+- **Reduce dashboard JS bundle from 1.7MB to 170KB (#792)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/928" />
+- **Catch ConfigNotFoundError for clean error output** [`d43a083`](https://github.com/Untrivial-ai/agent-orchestrator/commit/d43a083296c029b40c5f7755748429463a16d21f)
+- **Rename @composio refs in tsx files and regenerate lockfile** [`550bdf5`](https://github.com/Untrivial-ai/agent-orchestrator/commit/550bdf589c76646ff547006fb7a954098f59370b)
+- **Address bugbot comments — missed renames in preflight, tests, and shell scripts** [`4f26166`](https://github.com/Untrivial-ai/agent-orchestrator/commit/4f2616674f6940b44402f270e3d24a66ea8f4980)
+- **Restore @composio/core references — third-party SDK, not our scope** [`2c862f3`](https://github.com/Untrivial-ai/agent-orchestrator/commit/2c862f3f2965fddf09fe00e9e850109cddc76a08)
+- **Restore GitHub repo URLs to ComposioHQ/agent-orchestrator — only npm scope changed** [`2771244`](https://github.com/Untrivial-ai/agent-orchestrator/commit/27712442f8a7c18065c12b52e3751a6adc57d9a0)
+- **Remove redundant Error: prefix from ConfigNotFoundError output** [`9a49e5d`](https://github.com/Untrivial-ai/agent-orchestrator/commit/9a49e5d7b3c02873382cb865efd0298c6a2cd449)
+- **Add Error: prefix to ConfigNotFoundError output and fix test assertion** [`e1a42cd`](https://github.com/Untrivial-ai/agent-orchestrator/commit/e1a42cd8349afde559fb1a5a91c535dd789723ba)
+- **Display PR details card above terminal in session detail page** [`0b49ff3`](https://github.com/Untrivial-ai/agent-orchestrator/commit/0b49ff352fe3eed3dc27ed903becce21a9287500)
+- **Remove 'Next step' hint from ao start output** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/947" />
+- **Add terminal health metrics to /health endpoint** [`8cfa5b0`](https://github.com/Untrivial-ai/agent-orchestrator/commit/8cfa5b079b36dc0a9fae6dd3bcc3a6ac04ad41ee)
+- **Clarify ao_spawn works without an issue number** [`9df82d5`](https://github.com/Untrivial-ai/agent-orchestrator/commit/9df82d57af45ebf4e248a1c3c01494ad42cf2dac)
+- **Restore pinnedSummary field alongside new userPrompt** [`ea0a013`](https://github.com/Untrivial-ai/agent-orchestrator/commit/ea0a01326be7501d4b87fc5ea71d95e23290407c)
+- **Register plugin in all discovery/resolution layers** [`04f3a7c`](https://github.com/Untrivial-ai/agent-orchestrator/commit/04f3a7c27f5736c8e8703f4e655ea6360a968c2a)
+- **Correct getRestoreCommand signature and update documentation** [`f3224e9`](https://github.com/Untrivial-ai/agent-orchestrator/commit/f3224e91931d794d9abb2392376b73a33a0cb0d2)
+- **Preserve alias-specific notifier instances** [`49df741`](https://github.com/Untrivial-ai/agent-orchestrator/commit/49df74172ba2292c16cfd16ef4b450eae15a7734)
+- **Correct binary name from 'cursor' to 'agent'** [`f8e535f`](https://github.com/Untrivial-ai/agent-orchestrator/commit/f8e535f605774c12a9dab7534017f8bab76fa590)
+- **Use --sandbox disabled instead of --trust to skip workspace prompts** [`e210feb`](https://github.com/Untrivial-ai/agent-orchestrator/commit/e210feb85052a0e272d0f7fe1e7d9a474878501a)
+- **Classify metadata orchestrators in session ls json** [`f9edbee`](https://github.com/Untrivial-ai/agent-orchestrator/commit/f9edbee5d263dc409864c16e29660280ab7556f8)
+- **Address PR review comments from Copilot AI and Cursor bot** [`d97177b`](https://github.com/Untrivial-ai/agent-orchestrator/commit/d97177bced1494d38252942020c4f8cacd911222)
+- **Rebuild node-pty from source when prebuilt binary is incompatible** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/987" />
+- **Exercise pty.spawn() in postinstall probe, not just require()** [`628ada0`](https://github.com/Untrivial-ai/agent-orchestrator/commit/628ada08912e93ceed4f78dbc0fd4c94227ddd27)
+- **Prevent Node.js code injection in plugin directory name** [`23f4bd6`](https://github.com/Untrivial-ai/agent-orchestrator/commit/23f4bd6bfea58b57c26aa2b5fa466e652b29f46b)
+- **Handle 403 when updating coverage comment on fork PRs** [`4844e2e`](https://github.com/Untrivial-ai/agent-orchestrator/commit/4844e2eafa9d68e14f0d2e1fec332d0def8987b7)
+- **Add continue-on-error to coverage comment step** [`dd5a4c9`](https://github.com/Untrivial-ai/agent-orchestrator/commit/dd5a4c9600f89c1eccbc0fe473083c07c6416b6c)
+- **Override axios to &gt;=1.15.0 to resolve SSRF vulnerability (GHSA-3p68-rc4w-qgx5)** [`1571902`](https://github.com/Untrivial-ai/agent-orchestrator/commit/1571902bb94e08279fe7192fa801c2a987c0bfb8)
+- **Override axios to &gt;=1.15.0 to resolve SSRF vulnerability** [`ef6e83c`](https://github.com/Untrivial-ai/agent-orchestrator/commit/ef6e83c288b5e7d7f9017177f5d40ea42da9cfa2)
+- **Use ^1.15.0 instead of &gt;=1.15.0 for axios override** [`8f4218f`](https://github.com/Untrivial-ai/agent-orchestrator/commit/8f4218f4012e687f76055757c4d8b5a33b6f9dac)
+- **Update stale @composio package names in plugin-registry tests** [`a2ce66e`](https://github.com/Untrivial-ai/agent-orchestrator/commit/a2ce66e46b579e265b8c29001b7880c1d5c574eb)
+- **Deduplicate pnpm overrides and align axios to ^1.15.0** [`352f0b5`](https://github.com/Untrivial-ai/agent-orchestrator/commit/352f0b5038e6e130fc5e898e51f5246cbc3286ba)
+- **Address 7 critical PR review findings** [`63faae7`](https://github.com/Untrivial-ai/agent-orchestrator/commit/63faae784c0ac63921e7a4eab9bf2a3f46d14768)
+- **Merge upstream main and resolve conflicts for cursor agent** [`f154f87`](https://github.com/Untrivial-ai/agent-orchestrator/commit/f154f87addad428d91682fe039d58351e7e1d4ee)
+- **Remove duplicate proxy-from-env entry in pnpm-lock.yaml** [`2cd5dc1`](https://github.com/Untrivial-ai/agent-orchestrator/commit/2cd5dc1a1d1eaa6dcaedd3c281435aa4686c274f)
+- **Address Cursor Bugbot security findings** [`e47b038`](https://github.com/Untrivial-ai/agent-orchestrator/commit/e47b03807c1b27d15c2fefa22d620efa750ee78f)
+- **Use shell substitution for systemPromptFile** [`843ae2b`](https://github.com/Untrivial-ai/agent-orchestrator/commit/843ae2b897411d37e2ae52db261651da1a76eedd)
+- **Use printf %s pattern to prevent shell injection** [`8f43006`](https://github.com/Untrivial-ai/agent-orchestrator/commit/8f43006472026fd38510f494994b4a53410bdcdf)
+- **Derive activity from runtime probe, not terminal status** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1081" />
+- **Persist userPrompt to metadata and prevent injection** [`b7464e5`](https://github.com/Untrivial-ai/agent-orchestrator/commit/b7464e565768ec50931611f816e53384a02e4f6e)
+- **Fix prompt-spawn integration test import and type annotations** [`e18f9be`](https://github.com/Untrivial-ai/agent-orchestrator/commit/e18f9bee33f68862a3a4d18958268ef719eebf68)
+- **Add process.exit(0) after pty.kill() to prevent hang in compatibility probe** [`94b83c4`](https://github.com/Untrivial-ai/agent-orchestrator/commit/94b83c41e012be766b4f947cb5f3493a8ce631cf)
+- **Address PR review feedback for sleep prevention** [`8436505`](https://github.com/Untrivial-ai/agent-orchestrator/commit/8436505862a5f811bb6d45003d006771f703be2c)
+- **Merge main and address review findings for prompt-driven spawn** [`663c61e`](https://github.com/Untrivial-ai/agent-orchestrator/commit/663c61e16d5d055dffa958de947ad3ecf28fe34f)
+- **Update stale ao-core imports** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1143" />
+- **Make PR title clickable on /prs page** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1146" />

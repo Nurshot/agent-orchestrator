@@ -3,6 +3,7 @@ import test from "node:test";
 import {
 	classifyPullRequest,
 	extractPullRequestNumbers,
+	renderHistoricalWeek,
 	renderWeeklyDraft,
 } from "./changelog-core.mjs";
 
@@ -63,4 +64,16 @@ test("renders a reviewable weekly MDX draft", () => {
 	assert.match(result.content, /<PRBadge url=".*\/pull\/42" \/>/);
 	assert.match(result.content, /\*\*Bug fixes\*\*/);
 	assert.equal(result.counts.included, 2);
+});
+
+test("renders historical weeks without an editorial checklist", () => {
+	const result = renderHistoricalWeek({
+		changes: [pullRequest()],
+		startDate: "2026-09-14",
+		endDate: "2026-09-20",
+		totalCommits: 3,
+	});
+	assert.match(result.content, /historical: true/);
+	assert.match(result.content, /## Features/);
+	assert.doesNotMatch(result.content, /Review before merge/);
 });

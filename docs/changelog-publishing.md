@@ -3,6 +3,11 @@
 The public changelog is a curated weekly product update. Stable versions and
 technical notes remain available in the release archive and on GitHub Releases.
 
+The archive covers every completed week from the first repository commit. Its
+first partial window is February 13–15, 2026; later windows run Monday through
+Sunday. A hand-written release entry may occupy a weekly window, so the archive
+does not publish a second generated entry for that same week.
+
 ## Automation boundary
 
 The `Draft weekly changelog` workflow runs every Sunday and can also be started
@@ -47,6 +52,16 @@ npm run changelog:test
 npm run changelog:validate
 npm run build
 ```
+
+To reconstruct missing historical weeks from the local Git history:
+
+```bash
+npm run changelog:backfill
+```
+
+The backfill preserves an existing entry for a covered week and creates a
+deterministic `YYYY-MM-DD-weekly-update.mdx` file only for missing windows. The
+validator rejects a gap or overlap between published ranges.
 
 For a visual review, run the landing site and open it in the desktop browser
 panel:

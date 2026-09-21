@@ -1,0 +1,35 @@
+---
+title: "Weekly update — May 4, 2026 to May 10, 2026"
+description: "What changed in Agent Orchestrator this week: 5 features, 14 fixes."
+date: "2026-05-10"
+rangeStart: "2026-05-04"
+rangeEnd: "2026-05-10"
+historical: true
+---
+
+## Features
+
+- **Wire activity events into lifecycle-manager failure paths (#1511)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1620" />
+- **Add per-project env block to ProjectConfig** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1679" />
+- **Complete Windows support** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1025" />
+- **Allow renaming worker sessions in the sidebar** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1748" />
+- **Enable worker→orchestrator dialogue via `ao send` with auto-sender prefix** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1787" />
+
+---
+
+**Bug fixes**
+
+- **Render empty-state in sidebar when no projects configured** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1549" />
+- **Adopt orphaned orchestrator worktrees** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1643" />
+- **Disable tmux status bar at session creation** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1683" />
+- **Disable tmux status bar + dead code cleanup** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1711" />
+- **Bound PTY re-attach loop with grace-period counter reset** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1640" />
+- **Reload dashboard config after adding project from already-running menu** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1706" />
+- **Drop = prefix from set-option in mux-websocket (closes #1714)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1715" />
+- **Disable xterm scrollback to prevent terminal right-side clipping** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1678" />
+- **Deliver prompt inline via positional arg, remove post-launch polling** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1583" />
+- **Refuse to spawn when daemon is not polling the project** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1460" />
+- **Reset stale worktree session branches (#1650)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1652" />
+- **Restore re-attaches existing branch instead of recreating with -b** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1742" />
+- **Keep tmux session alive after agent exit** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1758" />
+- **Make update checks install-method aware** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1595" />

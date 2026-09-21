@@ -1,0 +1,34 @@
+---
+title: "Weekly update — May 11, 2026 to May 17, 2026"
+description: "What changed in Agent Orchestrator this week: 5 features, 13 fixes."
+date: "2026-05-17"
+rangeStart: "2026-05-11"
+rangeEnd: "2026-05-17"
+historical: true
+---
+
+## Features
+
+- **Add PWA manifest and wire mobile accordion on dashboard** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1476" />
+- **Weekly release train — channels, onboarding, dashboard banner, cron** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1781" />
+- **Inject failed-job/step + log tail into CI-failure agent messages (closes #1807)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1810" />
+- **"Launch Orchestrator (clean context)" button** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1904" />
+- **Sidebar and dashboard header UI/UX polish** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1846" />
+
+---
+
+**Bug fixes**
+
+- **First-run startup creates global config with project registered (#1766)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1819" />
+- **Distinguish indeterminate probe from "not found" + bump ps timeout (closes #1838)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1839" />
+- **Reap daemon children on stop+SIGINT, sweep orphans on start (closes #1848)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1849" />
+- **Authoritative session.state for terminated UI rendering (closes #1832)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1833" />
+- **Clear terminatedAt/completedAt when restoring a session out of terminal state (closes #1831)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1834" />
+- **Kill RSC prefetch storm + dedupe in-flight fetches + retry on transient timeout (closes #1855)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1856" />
+- **Sm.list() no longer writes terminated state to disk** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1737" />
+- **Add AO-JSONL safety net cascade (closes #1897)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1903" />
+- **Keep actionable activity sticky** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1902" />
+- **Recover native session restore fallback** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1797" />
+- **Hide unenriched PR diff stats** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1912" />
+- **Rebuild better-sqlite3 on install + quieter ABI-mismatch warning (closes #1822)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1824" />
+- **Remove 3 orphaned submodule refs leaked by PR #1819** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1913" />

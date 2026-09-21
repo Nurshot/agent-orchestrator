@@ -1,0 +1,61 @@
+---
+title: "Weekly update — Mar 2, 2026 to Mar 8, 2026"
+description: "What changed in Agent Orchestrator this week: 10 features, 35 fixes."
+date: "2026-03-08"
+rangeStart: "2026-03-02"
+rangeEnd: "2026-03-08"
+historical: true
+---
+
+## Features
+
+- **Add React Native app for monitoring AO sessions** [`c530999`](https://github.com/Untrivial-ai/agent-orchestrator/commit/c53099923d840b5fbb624f8908e054ca9e53bf52)
+- **Add dashboard action parity — merge, CI fix, review comments, spawn** [`2675c19`](https://github.com/Untrivial-ai/agent-orchestrator/commit/2675c191e2a7297d639c1709e7385d5520db966a)
+- **Add Orchestrator screen with zone overview and CLI reference** [`adf82a8`](https://github.com/Untrivial-ai/agent-orchestrator/commit/adf82a8c04fefbd991645d6d5e72c50414d9812b)
+- **Add review notifications and notification tap-to-navigate** [`6c9f74a`](https://github.com/Untrivial-ai/agent-orchestrator/commit/6c9f74a70090a932f9083c24b1f308e704d5e304)
+- **Add Tailscale setup guide and hide test notifications in prod** [`9bafd33`](https://github.com/Untrivial-ai/agent-orchestrator/commit/9bafd33cb383db46c1b052ca6bd3734665f5736d)
+- **Robot button opens orchestrator session, commands in header** [`d733f10`](https://github.com/Untrivial-ai/agent-orchestrator/commit/d733f107c3b27ea08335f833049ba4d33a8713df)
+- **Embed orchestrator session details inline, remove overview** [`0773137`](https://github.com/Untrivial-ai/agent-orchestrator/commit/0773137a65c5b89e2d788a14ef6baa7b4fd3a705)
+- **Add `ao start &lt;url&gt;` one-command project onboarding** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/267" />
+- **Add PR claim flow for agent sessions** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/326" />
+- **OpenCode session lifecycle and CLI controls** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/315" />
+
+---
+
+**Bug fixes**
+
+- **Address PR review comments and lint CI failure** [`f3944b5`](https://github.com/Untrivial-ai/agent-orchestrator/commit/f3944b5f15e5a246ffda04700dc3f6f2b96c4e9f)
+- **Address second round of review comments** [`7ed6e0c`](https://github.com/Untrivial-ai/agent-orchestrator/commit/7ed6e0c2c1692bf1e78a5e3dd177d8f0894cf268)
+- **Ensure message input stays visible above keyboard** [`fa5fcc9`](https://github.com/Untrivial-ai/agent-orchestrator/commit/fa5fcc9e910a324d6a415d87fa795a558a814559)
+- **Fix keyboard hiding text input on Android and iOS** [`fe90d5b`](https://github.com/Untrivial-ai/agent-orchestrator/commit/fe90d5b4e737b86f0ab7227427df259572d1dc92)
+- **Increase keyboard offset for Android accessory bar** [`a685565`](https://github.com/Untrivial-ai/agent-orchestrator/commit/a685565bbbb5536a6f3af4441a63dd284229879f)
+- **Replace KeyboardAvoidingView with Keyboard API listener** [`ba2053d`](https://github.com/Untrivial-ai/agent-orchestrator/commit/ba2053dd4c1eec8623d53a21cf79f7e9c86ec975)
+- **Increase message bar padding above keyboard** [`4090633`](https://github.com/Untrivial-ai/agent-orchestrator/commit/40906331e752694de96b762bdd5fbd4ad1aecb23)
+- **Further increase keyboard padding for message bar** [`034e1a0`](https://github.com/Untrivial-ai/agent-orchestrator/commit/034e1a0e257128c3c52f605477b40864c97878c9)
+- **Enable scrolling in terminal WebView** [`07cd72c`](https://github.com/Untrivial-ai/agent-orchestrator/commit/07cd72c36d309c525582dc6b434ececb11c2ea01)
+- **Use bot emoji for orchestrator and +Session for spawn** [`89606d4`](https://github.com/Untrivial-ai/agent-orchestrator/commit/89606d48579e2f40a745b897ee3db6a885625dcc)
+- **Expose orchestratorId in /api/sessions response** [`5314211`](https://github.com/Untrivial-ai/agent-orchestrator/commit/53142119bd4bca7a73730c350d57bcd442eb17ae)
+- **Stale fetch race condition and invalid test status** [`68a0ab1`](https://github.com/Untrivial-ai/agent-orchestrator/commit/68a0ab1dede4cdea58a9fabd130f6717186ad460)
+- **Move Tailscale details out of backend URL section into setup guide** [`170d54c`](https://github.com/Untrivial-ai/agent-orchestrator/commit/170d54cd53fc003dd8cf6075a88a039db37301a7)
+- **Add Commands button (📋) to HomeScreen header** [`185dc97`](https://github.com/Untrivial-ai/agent-orchestrator/commit/185dc97ede0cdbe92822c45f6f8e3ab3c5438035)
+- **Robot button goes to Orchestrator page with Commands in header** [`b5e486f`](https://github.com/Untrivial-ai/agent-orchestrator/commit/b5e486ffd2176a9c43057010e69f3f6811db84f8)
+- **Skip polling with empty session ID, use correct XDA parser API** [`d6d5dd6`](https://github.com/Untrivial-ai/agent-orchestrator/commit/d6d5dd66427d43b4610e6c93946da924a3e3d3ff)
+- **Enable cleartext traffic on Android for local/Tailscale HTTP** [`c9bf351`](https://github.com/Untrivial-ai/agent-orchestrator/commit/c9bf35148141678be09f37444f704012da31db01)
+- **URL start multi-project resolution and cross-platform browser open** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/272" />
+- **Use gh repo clone for private repo auth in ao start &lt;url&gt;** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/273" />
+- **Don't show 'Ready to merge' badge on merged/closed PRs** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/274" />
+- **Auto-detect free port in ao start &lt;url&gt; config generation** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/275" />
+- **Restrict cleanup to AO-managed worktrees** [`86b34c8`](https://github.com/Untrivial-ai/agent-orchestrator/commit/86b34c89236cc34fbd467ad56214a11f2778fddf)
+- **Preserve spawn cleanup while hardening kill path checks** [`1c9adba`](https://github.com/Untrivial-ai/agent-orchestrator/commit/1c9adba947c7c9770ff5ab6c7e2e1810e53b5a79)
+- **Canonicalize missing worktree paths using real ancestor** [`79d9754`](https://github.com/Untrivial-ai/agent-orchestrator/commit/79d97547c0b67c4eb1f8deffa23cd8ff64c497b3)
+- **Gate workspace cleanup to AO-managed worktree roots** [`bcc08cd`](https://github.com/Untrivial-ai/agent-orchestrator/commit/bcc08cd2296776b1fbf496581f64a3410d15eb50)
+- **Suppress codex update prompt in non-interactive agent sessions** [`2cd1b02`](https://github.com/Untrivial-ai/agent-orchestrator/commit/2cd1b02b49af6fa8757506656934a0c35f07975b)
+- **Prioritize /usr/local/bin ahead of linuxbrew in PATH** [`1bb68a3`](https://github.com/Untrivial-ai/agent-orchestrator/commit/1bb68a3f2ab6c4755e912d431a2d5b5193e08b61)
+- **Handle permissions=skip correctly in codex plugin** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/337" />
+- **DirectTerminal WebSocket URL behind reverse proxy** [`309bfbb`](https://github.com/Untrivial-ai/agent-orchestrator/commit/309bfbbc196fd9c6d2f12cc3e92999b42bb3df21)
+- **Disable codex startup update check via config override** [`e90c7f7`](https://github.com/Untrivial-ai/agent-orchestrator/commit/e90c7f7ff20a4f06b361eec2deeba52a1aa221ea)
+- **Harden gh wrapper resolution with explicit GH_PATH** [`b865549`](https://github.com/Untrivial-ai/agent-orchestrator/commit/b865549ea9922ee7657ecd83e386f707cecc7449)
+- **Preserve host port for proxy websocket path** [`40055eb`](https://github.com/Untrivial-ai/agent-orchestrator/commit/40055eb0d1524eadab1904c69f66237c2c0db023)
+- **Detect cd-prefixed gh/git commands and use relative hook path** [`59633e4`](https://github.com/Untrivial-ai/agent-orchestrator/commit/59633e45b4c96c5bd21b96d1575c8563b5da6ca7)
+- **Handle closed MR state and deduplicate glab helpers** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/358" />
+- **Bugbot follow-ups from PR #315** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/357" />

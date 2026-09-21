@@ -68,7 +68,11 @@ function formatDate(date) {
 }
 
 function badge(pullRequest) {
-	return `<PRBadge url="${pullRequest.url}" />`;
+	if (pullRequest.number) return `<PRBadge url="${pullRequest.url}" />`;
+	if (pullRequest.sha && pullRequest.url) {
+		return `[\`${pullRequest.sha.slice(0, 7)}\`](${pullRequest.url})`;
+	}
+	return "";
 }
 
 function featureSection(pullRequest) {
@@ -83,16 +87,20 @@ function featureSection(pullRequest) {
 
 function bullet(pullRequest) {
 	const title = escapeMdxText(cleanPullRequestTitle(pullRequest.title));
-	return `- **${title}** ${badge(pullRequest)}`;
+	return `- **${title}** ${badge(pullRequest)}`.trimEnd();
 }
 
-export function renderWeeklyDraft({ pullRequests, startDate, endDate }) {
-	const categorized = pullRequests
+function categorizedPullRequests(pullRequests) {
+	return pullRequests
 		.map((pullRequest) => ({
 			...pullRequest,
 			category: classifyPullRequest(pullRequest),
 		}))
 		.filter((pullRequest) => pullRequest.category !== "skip");
+}
+
+export function renderWeeklyDraft({ pullRequests, startDate, endDate }) {
+	const categorized = categorizedPullRequests(pullRequests);
 
 	if (categorized.length === 0) return null;
 
@@ -150,6 +158,63 @@ export function renderWeeklyDraft({ pullRequests, startDate, endDate }) {
 			improvements: improvements.length,
 			fixes: fixes.length,
 			skipped: pullRequests.length - categorized.length,
+		},
+	};
+}
+
+export function renderHistoricalWeek({ changes, startDate, endDate, totalCommits }) {
+	const categorized = categorizedPullRequests(changes);
+	const features = categorized.filter((change) => change.category === "feature");
+	const improvements = categorized.filter((change) => change.category === "improvement");
+	const fixes = categorized.filter((change) => change.category === "fix");
+	const title = `Weekly update — ${formatDate(startDate)} to ${formatDate(endDate)}`;
+	const summary = [
+		features.length ? `${features.length} features` : null,
+		improvements.length ? `${improvements.length} improvements` : null,
+		fixes.length ? `${fixes.length} fixes` : null,
+	]
+		.filter(Boolean)
+		.join(", ");
+	const description = summary
+		? `What changed in Agent Orchestrator this week: ${summary}.`
+		: `A maintenance week with ${totalCommits} integrated ${totalCommits === 1 ? "change" : "changes"} and no separately announced user-facing updates.`;
+	const sections = [
+		"---",
+		`title: ${JSON.stringify(title)}`,
+		`description: ${JSON.stringify(description)}`,
+		`date: ${JSON.stringify(endDate)}`,
+		`rangeStart: ${JSON.stringify(startDate)}`,
+		`rangeEnd: ${JSON.stringify(endDate)}`,
+		"historical: true",
+		"---",
+	];
+
+	if (features.length > 0) {
+		sections.push("", "## Features", "", ...features.map(bullet));
+	}
+	if (improvements.length > 0) {
+		sections.push("", "## Improvements", "", ...improvements.map(bullet));
+	}
+	if (fixes.length > 0) {
+		sections.push("", "---", "", "**Bug fixes**", "", ...fixes.map(bullet));
+	}
+	if (categorized.length === 0) {
+		sections.push(
+			"",
+			"## Maintenance",
+			"",
+			`This week contained ${totalCommits} integrated ${totalCommits === 1 ? "change" : "changes"}. There were no separately announced user-facing updates.`,
+		);
+	}
+
+	return {
+		content: `${sections.join("\n").trim()}\n`,
+		counts: {
+			included: categorized.length,
+			features: features.length,
+			improvements: improvements.length,
+			fixes: fixes.length,
+			skipped: changes.length - categorized.length,
 		},
 	};
 }
