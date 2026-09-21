@@ -52,7 +52,7 @@ func kimiLocalAuthStatus(ctx context.Context) (ports.AgentAuthStatus, bool, erro
 	var unknownFound bool
 	for _, home := range homes {
 		for _, configName := range []string{"config.toml", "config.json"} {
-			status, found, err := kimiConfigAuthStatus(filepath.Join(home, configName))
+			status, found, err := kimiConfigAuthStatusForHome(filepath.Join(home.path, configName), home.legacyKeyring)
 			if err != nil {
 				return status, found, err
 			}
@@ -64,7 +64,7 @@ func kimiLocalAuthStatus(ctx context.Context) (ports.AgentAuthStatus, bool, erro
 			}
 		}
 		// Legacy Kimi Code stored its hosted OAuth token at this fixed path.
-		status, found, err := kimiCredentialsAuthStatus(filepath.Join(home, "credentials", "kimi-code.json"))
+		status, found, err := kimiCredentialsAuthStatus(filepath.Join(home.path, "credentials", "kimi-code.json"))
 		if err != nil {
 			return status, found, err
 		}
@@ -81,36 +81,42 @@ func kimiLocalAuthStatus(ctx context.Context) (ports.AgentAuthStatus, bool, erro
 	return ports.AgentAuthStatusUnknown, false, nil
 }
 
-func kimiAuthHomes() ([]string, bool) {
+type kimiAuthHome struct {
+	path          string
+	legacyKeyring bool
+}
+
+func kimiAuthHomes() ([]kimiAuthHome, bool) {
 	userHome, err := os.UserHomeDir()
 	if err != nil && strings.TrimSpace(os.Getenv("KIMI_SHARE_DIR")) == "" &&
 		strings.TrimSpace(os.Getenv(kimiCodeHomeEnv)) == "" {
 		return nil, false
 	}
 
-	candidates := []string{
-		strings.TrimSpace(os.Getenv("KIMI_SHARE_DIR")),
-		strings.TrimSpace(os.Getenv(kimiCodeHomeEnv)),
+	candidates := []kimiAuthHome{
+		{path: strings.TrimSpace(os.Getenv("KIMI_SHARE_DIR")), legacyKeyring: true},
+		{path: strings.TrimSpace(os.Getenv(kimiCodeHomeEnv))},
 	}
-	if candidates[0] == "" && userHome != "" {
-		candidates[0] = filepath.Join(userHome, ".kimi")
+	if candidates[0].path == "" && userHome != "" {
+		candidates[0].path = filepath.Join(userHome, ".kimi")
 	}
-	if candidates[1] == "" && userHome != "" {
-		candidates[1] = filepath.Join(userHome, ".kimi-code")
+	if candidates[1].path == "" && userHome != "" {
+		candidates[1].path = filepath.Join(userHome, ".kimi-code")
 	}
 
-	homes := make([]string, 0, len(candidates))
+	homes := make([]kimiAuthHome, 0, len(candidates))
 	seen := make(map[string]struct{}, len(candidates))
 	for _, candidate := range candidates {
-		if candidate == "" {
+		if candidate.path == "" {
 			continue
 		}
-		clean := filepath.Clean(candidate)
+		clean := filepath.Clean(candidate.path)
 		if _, exists := seen[clean]; exists {
 			continue
 		}
 		seen[clean] = struct{}{}
-		homes = append(homes, clean)
+		candidate.path = clean
+		homes = append(homes, candidate)
 	}
 	return homes, len(homes) > 0
 }
@@ -185,6 +191,10 @@ func kimiConfigOAuthCredentialPaths(path string) ([]string, error) {
 }
 
 func kimiConfigAuthStatus(path string) (ports.AgentAuthStatus, bool, error) {
+	return kimiConfigAuthStatusForHome(path, false)
+}
+
+func kimiConfigAuthStatusForHome(path string, allowLegacyKeyring bool) (ports.AgentAuthStatus, bool, error) {
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return ports.AgentAuthStatusUnknown, false, nil
@@ -219,7 +229,7 @@ func kimiConfigAuthStatus(path string) (ports.AgentAuthStatus, bool, error) {
 			// Kimi treats unreadable credential files as missing and falls back
 			// to the keyring for legacy keyring-backed profiles. Keep returning
 			// file errors for file-backed profiles so their failure is visible.
-			if !strings.EqualFold(strings.TrimSpace(provider.OAuth.Storage), "keyring") {
+			if !allowLegacyKeyring || !strings.EqualFold(strings.TrimSpace(provider.OAuth.Storage), "keyring") {
 				return status, found, err
 			}
 			status, found = ports.AgentAuthStatusUnknown, false
@@ -234,7 +244,7 @@ func kimiConfigAuthStatus(path string) (ports.AgentAuthStatus, bool, error) {
 		// Before Kimi migrates deprecated keyring storage to a credentials file,
 		// the configured reference is the only local, non-secret signal available
 		// to AO. A credentials file, even without tokens, takes precedence above.
-		if strings.EqualFold(strings.TrimSpace(provider.OAuth.Storage), "keyring") {
+		if allowLegacyKeyring && strings.EqualFold(strings.TrimSpace(provider.OAuth.Storage), "keyring") {
 			return ports.AgentAuthStatusAuthorized, true, nil
 		}
 	}

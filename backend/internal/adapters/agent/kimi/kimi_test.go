@@ -466,7 +466,8 @@ func TestGetAgentHooksSeedsAOManagedConfigFromKeyringOAuthUserKimiHome(t *testin
 	workspace := t.TempDir()
 	userHome := t.TempDir()
 	aoHome := t.TempDir()
-	t.Setenv(kimiCodeHomeEnv, userHome)
+	t.Setenv("KIMI_SHARE_DIR", userHome)
+	t.Setenv(kimiCodeHomeEnv, t.TempDir())
 	userConfig := strings.Replace(kimiOAuthUserConfig, `storage = "file"`, `storage = "keyring"`, 1)
 	if err := os.WriteFile(filepath.Join(userHome, "config.toml"), []byte(userConfig), 0o600); err != nil {
 		t.Fatal(err)
@@ -507,11 +508,39 @@ func TestGetAgentHooksSeedsAOManagedConfigFromKeyringOAuthUserKimiHome(t *testin
 	}
 }
 
+func TestGetAgentHooksDoesNotSeedKeyringReferenceFromCurrentKimiCodeHome(t *testing.T) {
+	workspace := t.TempDir()
+	userHome := t.TempDir()
+	aoHome := t.TempDir()
+	t.Setenv("KIMI_SHARE_DIR", t.TempDir())
+	t.Setenv(kimiCodeHomeEnv, userHome)
+	userConfig := strings.Replace(kimiOAuthUserConfig, `storage = "file"`, `storage = "keyring"`, 1)
+	if err := os.WriteFile(filepath.Join(userHome, "config.toml"), []byte(userConfig), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := (&Plugin{}).GetAgentHooks(context.Background(), ports.WorkspaceHookConfig{
+		WorkspacePath: workspace,
+		Env:           map[string]string{kimiCodeHomeEnv: aoHome},
+	}); err != nil {
+		t.Fatalf("GetAgentHooks err = %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(aoHome, "config.toml"))
+	if err != nil {
+		t.Fatalf("read AO config: %v", err)
+	}
+	if strings.Contains(string(data), `[providers."managed:kimi-code".oauth]`) {
+		t.Fatalf("current kimi-code keyring reference was seeded:\n%s", data)
+	}
+}
+
 func TestGetAgentHooksSeedsAOManagedConfigFromMalformedKeyringCredentials(t *testing.T) {
 	workspace := t.TempDir()
 	userHome := t.TempDir()
 	aoHome := t.TempDir()
-	t.Setenv(kimiCodeHomeEnv, userHome)
+	t.Setenv("KIMI_SHARE_DIR", userHome)
+	t.Setenv(kimiCodeHomeEnv, t.TempDir())
 	userConfig := strings.Replace(kimiOAuthUserConfig, `storage = "file"`, `storage = "keyring"`, 1)
 	if err := os.WriteFile(filepath.Join(userHome, "config.toml"), []byte(userConfig), 0o600); err != nil {
 		t.Fatal(err)

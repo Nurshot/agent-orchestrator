@@ -106,7 +106,11 @@ func installKimiConfigHooks(cfg ports.WorkspaceHookConfig) error {
 	if !ok {
 		return errors.New("kimi: AO-managed Kimi Code home is unavailable")
 	}
-	if err := seedKimiCredentials(home); err != nil {
+	source, err := kimiSeedSource()
+	if err != nil {
+		return err
+	}
+	if err := seedKimiCredentials(home, source); err != nil {
 		return err
 	}
 	path := filepath.Join(home, "config.toml")
@@ -114,7 +118,7 @@ func installKimiConfigHooks(cfg ports.WorkspaceHookConfig) error {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("read %s: %w", path, err)
 	}
-	if seeded, ok, err := kimiSeedConfig(path, data); err != nil {
+	if seeded, ok, err := kimiSeedConfig(path, data, source); err != nil {
 		return err
 	} else if ok {
 		data = seeded
@@ -129,12 +133,62 @@ func installKimiConfigHooks(cfg ports.WorkspaceHookConfig) error {
 	return nil
 }
 
-func seedKimiCredentials(targetHome string) error {
-	sourceHome, ok := kimiCodeHome()
+type kimiConfigSeedSource struct {
+	home   string
+	config []byte
+}
+
+func kimiSeedSource() (*kimiConfigSeedSource, error) {
+	homes, ok := kimiAuthHomes()
 	if !ok {
+		return nil, nil
+	}
+	// Prefer the current kimi-code home. The legacy Python home is only a
+	// fallback for profiles that kimi-code can consume through the global OS
+	// keyring; it must not override an explicitly configured current profile.
+	for pass := 0; pass < 2; pass++ {
+		for _, home := range homes {
+			if home.legacyKeyring != (pass == 1) {
+				continue
+			}
+			path := filepath.Join(home.path, "config.toml")
+			data, err := os.ReadFile(path) //nolint:gosec // user Kimi config used only as a seed for AO-managed home.
+			if errors.Is(err, os.ErrNotExist) {
+				if !home.legacyKeyring {
+					credentialPath := filepath.Join(home.path, "credentials", "kimi-code.json")
+					status, found, credentialErr := kimiCredentialsAuthStatus(credentialPath)
+					if credentialErr != nil {
+						return nil, fmt.Errorf("read source Kimi credentials %s: %w", credentialPath, credentialErr)
+					}
+					if found && status == ports.AgentAuthStatusAuthorized {
+						return &kimiConfigSeedSource{home: home.path}, nil
+					}
+				}
+				continue
+			}
+			if err != nil {
+				return nil, fmt.Errorf("read source Kimi config %s: %w", path, err)
+			}
+			if kimiConfigHasAPIKey(data) {
+				return &kimiConfigSeedSource{home: home.path, config: data}, nil
+			}
+			status, found, err := kimiConfigAuthStatusForHome(path, home.legacyKeyring)
+			if err != nil {
+				return nil, fmt.Errorf("read source Kimi auth %s: %w", path, err)
+			}
+			if found && status == ports.AgentAuthStatusAuthorized {
+				return &kimiConfigSeedSource{home: home.path, config: data}, nil
+			}
+		}
+	}
+	return nil, nil
+}
+
+func seedKimiCredentials(targetHome string, source *kimiConfigSeedSource) error {
+	if source == nil {
 		return nil
 	}
-	sourceConfigPath := filepath.Join(sourceHome, "config.toml")
+	sourceConfigPath := filepath.Join(source.home, "config.toml")
 	sourcePaths, err := kimiConfigOAuthCredentialPaths(sourceConfigPath)
 	if err != nil {
 		return fmt.Errorf("read source Kimi config %s: %w", sourceConfigPath, err)
@@ -142,7 +196,7 @@ func seedKimiCredentials(targetHome string) error {
 	if len(sourcePaths) == 0 {
 		// Preserve the legacy credential-only seed path for profiles created by
 		// Kimi versions that did not persist an OAuth reference in config.toml.
-		sourcePaths = []string{filepath.Join(sourceHome, "credentials", "kimi-code.json")}
+		sourcePaths = []string{filepath.Join(source.home, "credentials", "kimi-code.json")}
 	}
 	for _, sourcePath := range sourcePaths {
 		targetPath := filepath.Join(targetHome, "credentials", filepath.Base(sourcePath))
@@ -194,50 +248,24 @@ func kimiCodeHomeFromEnv(env map[string]string) (string, bool) {
 	return "", false
 }
 
-func kimiSeedConfig(targetPath string, existing []byte) ([]byte, bool, error) {
+func kimiSeedConfig(targetPath string, existing []byte, source *kimiConfigSeedSource) ([]byte, bool, error) {
 	if kimiConfigHasAPIKey(existing) {
 		return nil, false, nil
 	}
 	if !kimiConfigCanSeed(existing) {
 		return nil, false, nil
 	}
-	sourceHome, ok := kimiCodeHome()
-	if !ok {
+	if source == nil {
 		return nil, false, nil
 	}
-	sourcePath := filepath.Join(sourceHome, "config.toml")
+	if len(source.config) == 0 {
+		return nil, false, nil
+	}
+	sourcePath := filepath.Join(source.home, "config.toml")
 	if sameKimiConfigPath(sourcePath, targetPath) {
 		return nil, false, nil
 	}
-	source, err := os.ReadFile(sourcePath) //nolint:gosec // user/process Kimi config used only as a seed for AO-managed home.
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, false, nil
-	}
-	if err != nil {
-		return nil, false, fmt.Errorf("read source Kimi config %s: %w", sourcePath, err)
-	}
-	if !kimiConfigHasAPIKey(source) {
-		// Device-code logins leave api_key empty and keep their tokens in the
-		// credential file. The full config is still required for default_model,
-		// the provider/OAuth mapping, model aliases, services, and permissions.
-		authorized, err := kimiSourceOAuthAuthorized(sourceHome)
-		if err != nil {
-			return nil, false, err
-		}
-		if !authorized {
-			return nil, false, nil
-		}
-	}
-	return source, true, nil
-}
-
-func kimiSourceOAuthAuthorized(sourceHome string) (bool, error) {
-	configPath := filepath.Join(sourceHome, "config.toml")
-	status, found, err := kimiConfigAuthStatus(configPath)
-	if err != nil {
-		return false, fmt.Errorf("read source Kimi auth %s: %w", configPath, err)
-	}
-	return found && status == ports.AgentAuthStatusAuthorized, nil
+	return source.config, true, nil
 }
 
 func kimiConfigCanSeed(existing []byte) bool {
