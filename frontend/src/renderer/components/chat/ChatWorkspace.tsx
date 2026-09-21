@@ -1378,6 +1378,7 @@ function ChatWorkspaceContent({
 					) : null}
 					<ControllerBanner
 						controller={snapshot.controller}
+						agentName={agentLabel(snapshot.harness)}
 						provisionState={session?.provisionState}
 						provisionError={session?.provisionError}
 						transitioning={controllerTransitioning}
@@ -1837,6 +1838,7 @@ function ChatHeader({
  */
 function ControllerBanner({
 	controller,
+	agentName,
 	provisionState,
 	provisionError,
 	transitioning,
@@ -1848,6 +1850,7 @@ function ControllerBanner({
 	shellError,
 }: {
 	controller: { state: ControllerState; error?: string };
+	agentName: string;
 	provisionState?: WorkspaceSession["provisionState"];
 	provisionError?: string;
 	transitioning?: boolean;
@@ -1883,7 +1886,7 @@ function ControllerBanner({
 		},
 	};
 	const shown = provisioning
-		? { title: "Starting this session…", tone: "text-muted-foreground" }
+		? { title: `Starting ${agentName}…`, tone: "text-muted-foreground" }
 		: failed
 			? { title: "This session could not be started", tone: "text-destructive" }
 			: copy[controller.state];
@@ -2957,7 +2960,7 @@ function Timeline({
 							</div>
 						);
 					})}
-					{turn && !groups.some((group) => group.turnId === turn.id) ? (
+					{turn?.state === "running" && !groups.some((group) => group.turnId === turn.id) ? (
 						<TurnLiveStatus startedAt={turn.startedAt ?? turn.requestedAt} />
 					) : null}
 					{messageEdit && !editedMessageVisible ? (
