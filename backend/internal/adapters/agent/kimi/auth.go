@@ -105,16 +105,22 @@ func kimiAuthHomes() ([]kimiAuthHome, bool) {
 	}
 
 	homes := make([]kimiAuthHome, 0, len(candidates))
-	seen := make(map[string]struct{}, len(candidates))
+	seen := make(map[string]int, len(candidates))
 	for _, candidate := range candidates {
 		if candidate.path == "" {
 			continue
 		}
 		clean := filepath.Clean(candidate.path)
-		if _, exists := seen[clean]; exists {
+		if index, exists := seen[clean]; exists {
+			// When both variables name the same directory, use the current
+			// kimi-code semantics. Treating it as legacy could falsely infer a
+			// keyring login that the current runtime cannot consume.
+			if !candidate.legacyKeyring {
+				homes[index].legacyKeyring = false
+			}
 			continue
 		}
-		seen[clean] = struct{}{}
+		seen[clean] = len(homes)
 		candidate.path = clean
 		homes = append(homes, candidate)
 	}

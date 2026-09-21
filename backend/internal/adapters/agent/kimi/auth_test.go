@@ -225,6 +225,27 @@ api_key = "secret"
 	}
 }
 
+func TestKimiLocalAuthStatusUsesCurrentSemanticsWhenHomesMatch(t *testing.T) {
+	clearKimiAuthEnv(t)
+	home := t.TempDir()
+	t.Setenv("KIMI_SHARE_DIR", home)
+	t.Setenv("KIMI_CODE_HOME", home)
+	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte(`
+[providers."managed:kimi-code"]
+oauth = { storage = "keyring", key = "oauth/kimi-code" }
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	status, ok, err := kimiLocalAuthStatus(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok || status != ports.AgentAuthStatusUnknown {
+		t.Fatalf("status = (%q, %v), want (%q, false)", status, ok, ports.AgentAuthStatusUnknown)
+	}
+}
+
 func TestKimiConfigAuthStatusUnknownWithFileOAuthReferenceWithoutToken(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.json")
 	if err := os.WriteFile(configPath, []byte(`{
