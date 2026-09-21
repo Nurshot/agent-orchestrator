@@ -33,12 +33,15 @@ CODER_ADMIN_EMAIL="${AO_CODER_ADMIN_EMAIL:-admin@ao-coder.dev}"
 TEMPLATE_DIR="${AO_CLOUD_CODER_TEMPLATE_DIR:-coder}"
 ECR_REGISTRY="${CP_IMAGE%%/*}"
 
-# Public IP is stable; az show is occasionally flaky for a fresh VM, so allow an
-# explicit override for both the IP (SSH) and FQDN (Coder is HTTPS-only).
-PIPNAME="$(az network public-ip list -g "$RG" --query "[?ipAddress!=null] | [0].name" -o tsv 2>/dev/null || true)"
-IP="${AO_AZURE_VM_IP:-$(az network public-ip show -g "$RG" -n "$PIPNAME" --query 'ipAddress' -o tsv 2>/dev/null || true)}"
-FQDN="${AO_AZURE_FQDN:-$(az network public-ip show -g "$RG" -n "$PIPNAME" --query 'dnsSettings.fqdn' -o tsv 2>/dev/null || true)}"
-[[ -n "$IP" && -n "$FQDN" ]] || { echo "could not resolve VM IP/FQDN; set AO_AZURE_VM_IP and AO_AZURE_FQDN"; exit 1; }
+# Resolve the Coder HOST VM's OWN public IP explicitly (via its NIC), never the
+# "first public IP in the resource group": once the VM-per-workspace template is
+# in use, the group also holds per-workspace public IPs, so [0] could resolve to
+# a workspace - which would SSH to and build the image on the wrong host. az show
+# is occasionally flaky for a fresh VM, so keep the explicit IP/FQDN overrides.
+PIPID="$(az vm list-ip-addresses -g "$RG" -n "$VM" --query '[0].virtualMachine.network.publicIpAddresses[0].id' -o tsv 2>/dev/null || true)"
+IP="${AO_AZURE_VM_IP:-$(az network public-ip show --ids "$PIPID" --query 'ipAddress' -o tsv 2>/dev/null || true)}"
+FQDN="${AO_AZURE_FQDN:-$(az network public-ip show --ids "$PIPID" --query 'dnsSettings.fqdn' -o tsv 2>/dev/null || true)}"
+[[ -n "$IP" && -n "$FQDN" ]] || { echo "could not resolve the Coder VM (${VM}) IP/FQDN; set AO_AZURE_VM_IP and AO_AZURE_FQDN"; exit 1; }
 SSHK=(-i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20)
 echo "=== Coder VM: ${IP} (${FQDN}) ==="
 

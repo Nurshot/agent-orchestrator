@@ -49,7 +49,7 @@ az vm create -g "$RG" -n "$BAKE_VM" \
   --size "$VM_SIZE" \
   --admin-username "$ADMIN_USER" \
   --generate-ssh-keys \
-  --public-ip-sku Standard \
+  --public-ip-address "" \
   --nic-delete-option Delete --os-disk-delete-option Delete \
   --output none
 echo "bake VM created"
@@ -84,9 +84,12 @@ gh --version | head -1 || echo 'gh MISSING'
 ls -l /usr/local/bin/cursor-agent
 " --query 'value[0].message' -o tsv
 
-echo "=== deprovision + generalize the bake VM ==="
-az vm run-command invoke -g "$RG" -n "$BAKE_VM" --command-id RunShellScript \
-  --scripts "sudo waagent -deprovision+user -force || true" --query 'value[0].message' -o tsv >/dev/null || true
+echo "=== deallocate + generalize the bake VM ==="
+# Do NOT run 'waagent -deprovision' via 'az vm run-command': deprovision tears
+# down the guest agent that run-command reports back through, so the invoke call
+# blocks until the extension timeout (~90 min). generalize does not require it,
+# and each workspace VM gets fresh cloud-init + a fresh coder identity at boot,
+# so a deprovision buys us nothing here.
 az vm deallocate -g "$RG" -n "$BAKE_VM" --output none
 az vm generalize -g "$RG" -n "$BAKE_VM" --output none
 

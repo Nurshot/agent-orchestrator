@@ -64,16 +64,22 @@ if ! az vm show -g "$RG" -n "$VM" -o none 2>/dev/null; then
 fi
 
 say "DNS label -> stable FQDN (for the TLS cert)"
-PIPNAME="$(az network public-ip list -g "$RG" --query "[?ipAddress!=null] | [0].name" -o tsv)"
+# Resolve the Coder HOST VM's OWN public IP explicitly (via its NIC), never the
+# "first public IP in the resource group": once the VM-per-workspace template is
+# in use, the group also holds per-workspace public IPs, and picking [0] could
+# stamp the Coder DNS label onto a workspace IP - breaking the stable FQDN, its
+# Let's Encrypt cert, health checks, and the wired CP endpoint.
+PIPID="$(az vm list-ip-addresses -g "$RG" -n "$VM" --query '[0].virtualMachine.network.publicIpAddresses[0].id' -o tsv)"
+[ -n "$PIPID" ] || { echo "could not resolve the Coder VM (${VM}) public IP"; exit 1; }
 # Sticky label: reuse the label already on the IP so re-runs keep the same FQDN
 # (regenerating it would break the wired CP and force a fresh Let's Encrypt cert).
-EXISTING_LABEL="$(az network public-ip show -g "$RG" -n "$PIPNAME" --query 'dnsSettings.domainNameLabel' -o tsv 2>/dev/null || true)"
+EXISTING_LABEL="$(az network public-ip show --ids "$PIPID" --query 'dnsSettings.domainNameLabel' -o tsv 2>/dev/null || true)"
 DNS_LABEL="${DNS_LABEL_OVERRIDE:-${EXISTING_LABEL:-ao-coder-$RANDOM}}"
 if [ "$DNS_LABEL" != "$EXISTING_LABEL" ]; then
-  az network public-ip update -g "$RG" -n "$PIPNAME" --dns-name "$DNS_LABEL" -o none
+  az network public-ip update --ids "$PIPID" --dns-name "$DNS_LABEL" -o none
 fi
-FQDN="$(az network public-ip show -g "$RG" -n "$PIPNAME" --query 'dnsSettings.fqdn' -o tsv)"
-IP="$(az network public-ip show -g "$RG" -n "$PIPNAME" --query 'ipAddress' -o tsv)"
+FQDN="$(az network public-ip show --ids "$PIPID" --query 'dnsSettings.fqdn' -o tsv)"
+IP="$(az network public-ip show --ids "$PIPID" --query 'ipAddress' -o tsv)"
 say "FQDN ${FQDN} (${IP})"
 
 # Lock SSH down if a source CIDR was provided (default az rule is world-open).
