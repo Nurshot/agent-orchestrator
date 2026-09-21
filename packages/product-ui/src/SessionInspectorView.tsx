@@ -1,5 +1,5 @@
-import { type KeyboardEvent, type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { type KeyboardEvent, type ReactNode, type RefObject, useEffect, useId, useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { ExternalLinkComponent } from "./external-link";
 import {
 	ArrowUpRightIcon,
@@ -7,6 +7,7 @@ import {
 	CheckIcon,
 	ChevronIcon,
 	GitPullRequestIcon,
+	LoaderCircleIcon,
 	MoreHorizontalIcon,
 } from "./icons";
 import {
@@ -19,6 +20,7 @@ import type {
 	PRSummaryMetadata,
 } from "./pull-request-models";
 import { scmUserAvatarUrl } from "./scm-avatar";
+import { NAV_ROW_HIGHLIGHT_HOST_CLASS, NavRowHighlight } from "./NavRowHighlight";
 import { cn } from "./utils";
 import { UserAvatar } from "./UserAvatar";
 
@@ -34,15 +36,42 @@ export type InspectorTab = {
 
 const inspectorShellClass = "@container/inspector flex h-full min-h-0 flex-col overflow-hidden";
 const inspectorBodyBaseClass = "min-h-0 flex-1";
-const inspectorScrollableBodyClass = "board-scrollbar overflow-x-hidden overflow-y-auto p-3 pb-4 @max-[300px]/inspector:px-2.5";
+const inspectorScrollableBodyClass = "inspector-scrollbar overflow-x-hidden overflow-y-auto";
 export const inspectorEmptyClass = "text-xs text-settings-muted leading-normal";
 /**
- * The Reviews tab labels its sections in sentence case rather than the settings
- * rail's small caps: they name content below them, not a settings group, and
- * the caps tracking read as a second, competing header row.
+ * Positions each section header in the panel: top/left inset match; bottom is half of top so
+ * stacked headers share the gap (pb + next pt).
  */
-export const inspectorReviewHeadingClass =
-	"normal-case text-foreground [&>span:first-child]:text-xs [&>span:first-child]:tracking-wide";
+export const inspectorSectionHeaderSlotClass = "px-1.5 pt-1.5 pb-0.5";
+
+/** Inset inside the hover pill (equal x/y so label sits evenly in the gray highlight). */
+export const inspectorSectionHeaderInsetClass = "p-1.5";
+
+/** Body inset matches header label (panel px-1.5 + header button p-1.5). */
+export const inspectorSectionInsetClass = "px-3 pb-0";
+
+/** Bleed section cards to the accordion button edges (body px-3 vs header slot px-1.5). */
+export const inspectorSectionCardBleedClass = "-mx-1.5";
+
+/** Inspector tab section titles: sentence case, normal weight (not settings-rail small caps). */
+export const inspectorSectionHeadingClass =
+	"font-normal normal-case tracking-normal [&>span:first-child]:font-normal";
+
+/** @deprecated Use {@link inspectorSectionHeadingClass}. */
+export const inspectorReviewHeadingClass = inspectorSectionHeadingClass;
+
+const inspectorSectionHeaderShellClass =
+	"relative w-full min-w-0 rounded-lg text-nano font-normal normal-case leading-none tracking-normal text-muted-foreground";
+
+const inspectorSectionHeaderContentClass =
+	"relative z-[1] flex w-full min-w-0 items-center justify-between gap-2";
+
+const inspectorSectionAccordionButtonClass = cn(
+	inspectorSectionHeaderShellClass,
+	NAV_ROW_HIGHLIGHT_HOST_CLASS,
+	"flex w-full items-center text-left transition-none",
+	inspectorSectionHeaderInsetClass,
+);
 
 export function SessionInspectorShellView({
 	activeView,
@@ -204,6 +233,8 @@ export function InspectorSection({
 	action,
 	children,
 	className,
+	collapsible = true,
+	defaultOpen = true,
 	surface = true,
 	surfaceClassName,
 	title,
@@ -212,29 +243,112 @@ export function InspectorSection({
 	action?: ReactNode;
 	children: ReactNode;
 	className?: string;
+	/** When true (default), the header toggles body visibility and shows a chevron. */
+	collapsible?: boolean;
+	defaultOpen?: boolean;
 	surface?: boolean;
 	/** Overrides the row card's own padding, for a section that runs flush. */
 	surfaceClassName?: string;
 	title?: string;
 	titleClassName?: string;
 }) {
+	const contentId = useId();
+	const headingId = useId();
+	const [open, setOpen] = useState(defaultOpen);
+	const prefersReducedMotion = useReducedMotion();
+	const canCollapse = collapsible && Boolean(title);
+	const showBody = !canCollapse || open;
+	const collapseTransition = prefersReducedMotion
+		? { duration: 0 }
+		: { duration: 0.22, ease: [0.4, 0, 0.2, 1] as const };
+
 	const heading =
 		title || action ? (
-			<div className={cn("mb-1 flex items-center justify-between gap-2 text-2xs font-bold uppercase tracking-settings-section text-settings-muted", titleClassName)}>
-				{title ? <span>{title}</span> : <span />}
-				{action ?? null}
+			<div className={inspectorSectionHeaderSlotClass}>
+				{canCollapse ? (
+					<button
+						aria-controls={contentId}
+						aria-expanded={open}
+						className={cn(inspectorSectionAccordionButtonClass, titleClassName)}
+						id={headingId}
+						onClick={() => setOpen((current) => !current)}
+						type="button"
+					>
+					<NavRowHighlight />
+					<span className={inspectorSectionHeaderContentClass}>
+						<span className="min-w-0 flex-1">{title}</span>
+						{action ? (
+							// Keep section actions clickable without toggling the accordion.
+							<span
+								className="shrink-0"
+								onClick={(event) => event.stopPropagation()}
+								onKeyDown={(event) => event.stopPropagation()}
+							>
+								{action}
+							</span>
+						) : null}
+						<ChevronIcon
+							aria-hidden="true"
+							className="size-icon-2xs shrink-0 text-passive"
+							direction={open ? "down" : "right"}
+						/>
+					</span>
+				</button>
+			) : (
+				<div
+					className={cn(inspectorSectionHeaderShellClass, inspectorSectionHeaderInsetClass, titleClassName)}
+					id={headingId}
+				>
+					<div className={inspectorSectionHeaderContentClass}>
+						{title ? <span className="min-w-0 flex-1">{title}</span> : <span className="flex-1" />}
+						{action ?? null}
+					</div>
+				</div>
+			)}
 			</div>
 		) : null;
+
+	const body =
+		surface ? (
+			<div className={cn("overflow-hidden rounded-none bg-settings-row py-1", surfaceClassName)}>
+				{children}
+			</div>
+		) : (
+			children
+		);
+
+	const bodyPanel = (
+		<div
+			aria-labelledby={title ? headingId : undefined}
+			className={cn("min-w-0", inspectorSectionInsetClass, heading ? "pt-0" : "pt-2")}
+			id={contentId}
+			role={canCollapse ? "region" : undefined}
+		>
+			{body}
+		</div>
+	);
+
 	return (
-		<section className={cn("mb-4 last:mb-0", className)} data-testid="inspector-section">
+		<section className={cn("flex flex-col", className)} data-testid="inspector-section">
 			{heading}
-			{surface ? (
-				<div className={cn("overflow-hidden rounded-settings-row bg-settings-row px-3.5 py-1.5", surfaceClassName)}>
-					{children}
-				</div>
-			) : (
-				children
-			)}
+			{canCollapse ? (
+				<AnimatePresence initial={false}>
+					{showBody ? (
+						<motion.div
+							animate={{ height: "auto", opacity: 1 }}
+							className="overflow-hidden"
+							exit={{ height: 0, opacity: 0 }}
+							initial={{ height: 0, opacity: 0 }}
+							key="inspector-section-body"
+							transition={collapseTransition}
+						>
+							{bodyPanel}
+						</motion.div>
+					) : null}
+				</AnimatePresence>
+			) : showBody ? (
+				bodyPanel
+			) : null}
 		</section>
 	);
 }
@@ -252,8 +366,8 @@ export function SessionInspectorSummaryView({
 	activity: ReactNode;
 	activityTitle: string;
 	completion?: ReactNode;
-	pullRequestCards: ReactNode;
-	pullRequestTitle: string;
+	pullRequestCards?: ReactNode;
+	pullRequestTitle?: string;
 	reviews?: ReactNode;
 	usage?: ReactNode;
 	/**
@@ -265,12 +379,16 @@ export function SessionInspectorSummaryView({
 	return (
 		<div role="tabpanel">
 			{workers}
-			<InspectorSection surface={false} title={pullRequestTitle}>
-				<div className="flex flex-col gap-1.5">{pullRequestCards}</div>
-			</InspectorSection>
+			{pullRequestTitle && pullRequestCards ? (
+				<InspectorSection surface={false} title={pullRequestTitle} titleClassName={inspectorSectionHeadingClass}>
+					<div className={cn("flex flex-col gap-1.5", inspectorSectionCardBleedClass)}>{pullRequestCards}</div>
+				</InspectorSection>
+			) : null}
 			{reviews}
 			{completion}
-			<InspectorSection title={activityTitle}>{activity}</InspectorSection>
+			<InspectorSection title={activityTitle} titleClassName={inspectorSectionHeadingClass}>
+				{activity}
+			</InspectorSection>
 			{usage}
 		</div>
 	);
@@ -551,10 +669,14 @@ export type InspectorReviewLabels = {
 	viewOnPR: string;
 };
 
+const reviewPrRowButtonClass =
+	"flex w-full items-start gap-2 px-3 py-2.5 text-left transition-none";
+
 export function InspectorReviewsView({
 	externalLink,
 	groups,
 	isLoading,
+	liveReviewLabel,
 	labels,
 	onRequestRereview,
 	onResolveInlineComment,
@@ -568,6 +690,7 @@ export function InspectorReviewsView({
 	externalLink: ExternalLinkComponent;
 	groups: InspectorReviewGroup[];
 	isLoading: boolean;
+	liveReviewLabel?: string;
 	labels: InspectorReviewLabels;
 	onRequestRereview?: (review: InspectorGithubReview) => Promise<void> | void;
 	onResolveInlineComment?: (comment: InspectorInlineComment & { reviewerId?: string }) => Promise<void> | void;
@@ -578,17 +701,26 @@ export function InspectorReviewsView({
 	renderAvatar: (harness: string) => ReactNode;
 	renderMarkdown: (body: string) => ReactNode;
 }) {
-	if (isLoading && groups.length === 0) {
+	if (isLoading && groups.length === 0 && !liveReviewLabel) {
 		return (
-			<InspectorSection surface surfaceClassName="px-0" title={labels.reviews} titleClassName={inspectorReviewHeadingClass}>
+			<InspectorSection surface={false} title={labels.reviews} titleClassName={inspectorSectionHeadingClass}>
 				<p className={inspectorEmptyClass}>{labels.loadingReviews}</p>
 			</InspectorSection>
 		);
 	}
-	if (groups.length === 0) return null;
+	if (groups.length === 0 && !liveReviewLabel) return null;
 	return (
-		<InspectorSection surface={false} title={labels.reviews} titleClassName={inspectorReviewHeadingClass}>
-			<div className="flex flex-col gap-2">
+		<InspectorSection surface={false} title={labels.reviews} titleClassName={inspectorSectionHeadingClass}>
+			<div className={cn("flex flex-col gap-1.5", inspectorSectionCardBleedClass)}>
+				{liveReviewLabel ? (
+					<article
+						className="flex min-w-0 items-center gap-2 rounded-lg border border-border bg-settings-row px-3 py-2.5"
+						data-testid="review-live-card"
+					>
+						<LoaderCircleIcon aria-hidden="true" className="size-icon-sm shrink-0 animate-spin text-muted-foreground" />
+						<span className="min-w-0 flex-1 text-xs font-medium leading-snug text-muted-foreground">{liveReviewLabel}</span>
+					</article>
+				) : null}
 				{groups.map((group) => (
 					<ReviewDisclosure
 						defaultOpen={false}
@@ -678,7 +810,7 @@ function ReviewSourceLabel({
 			<span className="flex shrink-0 items-center justify-center text-passive [&_svg]:size-icon-xs">
 				{icon}
 			</span>
-			<span className="shrink-0 text-2xs font-medium uppercase tracking-wide text-passive">
+			<span className="shrink-0 text-2xs font-normal normal-case text-passive">
 				{children}
 			</span>
 			{marker ? (
@@ -723,7 +855,7 @@ function ReviewDisclosure({
 				<div className="flex min-w-0 flex-col gap-1 border-b border-border/70 px-3 py-2.5">
 					<span className="flex min-w-0 items-start justify-between gap-2 @max-[420px]/inspector:flex-col @max-[420px]/inspector:items-stretch">
 						<span
-							className="min-w-0 whitespace-normal break-words text-sm-md font-semibold leading-snug text-foreground"
+							className="min-w-0 whitespace-normal break-words text-xs font-normal leading-snug text-foreground"
 							title={title}
 						>
 							{title}
@@ -743,20 +875,29 @@ function ReviewDisclosure({
 			<button
 				aria-expanded={open}
 				data-testid="review-pr-row"
-				className="flex w-full min-w-0 items-start gap-2 px-3 py-2.5 text-left transition-colors hover:bg-interactive-hover/30 @max-[420px]/inspector:grid @max-[420px]/inspector:grid-cols-[auto_minmax(0,1fr)]"
+				className={reviewPrRowButtonClass}
 				onClick={() => setOpen((current) => !current)}
 				type="button"
 			>
-				<ChevronIcon className="size-icon-sm shrink-0 text-passive" direction={open ? "down" : "right"} />
+				<span
+					className={cn(
+						inspectorSectionHeaderContentClass,
+						"items-start @max-[420px]/inspector:grid @max-[420px]/inspector:grid-cols-[auto_minmax(0,1fr)]",
+					)}
+				>
+					<ChevronIcon className="size-icon-sm shrink-0 text-passive" direction={open ? "down" : "right"} />
 					<span className="flex min-w-0 flex-1 flex-col gap-0.5">
-					<span className="whitespace-normal break-words text-sm-md font-semibold leading-snug text-foreground" title={title}>
-						{title}
+						<span className="whitespace-normal break-words text-xs font-normal leading-snug text-foreground" title={title}>
+							{title}
+						</span>
+						<span className="whitespace-normal break-words font-mono text-micro leading-snug text-passive" title={meta}>
+							{meta}
+						</span>
 					</span>
-					<span className="whitespace-normal break-words font-mono text-micro leading-snug text-passive" title={meta}>
-						{meta}
-					</span>
+					{verdict ? (
+						<VerdictBadge className="@max-[420px]/inspector:col-start-2 @max-[420px]/inspector:row-start-2 @max-[420px]/inspector:justify-self-start" verdict={verdict} />
+					) : null}
 				</span>
-				{verdict ? <VerdictBadge className="@max-[420px]/inspector:col-start-2 @max-[420px]/inspector:row-start-2 @max-[420px]/inspector:justify-self-start" verdict={verdict} /> : null}
 			</button>
 			{open ? <div className="flex flex-col gap-3 px-3 py-3">{children}</div> : null}
 		</article>
@@ -1072,7 +1213,7 @@ function GithubInlineComments({
 	if (comments.length === 0) return null;
 	return (
 		<section className="min-w-0" data-testid="github-inline-comments">
-			<button aria-expanded={open} className="flex min-h-8 w-full min-w-0 items-center gap-2 rounded-md px-1.5 py-1 text-left text-xs font-medium leading-none text-muted-foreground transition-colors hover:bg-interactive-hover/20 hover:text-foreground" onClick={() => setOpen((current) => !current)} type="button">
+			<button aria-expanded={open} className="flex min-h-8 w-full min-w-0 items-center gap-2 rounded-md px-1.5 py-1 text-left text-xs font-medium leading-none text-muted-foreground" onClick={() => setOpen((current) => !current)} type="button">
 				<ChevronIcon className="size-icon-2xs shrink-0" direction={open ? "down" : "right"} />
 				<span>{labels.openComments} · {comments.length}</span>
 			</button>
@@ -1254,7 +1395,7 @@ function InlineCommentRow({
 		<div className="relative flex min-w-0 flex-col gap-1.5 py-1.5 text-xs">
 			<div
 				{...(canExpand ? { "aria-expanded": expanded, role: "button", tabIndex: 0 } : {})}
-				className={cn("w-full min-w-0 rounded-md py-1 text-left transition-colors", canExpand && "cursor-pointer hover:bg-interactive-hover/20")}
+				className={cn("w-full min-w-0 rounded-md py-1 text-left", canExpand && "cursor-pointer")}
 				onClick={canExpand ? () => setExpanded((current) => !current) : undefined}
 				onKeyDown={canExpand ? (event) => {
 					if (event.key === "Enter" || event.key === " ") {
