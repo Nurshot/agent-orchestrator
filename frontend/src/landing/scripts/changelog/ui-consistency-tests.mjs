@@ -11,7 +11,9 @@ function hasClasses(element, requiredClasses) {
 
 test("every changelog feed entry uses the weekly UI contract", async () => {
 	const response = await fetch(changelogUrl);
-	assert.equal(response.ok, true, `${changelogUrl} returned HTTP ${response.status}`);
+	if (!response.ok) {
+		throw new Error(`${changelogUrl} returned HTTP ${response.status}`);
+	}
 
 	const $ = load(await response.text());
 	const articles = $("section[aria-label='Weekly product updates'] > article").toArray();
