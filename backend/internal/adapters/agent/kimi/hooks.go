@@ -157,16 +157,6 @@ func kimiSeedSource() (*kimiConfigSeedSource, error) {
 				path := filepath.Join(home.path, configName)
 				data, err := os.ReadFile(path) //nolint:gosec // user Kimi config used only as a seed for AO-managed home.
 				if errors.Is(err, os.ErrNotExist) {
-					if !home.legacyKeyring {
-						credentialPath := filepath.Join(home.path, "credentials", "kimi-code.json")
-						status, found, credentialErr := kimiCredentialsAuthStatus(credentialPath)
-						if credentialErr != nil {
-							return nil, fmt.Errorf("read source Kimi credentials %s: %w", credentialPath, credentialErr)
-						}
-						if found && status == ports.AgentAuthStatusAuthorized {
-							return &kimiConfigSeedSource{home: home.path}, nil
-						}
-					}
 					continue
 				}
 				if err != nil {
@@ -189,6 +179,16 @@ func kimiSeedSource() (*kimiConfigSeedSource, error) {
 						return nil, err
 					}
 					return &kimiConfigSeedSource{home: home.path, configPath: path, config: config}, nil
+				}
+			}
+			if !home.legacyKeyring {
+				credentialPath := filepath.Join(home.path, "credentials", "kimi-code.json")
+				status, found, err := kimiCredentialsAuthStatus(credentialPath)
+				if err != nil {
+					return nil, fmt.Errorf("read source Kimi credentials %s: %w", credentialPath, err)
+				}
+				if found && status == ports.AgentAuthStatusAuthorized {
+					return &kimiConfigSeedSource{home: home.path}, nil
 				}
 			}
 		}
