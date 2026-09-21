@@ -135,6 +135,10 @@ type API struct {
 // per-request timeout so the REST group can apply it without re-reading the
 // environment.
 func NewAPI(cfg config.Config, deps APIDeps) *API {
+	return newAPI(cfg, deps, loggerOrDefault(nil))
+}
+
+func newAPI(cfg config.Config, deps APIDeps, log *slog.Logger) *API {
 	return &API{
 		cfg:  cfg,
 		deps: deps,
@@ -154,7 +158,7 @@ func NewAPI(cfg config.Config, deps APIDeps) *API {
 			Capabilities:  deps.SessionCapabilities,
 		},
 		desktop:       &controllers.DesktopWorkspaceController{Svc: deps.DesktopWorkspaces},
-		usage:         &controllers.UsageController{Svc: deps.UsageSummary},
+		usage:         &controllers.UsageController{Svc: deps.UsageSummary, Log: loggerOrDefault(log)},
 		prs:           &controllers.PRsController{Svc: deps.PRs},
 		reviews:       &controllers.ReviewsController{Svc: deps.Reviews},
 		notifications: &controllers.NotificationsController{Svc: deps.Notifications, Stream: deps.NotificationStream},
