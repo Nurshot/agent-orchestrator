@@ -51,7 +51,7 @@ export default function CompareIndexPage() {
 						{pages.map((page) => (
 							<li key={page.slug}>
 								<Link href={page.url} className="block group">
-									<article className="border border-border bg-background p-6 transition-all hover:bg-muted/50 hover:border-foreground/20">
+									<article className="border border-border bg-background p-6 transition-colors hover:bg-muted/50 hover:border-foreground/20">
 										<div className="flex items-center gap-3 mb-3">
 											<span className="text-xs font-mono text-muted-foreground tracking-[0.5px]">
 												{getComparisonPageTypeLabel(page.type)}
