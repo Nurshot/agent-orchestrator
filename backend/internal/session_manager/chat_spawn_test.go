@@ -76,14 +76,17 @@ type recordingLauncher struct {
 	turns                []string
 	// relayed is what arrived through Manager.Send rather than as an initial
 	// prompt, kept separate so a test can tell the two apart.
-	relayed       []string
-	relayIDs      []string
-	stopped       []domain.SessionID
-	armed         []domain.SessionID
-	armPolicy     []domain.SessionInterfaceTransitionPolicy
-	prepared      []domain.SessionID
-	preparePolicy []domain.SessionInterfaceTransitionPolicy
-	aborted       []domain.SessionID
+	relayed             []string
+	relayIDs            []string
+	stopped             []domain.SessionID
+	backgroundHarnesses []domain.AgentHarness
+	background          []ports.ChatStartConfig
+	backgroundPrompts   []string
+	armed               []domain.SessionID
+	armPolicy           []domain.SessionInterfaceTransitionPolicy
+	prepared            []domain.SessionID
+	preparePolicy       []domain.SessionInterfaceTransitionPolicy
+	aborted             []domain.SessionID
 }
 
 type historicalChatRestoreStore struct {
@@ -200,6 +203,13 @@ func (l *recordingLauncher) HasLiveChatController(domain.SessionID) bool {
 	return l.live
 }
 
+func (l *recordingLauncher) RunBackgroundTask(_ context.Context, harness domain.AgentHarness, cfg ports.ChatStartConfig, prompt string) (string, error) {
+	l.backgroundHarnesses = append(l.backgroundHarnesses, harness)
+	l.background = append(l.background, cfg)
+	l.backgroundPrompts = append(l.backgroundPrompts, prompt)
+	return "Generated title", nil
+}
+
 func (l *recordingLauncher) ArmChatHandoff(_ context.Context, id domain.SessionID, policy domain.SessionInterfaceTransitionPolicy) error {
 	l.armed = append(l.armed, id)
 	l.armPolicy = append(l.armPolicy, policy)
@@ -214,6 +224,45 @@ func (l *recordingLauncher) PrepareChatHandoff(_ context.Context, id domain.Sess
 
 func (l *recordingLauncher) AbortChatHandoff(id domain.SessionID) {
 	l.aborted = append(l.aborted, id)
+}
+
+func TestRunBackgroundTaskUsesResolvedWorkerHarnessAndConfig(t *testing.T) {
+	launcher := &recordingLauncher{}
+	m, st, _ := newChatManager(launcher)
+	project := st.projects[string(chatTestProject)]
+	project.Config.Env = map[string]string{"PROJECT_TOKEN": "yes"}
+	st.projects[string(chatTestProject)] = project
+	rec := domain.SessionRecord{
+		ID:        "mer-1",
+		ProjectID: chatTestProject,
+		Kind:      domain.KindWorker,
+		Harness:   domain.HarnessCursor,
+		Metadata: domain.SessionMetadata{
+			WorkspacePath: "/ws/mer-1",
+			Model:         "selected-model",
+			Permissions:   ports.PermissionModeAcceptEdits,
+		},
+	}
+	st.sessions[rec.ID] = rec
+
+	got, err := m.RunBackgroundTask(context.Background(), rec.ID, "title only", "Fix the renderer", "low")
+	if err != nil || got != "Generated title" {
+		t.Fatalf("RunBackgroundTask = %q, %v", got, err)
+	}
+	if len(launcher.background) != 1 {
+		t.Fatalf("background calls = %d, want 1", len(launcher.background))
+	}
+	task := launcher.background[0]
+	if launcher.backgroundHarnesses[0] != rec.Harness || task.WorkspacePath != rec.Metadata.WorkspacePath ||
+		task.Model != rec.Metadata.Model || task.Effort != "low" || task.Permissions != rec.Metadata.Permissions {
+		t.Fatalf("background task = %#v", task)
+	}
+	if task.SystemPrompt != "title only" || launcher.backgroundPrompts[0] != "Fix the renderer" || task.Env["PROJECT_TOKEN"] != "yes" {
+		t.Fatalf("background prompt/env = %#v", task)
+	}
+	if _, ok := task.Env[EnvSessionID]; ok {
+		t.Fatalf("background task inherited %s: %#v", EnvSessionID, task.Env)
+	}
 }
 
 type generationClaimFailureLauncher struct {

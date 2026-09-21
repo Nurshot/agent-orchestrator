@@ -869,7 +869,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start a worker task and ask the orchestrator to title it */
+        /** Start a worker task and refine its title in the background */
         post: operations["delegateTask"];
         delete?: never;
         options?: never;

@@ -215,6 +215,11 @@ FROM sessions ORDER BY project_id, num;
 -- name: RenameSession :execrows
 UPDATE sessions SET display_name = ?, updated_at = ? WHERE id = ?;
 
+-- name: RenameSessionIfDisplayName :execrows
+UPDATE sessions
+SET display_name = sqlc.arg(display_name), updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id) AND display_name = sqlc.arg(current_display_name);
+
 -- name: SetSessionPreviewURL :execrows
 -- preview_revision is bumped on every call (even when preview_url is unchanged)
 -- so a repeated `ao preview <same-url>` still trips the sessions_cdc_update

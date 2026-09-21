@@ -757,6 +757,17 @@ func TestSessionRenameUpdatesDisplayName(t *testing.T) {
 		t.Fatalf("rename not persisted: %+v", got)
 	}
 
+	if changed, err := s.RenameSessionIfDisplayName(ctx, r.ID, "stale name", "Generated title", renamedAt.Add(time.Minute)); err != nil || changed {
+		t.Fatalf("conditional stale rename: changed=%v err=%v", changed, err)
+	}
+	if changed, err := s.RenameSessionIfDisplayName(ctx, r.ID, "Fix flaky tests", "Generated title", renamedAt.Add(time.Minute)); err != nil || !changed {
+		t.Fatalf("conditional rename: changed=%v err=%v", changed, err)
+	}
+	got, _, _ = s.GetSession(ctx, r.ID)
+	if got.DisplayName != "Generated title" {
+		t.Fatalf("conditional rename not persisted: %+v", got)
+	}
+
 	ok, err = s.RenameSession(ctx, "mer-missing", "Missing", renamedAt)
 	if err != nil {
 		t.Fatalf("rename missing: %v", err)

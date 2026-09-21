@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
 	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
@@ -55,12 +56,82 @@ type ChatLauncher interface {
 	StopChat(ctx context.Context, id domain.SessionID) error
 }
 
+type chatBackgroundTaskRunner interface {
+	RunBackgroundTask(context.Context, domain.AgentHarness, ports.ChatStartConfig, string) (string, error)
+}
+
 // ChatStart is what the launcher needs. It mirrors the terminal path's
 // LaunchConfig in spirit: everything resolved, nothing left to look up.
 type ChatStart = ports.ChatControllerStart
 
 // ChatStarted is the durable result of a launch.
 type ChatStarted = ports.ChatControllerStarted
+
+// RunBackgroundTask executes one short-lived model call with the harness and
+// account already resolved for id. It creates no AO session or terminal.
+func (m *Manager) RunBackgroundTask(
+	ctx context.Context,
+	id domain.SessionID,
+	systemPrompt, prompt, effort string,
+) (string, error) {
+	runner, ok := m.chat.(chatBackgroundTaskRunner)
+	if !ok {
+		return "", ports.ErrChatUnsupported
+	}
+	rec, err := m.getRecord(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	project, err := m.loadProject(ctx, rec.ProjectID)
+	if err != nil {
+		return "", err
+	}
+
+	releaseHarness, err := m.beginHarnessUse(rec.Harness)
+	if err != nil {
+		return "", err
+	}
+	defer releaseHarness()
+	releaseCodex, err := m.acquireCodexControllerAdmission(ctx, rec.Harness)
+	if err != nil {
+		return "", err
+	}
+	defer releaseCodex()
+
+	config := effectiveAgentConfig(rec.Harness, rec.Kind, project.Config)
+	if rec.Metadata.Model != "" {
+		config.Model = rec.Metadata.Model
+	}
+	if strings.TrimSpace(effort) != "" {
+		config.Effort = strings.TrimSpace(effort)
+	}
+	if rec.Metadata.Permissions != "" {
+		config.Permissions = rec.Metadata.Permissions
+	}
+	if config.Permissions == "" {
+		config.Permissions = ports.PermissionModeAuto
+	}
+	env := m.runtimeEnv(rec.ID, rec.ProjectID, rec.IssueID, project.Config.Env)
+	if m.agents != nil {
+		if agent, found := m.agents.Agent(rec.Harness); found {
+			m.augmentAgentRuntimeEnv(agent, env)
+		}
+	}
+	// This provider call is not the worker session. Suppress session-scoped hooks
+	// so its prompt and response cannot be projected into the worker's history.
+	deleteProtectedEnv(env, EnvSessionID, envKeysCaseInsensitive)
+	pinRuntimePermissionEnv(env, config.Permissions)
+
+	return runner.RunBackgroundTask(ctx, rec.Harness, ports.ChatStartConfig{
+		DataDir:       m.dataDir,
+		WorkspacePath: rec.Metadata.WorkspacePath,
+		Env:           env,
+		Model:         config.Model,
+		Effort:        config.Effort,
+		Permissions:   config.Permissions,
+		SystemPrompt:  systemPrompt,
+	}, prompt)
+}
 
 // ChatControllerCommit carries the post-commit conversation state back to Chat
 // Service without making it read again after durable ownership has changed.
