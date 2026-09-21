@@ -72,6 +72,7 @@ export default function ChangelogPage() {
               Release archive
               <ArrowRight className="size-3.5" />
             </Link>
+            {/* RSS is a document endpoint, so it intentionally uses full navigation. */}
             <a
               href="/changelog.xml"
               className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/70 transition-colors"

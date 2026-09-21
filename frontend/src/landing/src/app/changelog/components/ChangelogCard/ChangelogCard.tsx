@@ -36,7 +36,7 @@ export function ChangelogCard({ entry }: ChangelogCardProps) {
 						</p>
 					)}
 				</div>
-				<ArrowUpRight className="hidden size-5 text-muted-foreground transition-all duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-foreground sm:block" />
+				<ArrowUpRight className="hidden size-5 text-muted-foreground transition-[color,transform] duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-foreground sm:block" />
 			</article>
 		</Link>
 	);

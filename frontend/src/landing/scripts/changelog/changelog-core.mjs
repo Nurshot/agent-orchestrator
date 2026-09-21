@@ -1,4 +1,10 @@
 const INTERNAL_TYPES = new Set(["build", "chore", "ci", "docs", "refactor", "test"]);
+const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
+	month: "short",
+	day: "numeric",
+	year: "numeric",
+	timeZone: "UTC",
+});
 
 function labelNames(pullRequest) {
 	return new Set(
@@ -58,12 +64,7 @@ export function extractPullRequestNumbers(content) {
 }
 
 function formatDate(date) {
-	return new Intl.DateTimeFormat("en-US", {
-		month: "short",
-		day: "numeric",
-		year: "numeric",
-		timeZone: "UTC",
-	}).format(new Date(`${date}T12:00:00Z`));
+	return DATE_FORMATTER.format(new Date(`${date}T12:00:00Z`));
 }
 
 function badge(pullRequest) {
