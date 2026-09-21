@@ -145,9 +145,9 @@ type Server struct {
 	availableSandboxProviders []string
 	// capabilityGatedProviders is the set of providers that additionally require
 	// a matching organization capability. Empty by default (no gating).
-	capabilityGatedProviders  map[string]bool
-	provisioning              sandbox.ProvisioningDefaults
-	workerTokens              WorkerTokens
+	capabilityGatedProviders map[string]bool
+	provisioning             sandbox.ProvisioningDefaults
+	workerTokens             WorkerTokens
 	// workerTokenLifetime is zero when the deployment does not override the
 	// protocol default; workerTokenTTL() resolves that.
 	workerTokenLifetime     time.Duration

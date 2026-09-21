@@ -50,11 +50,11 @@ type Config struct {
 	// organizations have been flagged in WorkOS.
 	CapabilityGatedProviders []string
 	AllowAnonymousCheckout   bool
-	ProviderSecretKey         []byte
-	Release                   string
-	RepositoryBrokerURL       string
-	RepositoryBrokerToken     string
-	EnvironmentControlToken   string
+	ProviderSecretKey        []byte
+	Release                  string
+	RepositoryBrokerURL      string
+	RepositoryBrokerToken    string
+	EnvironmentControlToken  string
 
 	// PublicURL is the origin a sandbox worker dials back to. A worker opens
 	// no inbound port, so this is the only way it can reach the control plane.
