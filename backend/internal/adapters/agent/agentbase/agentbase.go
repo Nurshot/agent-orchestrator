@@ -72,6 +72,18 @@ func TranscriptInProjects(ctx context.Context, projectsDir, relativePath string)
 		if !project.IsDir() {
 			continue
 		}
+		name := filepath.Base(relativePath)
+		if !strings.HasPrefix(name, "*") {
+			info, err := os.Stat(filepath.Join(projectsDir, project.Name(), relativePath))
+			switch {
+			case err == nil && info.Mode().IsRegular() && info.Size() > 0:
+				return true, nil
+			case err == nil, os.IsNotExist(err):
+				continue
+			default:
+				return false, err
+			}
+		}
 		candidateDir := filepath.Join(projectsDir, project.Name(), filepath.Dir(relativePath))
 		entries, err := os.ReadDir(candidateDir)
 		if os.IsNotExist(err) {
@@ -81,11 +93,10 @@ func TranscriptInProjects(ctx context.Context, projectsDir, relativePath string)
 			return false, err
 		}
 		for _, entry := range entries {
-			name := filepath.Base(relativePath)
-			matched := entry.Name() == name
-			if strings.HasPrefix(name, "*") {
-				matched = strings.HasSuffix(entry.Name(), strings.TrimPrefix(name, "*"))
+			if err := ctx.Err(); err != nil {
+				return false, err
 			}
+			matched := strings.HasSuffix(entry.Name(), strings.TrimPrefix(name, "*"))
 			if !matched {
 				continue
 			}

@@ -43,6 +43,20 @@ func TestTranscriptInProjectsRequiresNonEmptyRegularFile(t *testing.T) {
 	}
 }
 
+func TestTranscriptInProjectsFindsExactRelativePath(t *testing.T) {
+	root := t.TempDir()
+	project := filepath.Join(root, "project", "chats")
+	if err := os.MkdirAll(project, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "session.jsonl"), []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := TranscriptInProjects(context.Background(), root, filepath.Join("chats", "session.jsonl")); err != nil || !ok {
+		t.Fatalf("exact transcript = %v, %v", ok, err)
+	}
+}
+
 func TestTranscriptInProjectsHonorsCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
