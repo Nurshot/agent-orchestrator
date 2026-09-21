@@ -118,9 +118,7 @@ func installKimiConfigHooks(cfg ports.WorkspaceHookConfig) error {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("read %s: %w", path, err)
 	}
-	if seeded, ok, err := kimiSeedConfig(path, data, source); err != nil {
-		return err
-	} else if ok {
+	if seeded, ok := kimiSeedConfig(path, data, source); ok {
 		data = seeded
 	}
 	body := mergeKimiHooksConfig(string(data))
@@ -248,24 +246,24 @@ func kimiCodeHomeFromEnv(env map[string]string) (string, bool) {
 	return "", false
 }
 
-func kimiSeedConfig(targetPath string, existing []byte, source *kimiConfigSeedSource) ([]byte, bool, error) {
+func kimiSeedConfig(targetPath string, existing []byte, source *kimiConfigSeedSource) ([]byte, bool) {
 	if kimiConfigHasAPIKey(existing) {
-		return nil, false, nil
+		return nil, false
 	}
 	if !kimiConfigCanSeed(existing) {
-		return nil, false, nil
+		return nil, false
 	}
 	if source == nil {
-		return nil, false, nil
+		return nil, false
 	}
 	if len(source.config) == 0 {
-		return nil, false, nil
+		return nil, false
 	}
 	sourcePath := filepath.Join(source.home, "config.toml")
 	if sameKimiConfigPath(sourcePath, targetPath) {
-		return nil, false, nil
+		return nil, false
 	}
-	return source.config, true, nil
+	return source.config, true
 }
 
 func kimiConfigCanSeed(existing []byte) bool {
