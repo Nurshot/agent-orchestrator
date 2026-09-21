@@ -198,7 +198,7 @@ export function FileContentPane({
 			data-testid="unsaved-file-indicator"
 		/>
 	) : null;
-	const wholeFileAnnotationActive = annotation.target?.surface !== "review"
+	const wholeFileAnnotationActive = annotation.target?.surface === "focused"
 		&& annotation.target?.path === detail.path
 		&& annotation.target.side === "file"
 		&& annotation.target.line == null;

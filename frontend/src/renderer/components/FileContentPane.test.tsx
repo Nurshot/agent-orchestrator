@@ -352,8 +352,38 @@ describe("FileContentPane", () => {
 
 		renderWithQuery(<FileContentPane annotation={model} path="src/App.tsx" sessionId="sess-1" split={false} />);
 
-		const composer = await screen.findByRole("textbox", { name: /Feedback for src\/App\.tsx/ });
+		const composers = await screen.findAllByRole("textbox", { name: /Feedback for src\/App\.tsx/ });
+		expect(composers).toHaveLength(1);
+		const [composer] = composers;
 		expect(composer.closest(".absolute.top-full")?.parentElement).toHaveClass("sticky", "top-0");
+	});
+
+	it("leaves review-surface whole-file feedback to the review pane", async () => {
+		const model = noopAnnotation();
+		model.target = { path: "src/App.tsx", side: "file", scope: "combined", surface: "review" };
+		getMock.mockResolvedValue({
+			data: {
+				sessionId: "sess-1",
+				path: "src/App.tsx",
+				status: "modified",
+				additions: 1,
+				deletions: 0,
+				size: 18,
+				binary: false,
+				deleted: false,
+				content: "export const x = 1;\n",
+				contentTruncated: false,
+				diff: "@@ -0,0 +1,1 @@\n+export const x = 1;\n",
+				diffTruncated: false,
+				workspaceVersion: "workspace-1",
+				fileFingerprint: "file-1",
+			},
+		});
+
+		renderWithQuery(<FileContentPane annotation={model} path="src/App.tsx" sessionId="sess-1" split={false} />);
+
+		await screen.findByRole("button", { name: "Add feedback" });
+		expect(screen.queryByRole("textbox", { name: /Feedback for src\/App\.tsx/ })).not.toBeInTheDocument();
 	});
 
 	it("loads the before revision when opening the complete view of a deleted file", async () => {
