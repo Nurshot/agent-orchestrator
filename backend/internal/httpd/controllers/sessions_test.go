@@ -591,7 +591,7 @@ func (f *fakeSessionService) ListPRFiles(_ context.Context, id domain.SessionID,
 	return sessionsvc.PRFiles{SessionID: id}, nil
 }
 
-func (f *fakeSessionService) GetPRFile(_ context.Context, id domain.SessionID, _ int, _ string, path string) (sessionsvc.WorkspaceFileDetail, error) {
+func (f *fakeSessionService) GetPRFile(_ context.Context, id domain.SessionID, _ int, _ string, path string, _ *string) (sessionsvc.WorkspaceFileDetail, error) {
 	if _, ok := f.sessions[id]; !ok {
 		return sessionsvc.WorkspaceFileDetail{}, apierr.NotFound("SESSION_NOT_FOUND", "Unknown session")
 	}

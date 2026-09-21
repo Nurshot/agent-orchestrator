@@ -46,7 +46,7 @@ vi.mock("./FileTree", () => ({
 }));
 
 vi.mock("./FileContentPane", () => ({
-	FileContentPane: ({ initialEditing, initialMode, path }: { initialEditing?: boolean; initialMode?: string; path: string | null }) => <div data-editing={String(Boolean(initialEditing))} data-mode={initialMode ?? "default"} data-testid="content-pane">{path ?? "none"}</div>,
+	FileContentPane: ({ initialEditing, initialMode, path, previousPath }: { initialEditing?: boolean; initialMode?: string; path: string | null; previousPath?: string }) => <div data-editing={String(Boolean(initialEditing))} data-mode={initialMode ?? "default"} data-previous-path={previousPath} data-testid="content-pane">{path ?? "none"}</div>,
 }));
 
 vi.mock("./diffs/WorkspaceReviewPane", () => ({
@@ -245,6 +245,22 @@ describe("SessionFileExplorer", () => {
 		await waitFor(() => expect(client.getQueryData(["session-source-files", sessionId, "pull_request", url, "head-1"])).toBeDefined());
 		client.setQueryData(["session-scm-summary", sessionId], [{ headSha: "head-2", number: 42, url, sourceBranch: "files", title: "Files" }]);
 		await waitFor(() => expect(client.getQueryData(["session-source-files", sessionId, "pull_request", url, "head-2"])).toBeDefined());
+	});
+
+	it("passes a renamed file's previous path to the PR detail request", async () => {
+		const sessionId = "sess-pr-rename";
+		const url = "https://example.test/pr/42";
+		useUiStore.getState().setFilesSource(sessionId, { kind: "pull_request", number: 42, url, label: "PR #42 · files" });
+		getMock.mockImplementation(async (path: string) => {
+			if (path === "/api/v1/sessions/{sessionId}/pr") {
+				return { data: { sessionId, prs: [{ headSha: "head-1", number: 42, url, sourceBranch: "files", title: "Files" }] } };
+			}
+			return { data: { sessionId, files: [{ path: "src/App.tsx", previousPath: "src/OldApp.tsx", status: "renamed", additions: 0, deletions: 0, size: 10, binary: false }], truncated: false } };
+		});
+		renderWithQuery(<SessionFileExplorer isMaximized sessionId={sessionId} />);
+
+		await userEvent.click(await screen.findByRole("button", { name: "select src/App.tsx" }));
+		expect(screen.getByTestId("content-pane")).toHaveAttribute("data-previous-path", "src/OldApp.tsx");
 	});
 
 	it("selects duplicate PR numbers by URL and preserves the source across remounts", async () => {

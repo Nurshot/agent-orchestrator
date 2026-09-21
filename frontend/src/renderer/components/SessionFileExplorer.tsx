@@ -117,6 +117,7 @@ export function SessionFileExplorer({
 		setFilesChangedOnly(sessionId, next);
 	};
 	const treeSelectedPath = selectedPath;
+	const selectedPreviousPath = filesQuery.data?.files.find((file) => file.path === selectedPath)?.previousPath;
 	const sourceValue = source.kind === "workspace" ? "workspace" : source.url;
 	const selectSource = (value: string) => {
 		setSourceNotice("");
@@ -270,7 +271,7 @@ export function SessionFileExplorer({
 					<ResizableHandle />
 					<ResizablePanel defaultSize="74%" minSize="40%">
 						<ContentScrollArea>
-							<FileContentPane annotation={annotation} path={selectedPath} sessionId={sessionId} source={querySource} split={split} />
+							<FileContentPane annotation={annotation} path={selectedPath} previousPath={selectedPreviousPath} sessionId={sessionId} source={querySource} split={split} />
 						</ContentScrollArea>
 					</ResizablePanel>
 				</ResizablePanelGroup>

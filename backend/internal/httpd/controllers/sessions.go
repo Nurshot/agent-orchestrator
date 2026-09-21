@@ -112,7 +112,7 @@ type SessionService interface {
 	GetWorkspaceFileAtCommit(ctx context.Context, id domain.SessionID, path, commitSHA string) (sessionsvc.WorkspaceFileDetail, error)
 	UpdateWorkspaceFile(ctx context.Context, id domain.SessionID, input sessionsvc.UpdateWorkspaceFileInput) (sessionsvc.WorkspaceFileDetail, error)
 	ListPRFiles(ctx context.Context, id domain.SessionID, number int, sourceURL string) (sessionsvc.PRFiles, error)
-	GetPRFile(ctx context.Context, id domain.SessionID, number int, sourceURL, path string) (sessionsvc.WorkspaceFileDetail, error)
+	GetPRFile(ctx context.Context, id domain.SessionID, number int, sourceURL, path string, previousPath *string) (sessionsvc.WorkspaceFileDetail, error)
 	GetPRFileRevision(ctx context.Context, id domain.SessionID, number int, sourceURL, path string, side sessionsvc.WorkspaceFileBlobSide) (sessionsvc.WorkspaceFileRevision, error)
 	GetWorkspaceFileBlob(ctx context.Context, id domain.SessionID, path string, side sessionsvc.WorkspaceFileBlobSide) (sessionsvc.WorkspaceFileBlob, error)
 	GetWorkspaceDiffs(ctx context.Context, id domain.SessionID, input sessionsvc.WorkspaceDiffInput) (sessionsvc.WorkspaceDiffs, error)
@@ -654,7 +654,13 @@ func (c *SessionsController) getPRFile(w http.ResponseWriter, r *http.Request) {
 		envelope.WriteAPIError(w, r, http.StatusBadRequest, "bad_request", "WORKSPACE_PATH_REQUIRED", "path is required", nil)
 		return
 	}
-	file, err := c.Svc.GetPRFile(r.Context(), sessionID(r), number, strings.TrimSpace(r.URL.Query().Get("sourceUrl")), relPath)
+	query := r.URL.Query()
+	var previousPath *string
+	if query.Has("previousPath") {
+		value := strings.TrimSpace(query.Get("previousPath"))
+		previousPath = &value
+	}
+	file, err := c.Svc.GetPRFile(r.Context(), sessionID(r), number, strings.TrimSpace(query.Get("sourceUrl")), relPath, previousPath)
 	if err != nil {
 		envelope.WriteError(w, r, err)
 		return

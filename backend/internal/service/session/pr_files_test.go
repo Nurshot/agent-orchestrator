@@ -36,12 +36,34 @@ func TestPRFilesUsePersistedBaseAndHeadWithoutReadingWorkspaceChanges(t *testing
 	if _, err := os.Stat(filepath.Join(repo, "notes.txt")); err != nil {
 		t.Fatalf("workspace was unexpectedly changed: %v", err)
 	}
-	detail, err := svc.GetPRFile(context.Background(), "ao-1", 42, "", "README.md")
+	previousPath := ""
+	detail, err := svc.GetPRFile(context.Background(), "ao-1", 42, "", "README.md", &previousPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if detail.Content != "pull request\n" || !strings.Contains(detail.Diff, "+pull request") {
 		t.Fatalf("detail = %+v", detail)
+	}
+}
+
+func TestGetPRFileScopesRenameMetadataToSelectedPaths(t *testing.T) {
+	repo := newWorkspaceRepo(t)
+	runGit(t, repo, "remote", "add", "origin", "https://example.test/acme/repo.git")
+	base := strings.TrimSpace(runGit(t, repo, "rev-parse", "HEAD"))
+	runGit(t, repo, "mv", "README.md", "RENAMED.md")
+	runGit(t, repo, "commit", "-m", "rename readme")
+	head := strings.TrimSpace(runGit(t, repo, "rev-parse", "HEAD"))
+	st := newFakeStore()
+	st.sessions["ao-1"] = domain.SessionRecord{ID: "ao-1", Metadata: domain.SessionMetadata{WorkspacePath: repo}}
+	st.prs["ao-1"] = []domain.PullRequest{{Number: 42, URL: "https://example.test/acme/repo/-/merge_requests/42", Provider: "gitlab", Host: "example.test", Repo: "acme/repo", BaseSHA: base, HeadSHA: head}}
+
+	previousPath := "README.md"
+	detail, err := (&Service{store: st}).GetPRFile(context.Background(), "ao-1", 42, "", "RENAMED.md", &previousPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail.Status != WorkspaceFileRenamed || detail.PreviousPath != previousPath {
+		t.Fatalf("detail = %#v, want rename from %q", detail, previousPath)
 	}
 }
 

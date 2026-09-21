@@ -220,8 +220,9 @@ type PRFilesQuery struct {
 
 // PRFileQuery identifies one file in an associated pull request.
 type PRFileQuery struct {
-	Path      string `query:"path" required:"true" description:"Repository-relative file path."`
-	SourceURL string `query:"sourceUrl,omitempty" description:"Stable URL of the selected associated pull request."`
+	Path         string `query:"path" required:"true" description:"Repository-relative file path."`
+	PreviousPath string `query:"previousPath,omitempty" description:"Previous repository-relative path supplied by the selected PR file summary for rename detection."`
+	SourceURL    string `query:"sourceUrl,omitempty" description:"Stable URL of the selected associated pull request."`
 }
 
 // PRFileRevisionQuery selects one immutable side of a pull-request comparison.

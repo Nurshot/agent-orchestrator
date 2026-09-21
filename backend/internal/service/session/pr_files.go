@@ -58,7 +58,7 @@ func (s *Service) ListPRFiles(ctx context.Context, id domain.SessionID, number i
 }
 
 // GetPRFile returns one file and its exact base...head diff for an associated PR.
-func (s *Service) GetPRFile(ctx context.Context, id domain.SessionID, number int, sourceURL, rawPath string) (WorkspaceFileDetail, error) {
+func (s *Service) GetPRFile(ctx context.Context, id domain.SessionID, number int, sourceURL, rawPath string, rawPreviousPath *string) (WorkspaceFileDetail, error) {
 	rec, pr, err := s.prFileSource(ctx, id, number, sourceURL)
 	if err != nil {
 		return WorkspaceFileDetail{}, err
@@ -68,7 +68,19 @@ func (s *Service) GetPRFile(ctx context.Context, id domain.SessionID, number int
 		return WorkspaceFileDetail{}, err
 	}
 	root := rec.Metadata.WorkspacePath
-	statuses, previous, err := workspaceDiffNameStatus(ctx, root, pr.BaseSHA+"..."+pr.HeadSHA)
+	revArgs := []string{pr.BaseSHA + "..." + pr.HeadSHA}
+	var paths []string
+	if rawPreviousPath != nil {
+		paths = []string{rel}
+		if strings.TrimSpace(*rawPreviousPath) != "" {
+			previousPath, cleanErr := cleanWorkspaceRelativePath(*rawPreviousPath)
+			if cleanErr != nil {
+				return WorkspaceFileDetail{}, cleanErr
+			}
+			paths = append(paths, previousPath)
+		}
+	}
+	statuses, previous, err := workspaceDiffNameStatusPaths(ctx, root, revArgs, paths)
 	if err != nil {
 		return WorkspaceFileDetail{}, unavailablePRSource()
 	}
@@ -76,7 +88,7 @@ func (s *Service) GetPRFile(ctx context.Context, id domain.SessionID, number int
 	if !ok {
 		return WorkspaceFileDetail{}, apierr.NotFound("PR_FILE_NOT_FOUND", "File is not part of the selected pull request")
 	}
-	counts, err := workspaceDiffNumstat(ctx, root, pr.BaseSHA+"..."+pr.HeadSHA)
+	counts, err := workspaceDiffNumstatPaths(ctx, root, revArgs, paths)
 	if err != nil {
 		return WorkspaceFileDetail{}, unavailablePRSource()
 	}

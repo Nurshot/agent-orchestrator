@@ -10926,6 +10926,8 @@ export interface operations {
             query: {
                 /** @description Repository-relative file path. */
                 path: string;
+                /** @description Previous repository-relative path supplied by the selected PR file summary for rename detection. */
+                previousPath?: string;
                 /** @description Stable URL of the selected associated pull request. */
                 sourceUrl?: string;
             };

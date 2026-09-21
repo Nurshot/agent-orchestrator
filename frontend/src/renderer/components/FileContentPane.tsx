@@ -50,6 +50,7 @@ export function FileContentPane({
 	commitSha,
 	onDirtyChange,
 	path,
+	previousPath,
 	sessionId,
 	split,
 	scope = "combined",
@@ -62,6 +63,7 @@ export function FileContentPane({
 	commitSha?: string;
 	onDirtyChange?: (dirty: boolean) => void;
 	path: string | null;
+	previousPath?: string;
 	sessionId: string;
 	split: boolean;
 	scope?: WorkspaceDiffScope;
@@ -79,7 +81,7 @@ export function FileContentPane({
 	// an active native text selection.
 	const [selectionOrMenuActive, setSelectionOrMenuActive] = useState(false);
 	const query = useQuery({
-		...sessionSourceFileQueryOptions(sessionId, source, path ?? "", t("files.error.loadWorkspaceFile"), scope, commitSha),
+		...sessionSourceFileQueryOptions(sessionId, source, path ?? "", t("files.error.loadWorkspaceFile"), scope, commitSha, previousPath),
 		enabled: Boolean(path) && !selectionOrMenuActive,
 	});
 	const hasUnsavedChanges = Boolean(editing && query.data && draft !== query.data.content);

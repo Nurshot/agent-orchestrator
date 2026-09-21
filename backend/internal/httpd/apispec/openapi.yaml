@@ -4946,6 +4946,14 @@ paths:
         schema:
           description: Repository-relative file path.
           type: string
+      - description: Previous repository-relative path supplied by the selected PR
+          file summary for rename detection.
+        in: query
+        name: previousPath
+        schema:
+          description: Previous repository-relative path supplied by the selected
+            PR file summary for rename detection.
+          type: string
       - description: Stable URL of the selected associated pull request.
         in: query
         name: sourceUrl

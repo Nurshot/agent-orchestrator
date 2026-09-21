@@ -87,9 +87,9 @@ async function fetchSessionWorkspaceFile(sessionId: string, path: string, scope:
 	return data as WorkspaceFileDetail;
 }
 
-async function fetchSessionPRFile(sessionId: string, number: number, sourceUrl: string, path: string, errorMessage: string): Promise<WorkspaceFileDetail> {
+async function fetchSessionPRFile(sessionId: string, number: number, sourceUrl: string, path: string, previousPath: string, errorMessage: string): Promise<WorkspaceFileDetail> {
 	const { data, error } = await apiClient.GET("/api/v1/sessions/{sessionId}/pr/{prNumber}/file", {
-		params: { path: { sessionId, prNumber: number }, query: { path, sourceUrl } },
+		params: { path: { sessionId, prNumber: number }, query: { path, previousPath, sourceUrl } },
 	});
 	if (error) throw new Error(apiErrorMessage(error, errorMessage));
 	if (!data) throw new Error(errorMessage);
@@ -105,10 +105,10 @@ export function sessionWorkspaceFileQueryOptions(sessionId: string, path: string
 	};
 }
 
-export function sessionSourceFileQueryOptions(sessionId: string, source: FilesSource, path: string, errorMessage = "Unable to load file", scope: WorkspaceDiffScope = "combined", commitSha?: string): UseQueryOptions<WorkspaceFileDetail> {
+export function sessionSourceFileQueryOptions(sessionId: string, source: FilesSource, path: string, errorMessage = "Unable to load file", scope: WorkspaceDiffScope = "combined", commitSha?: string, previousPath = ""): UseQueryOptions<WorkspaceFileDetail> {
 	return source.kind === "workspace"
 		? sessionWorkspaceFileQueryOptions(sessionId, path, errorMessage, scope, commitSha)
-		: { queryKey: ["session-source-file", sessionId, "pull_request", source.url, source.snapshot ?? "", path], queryFn: () => fetchSessionPRFile(sessionId, source.number, source.url, path, errorMessage) };
+		: { queryKey: ["session-source-file", sessionId, "pull_request", source.url, source.snapshot ?? "", path], queryFn: () => fetchSessionPRFile(sessionId, source.number, source.url, path, previousPath, errorMessage) };
 }
 
 export const sessionWorkspaceDiffsQueryKey = (

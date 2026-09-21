@@ -2037,8 +2037,13 @@ func workspaceDiffStatuses(ctx context.Context, root, base string) (map[string]W
 // revision arguments (e.g. a single base for base..worktree, "--cached" for
 // index..HEAD, or two revisions for a committed range) and parses the result.
 func workspaceDiffNameStatus(ctx context.Context, root string, revArgs ...string) (map[string]WorkspaceFileStatus, map[string]string, error) {
+	return workspaceDiffNameStatusPaths(ctx, root, revArgs, nil)
+}
+
+func workspaceDiffNameStatusPaths(ctx context.Context, root string, revArgs, paths []string) (map[string]WorkspaceFileStatus, map[string]string, error) {
 	args := append([]string{"diff", "--name-status", "--find-renames", "-z"}, revArgs...)
 	args = append(args, "--")
+	args = append(args, paths...)
 	out, err := gitWorkspaceOutput(ctx, root, args...)
 	if err != nil {
 		return nil, nil, err
@@ -2120,8 +2125,13 @@ func workspaceNumstat(ctx context.Context, root, base string) (map[string][2]int
 // workspaceDiffNumstat runs `git diff --numstat` with the given revision
 // arguments; see workspaceDiffNameStatus for the argument forms.
 func workspaceDiffNumstat(ctx context.Context, root string, revArgs ...string) (map[string][2]int, error) {
+	return workspaceDiffNumstatPaths(ctx, root, revArgs, nil)
+}
+
+func workspaceDiffNumstatPaths(ctx context.Context, root string, revArgs, paths []string) (map[string][2]int, error) {
 	args := append([]string{"diff", "--numstat", "--find-renames", "-z"}, revArgs...)
 	args = append(args, "--")
+	args = append(args, paths...)
 	out, err := gitWorkspaceOutput(ctx, root, args...)
 	if err != nil {
 		return nil, err
