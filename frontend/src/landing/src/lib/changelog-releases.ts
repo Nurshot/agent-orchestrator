@@ -3,6 +3,7 @@ import { normalizeContentDate } from "./content-utils";
 
 const RELEASES_REPO = "Untrivial-ai/agent-orchestrator";
 const STABLE_TAG = /^v\d+\.\d+\.\d+$/;
+const RELEASES_PER_PAGE = 25;
 
 interface GitHubRelease {
 	tag_name: string;
@@ -44,29 +45,31 @@ let stableReleaseEntriesPromise: Promise<ChangelogEntry[]> | undefined;
 async function loadStableReleaseEntries(): Promise<ChangelogEntry[]> {
 	try {
 		const token = process.env.GITHUB_TOKEN;
-		const pages = await Promise.all(
-			[1, 2, 3, 4].map(async (page) => {
-				const response = await fetch(
-					`https://api.github.com/repos/${RELEASES_REPO}/releases?per_page=25&page=${page}`,
-					{
-						headers: {
-							Accept: "application/vnd.github+json",
-							"X-GitHub-Api-Version": "2022-11-28",
-							...(token ? { Authorization: `Bearer ${token}` } : {}),
-						},
-						next: { revalidate: 3600 },
+		const releases: GitHubRelease[] = [];
+
+		for (let page = 1; ; page += 1) {
+			const response = await fetch(
+				`https://api.github.com/repos/${RELEASES_REPO}/releases?per_page=${RELEASES_PER_PAGE}&page=${page}`,
+				{
+					headers: {
+						Accept: "application/vnd.github+json",
+						"X-GitHub-Api-Version": "2022-11-28",
+						...(token ? { Authorization: `Bearer ${token}` } : {}),
 					},
-				);
+					next: { revalidate: 3600 },
+				},
+			);
 
-				if (!response.ok) {
-					throw new Error(`GitHub releases request failed with ${response.status}`);
-				}
-				return (await response.json()) as GitHubRelease[];
-			}),
-		);
+			if (!response.ok) {
+				throw new Error(`GitHub releases request failed with ${response.status}`);
+			}
 
-		return pages
-			.flat()
+			const pageReleases = (await response.json()) as GitHubRelease[];
+			releases.push(...pageReleases);
+			if (pageReleases.length < RELEASES_PER_PAGE) break;
+		}
+
+		return [...new Map(releases.map((release) => [release.tag_name, release])).values()]
 			.filter(isStableRelease)
 			.map(releaseToEntry)
 			.sort(
