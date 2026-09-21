@@ -41,11 +41,19 @@ function parseFrontmatter(filePath: string): ChangelogEntry | null {
 }
 
 export function getWeeklyUpdates(): ChangelogEntry[] {
+	return getLocalEntries((file) => file.endsWith("-weekly-update.mdx"));
+}
+
+function getLocalEntries(
+	includeFile: (file: string) => boolean = () => true,
+): ChangelogEntry[] {
 	if (!fs.existsSync(CHANGELOG_DIR)) {
 		return [];
 	}
 
-	const files = fs.readdirSync(CHANGELOG_DIR).filter((f) => f.endsWith(".mdx"));
+	const files = fs
+		.readdirSync(CHANGELOG_DIR)
+		.filter((file) => file.endsWith(".mdx") && includeFile(file));
 
 	return files
 		.map((file) => parseFrontmatter(path.join(CHANGELOG_DIR, file)))
@@ -59,16 +67,16 @@ export function getChangelogEntries(): ChangelogEntry[] {
 }
 
 export async function getChangelogEntry(slug: string): Promise<ChangelogEntry | undefined> {
-	const weeklyEntry = getWeeklyUpdates().find((entry) => entry.slug === slug);
-	return weeklyEntry ?? getStableReleaseEntry(slug);
+	const localEntry = getLocalEntries().find((entry) => entry.slug === slug);
+	return localEntry ?? getStableReleaseEntry(slug);
 }
 
 export async function getAllChangelogSlugs(): Promise<string[]> {
-	const weeklySlugs = getWeeklyUpdates().map((entry) => entry.slug);
+	const localSlugs = getLocalEntries().map((entry) => entry.slug);
 	const releaseSlugs = (await getStableReleaseEntries()).map(
 		(entry) => entry.slug,
 	);
-	return [...new Set([...weeklySlugs, ...releaseSlugs])];
+	return [...new Set([...localSlugs, ...releaseSlugs])];
 }
 
 export function extractToc(

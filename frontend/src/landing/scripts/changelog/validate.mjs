@@ -44,7 +44,7 @@ for (const file of fs.readdirSync(changelogDirectory).filter((name) => name.ends
 			errors.push(`${file}: rangeStart and rangeEnd must both be YYYY-MM-DD dates`);
 		} else if (start > end) {
 			errors.push(`${file}: rangeStart must not be after rangeEnd`);
-		} else {
+		} else if (file.endsWith("-weekly-update.mdx")) {
 			ranges.push({ file, start, end });
 		}
 	}
