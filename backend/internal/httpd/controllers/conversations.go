@@ -182,7 +182,11 @@ func (c *ConversationsController) reviewResolve(w http.ResponseWriter, r *http.R
 		envelope.WriteAPIError(w, r, http.StatusBadRequest, "validation", "CHAT_DECISION_REQUIRED", "decisionId is required", nil)
 		return
 	}
-	if err := svc.ResolveForOwner(r.Context(), domain.ReviewConversationOwner(chi.URLParam(r, "reviewId")), chi.URLParam(r, "requestId"), ports.ChatDecision{ID: req.DecisionID}); err != nil {
+	requestID, ok := conversationRequestID(w, r)
+	if !ok {
+		return
+	}
+	if err := svc.ResolveForOwner(r.Context(), domain.ReviewConversationOwner(chi.URLParam(r, "reviewId")), requestID, ports.ChatDecision{ID: req.DecisionID}); err != nil {
 		writeConversationError(w, r, err)
 		return
 	}
@@ -207,7 +211,11 @@ func (c *ConversationsController) reviewResolveInput(w http.ResponseWriter, r *h
 		envelope.WriteAPIError(w, r, http.StatusBadRequest, "validation", "CHAT_INPUT_CONTENT_INVALID", "content is only allowed with accept", nil)
 		return
 	}
-	if err := svc.ResolveInputForOwner(r.Context(), domain.ReviewConversationOwner(chi.URLParam(r, "reviewId")), chi.URLParam(r, "requestId"), ports.ChatInputResponse{Action: action, Content: req.Content}); err != nil {
+	requestID, ok := conversationRequestID(w, r)
+	if !ok {
+		return
+	}
+	if err := svc.ResolveInputForOwner(r.Context(), domain.ReviewConversationOwner(chi.URLParam(r, "reviewId")), requestID, ports.ChatInputResponse{Action: action, Content: req.Content}); err != nil {
 		writeConversationError(w, r, err)
 		return
 	}
