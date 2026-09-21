@@ -156,8 +156,9 @@ export async function installFakeBridge(page: Page, opts: FakeBridgeOptions = {}
 				browser: {
 					nativeCompositionEnabled: true,
 					ensure: async (sessionId: string) => navState(`preview:${sessionId}`),
-					setBounds: () => undefined,
-					setOverlayOpen: () => undefined,
+		setBounds: () => undefined,
+		onBoundsApplied: () => () => undefined,
+		setOverlayOpen: () => undefined,
 					navigate: async ({ viewId }: { viewId: string }) => navState(viewId),
 					historySuggestions: async () => [],
 					historyFavicon: async () => undefined,
@@ -728,8 +729,9 @@ export async function installFakeAgent(page: Page, opts: FakeAgentOptions = {}):
 				browser: {
 					nativeCompositionEnabled: true,
 					ensure: async (sessionId: string) => navState(`preview:${sessionId}`),
-					setBounds: () => undefined,
-					setOverlayOpen: () => undefined,
+		setBounds: () => undefined,
+		onBoundsApplied: () => () => undefined,
+		setOverlayOpen: () => undefined,
 					navigate: async ({ viewId, url }: { viewId: string; url: string }) =>
 						state.browserError ? navState(viewId, "", state.browserError) : navState(viewId, url),
 					historySuggestions: async () => [],

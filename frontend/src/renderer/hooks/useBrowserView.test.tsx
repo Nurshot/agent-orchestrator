@@ -7,6 +7,7 @@ import {
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { OPEN_BROWSER_OVERLAY_SELECTOR } from "../lib/dom-selectors";
 
 type Listener = (state: BrowserNavState) => void;
 type TabsListener = (state: import("../../main/browser-view-host").BrowserTabsState) => void;
@@ -61,6 +62,7 @@ function setupBridge() {
 			isLoading: false,
 		})),
 		setBounds: vi.fn(),
+		onBoundsApplied: vi.fn(() => () => undefined),
 		setOverlayOpen: vi.fn(),
 		navigate: vi.fn(async ({ viewId }: { viewId: string }) => bridge.stateFor(viewId)),
 		clear: vi.fn(async (viewId: string) => bridge.stateFor(viewId)),
@@ -238,12 +240,18 @@ describe("useBrowserView", () => {
 		act(() => result.current.slotRef(slot));
 
 		await waitFor(() =>
-			expect(bridge.setBounds).toHaveBeenCalledWith({
+			expect(bridge.setBounds).toHaveBeenCalledWith(expect.objectContaining({
 				viewId: "42:sess-1",
 				rect: { x: 12, y: 34, width: 320, height: 240 },
 				visible: true,
-			}),
+			})),
 		);
+		const revisions = bridge.setBounds.mock.calls.map(([input]) => input.revision);
+		expect(
+			revisions.every(
+				(revision, index) => Number.isSafeInteger(revision) && (index === 0 || revision > revisions[index - 1]!),
+			),
+		).toBe(true);
 		expect(result.current.viewId).toBe("42:sess-1");
 	});
 
@@ -256,11 +264,11 @@ describe("useBrowserView", () => {
 		act(() => result.current.slotRef(slot));
 
 		await waitFor(() =>
-			expect(bridge.setBounds).toHaveBeenCalledWith({
+			expect(bridge.setBounds).toHaveBeenCalledWith(expect.objectContaining({
 				viewId: "42:sess-1",
 				rect: { x: 12, y: 34, width: 320, height: 240 },
 				visible: true,
-			}),
+			})),
 		);
 	});
 
@@ -290,11 +298,11 @@ describe("useBrowserView", () => {
 			result.current.slotRef(expandedSlot);
 		});
 
-		expect(bridge.setBounds).toHaveBeenLastCalledWith({
+		expect(bridge.setBounds).toHaveBeenLastCalledWith(expect.objectContaining({
 			viewId: "42:sess-1",
 			rect: { x: 8, y: 48, width: 1184, height: 700 },
 			visible: true,
-		});
+		}));
 	});
 
 	it("tracks popup tabs and routes manual select and close actions", async () => {
@@ -927,11 +935,11 @@ describe("useBrowserView", () => {
 		);
 		act(() => result.current.slotRef(slot));
 		await waitFor(() =>
-			expect(bridge.setBounds).toHaveBeenCalledWith({
+			expect(bridge.setBounds).toHaveBeenCalledWith(expect.objectContaining({
 				viewId: "42:sess-1",
 				rect: { x: 12, y: 34, width: 320, height: 240 },
 				visible: true,
-			}),
+			})),
 		);
 		bridge.setBounds.mockClear();
 
@@ -940,11 +948,11 @@ describe("useBrowserView", () => {
 		});
 
 		await waitFor(() =>
-			expect(bridge.setBounds).toHaveBeenCalledWith({
+			expect(bridge.setBounds).toHaveBeenCalledWith(expect.objectContaining({
 				viewId: "42:sess-1",
 				rect: { x: 12, y: 34, width: 320, height: 240 },
 				visible: true,
-			}),
+			})),
 		);
 	});
 
@@ -985,14 +993,14 @@ describe("useBrowserView", () => {
 		act(() => result.current.slotRef(slot));
 
 		await waitFor(() =>
-			expect(bridge.setBounds).toHaveBeenCalledWith({
+			expect(bridge.setBounds).toHaveBeenCalledWith(expect.objectContaining({
 				viewId: "42:sess-1",
 				// Left edge is inset by the resize handle's reserved 6px (see
 				// RESIZE_HANDLE_RESERVE_PX in useBrowserView.ts) so the handle's
 				// hit area, inside this same column, is never covered by the view.
 				rect: { x: 106, y: 34, width: 144, height: 240 },
 				visible: true,
-			}),
+			})),
 		);
 	});
 
@@ -1075,19 +1083,19 @@ describe("useBrowserView", () => {
 
 		rerender({ active: false });
 		await waitFor(() =>
-			expect(bridge.setBounds).toHaveBeenLastCalledWith({
+			expect(bridge.setBounds).toHaveBeenLastCalledWith(expect.objectContaining({
 				viewId: "42:sess-1",
 				rect: { x: 0, y: 0, width: 0, height: 0 },
 				visible: false,
-			}),
+			})),
 		);
 
 		unmount();
-		expect(bridge.setBounds).toHaveBeenLastCalledWith({
+		expect(bridge.setBounds).toHaveBeenLastCalledWith(expect.objectContaining({
 			viewId: "42:sess-1",
 			rect: { x: 0, y: 0, width: 0, height: 0 },
 			visible: false,
-		});
+		}));
 		expect(bridge.destroy).not.toHaveBeenCalled();
 	});
 
@@ -1109,11 +1117,11 @@ describe("useBrowserView", () => {
 		);
 		act(() => result.current.slotRef(slot));
 		await waitFor(() =>
-			expect(bridge.setBounds).toHaveBeenCalledWith({
+			expect(bridge.setBounds).toHaveBeenCalledWith(expect.objectContaining({
 				viewId: "42:sess-1",
 				rect: { x: 12, y: 34, width: 320, height: 240 },
 				visible: true,
-			}),
+			})),
 		);
 
 		bridge.setBounds.mockClear();
@@ -1151,11 +1159,11 @@ describe("useBrowserView", () => {
 		);
 		act(() => result.current.slotRef(slot));
 		await waitFor(() =>
-			expect(bridge.setBounds).toHaveBeenCalledWith({
+			expect(bridge.setBounds).toHaveBeenCalledWith(expect.objectContaining({
 				viewId: "42:sess-1",
 				rect: { x: 12, y: 34, width: 320, height: 240 },
 				visible: true,
-			}),
+			})),
 		);
 
 		const menu = document.createElement("div");
@@ -1217,11 +1225,11 @@ describe("useBrowserView", () => {
 		);
 		act(() => result.current.slotRef(slot));
 		await waitFor(() =>
-			expect(bridge.setBounds).toHaveBeenCalledWith({
+			expect(bridge.setBounds).toHaveBeenCalledWith(expect.objectContaining({
 				viewId: "42:sess-1",
 				rect: { x: 12, y: 34, width: 320, height: 240 },
 				visible: true,
-			}),
+			})),
 		);
 
 		const menu = document.createElement("div");
@@ -1300,6 +1308,24 @@ describe("useBrowserView", () => {
 			document.body.classList.remove("is-resizing-x");
 			await Promise.resolve();
 		});
+		expect(bridge.setOverlayOpen).not.toHaveBeenCalled();
+	});
+
+	it("does not scan the document for unrelated data-state mutations", async () => {
+		const bridge = setupBridge();
+		renderHook(() => useBrowserView({ sessionId: "sess-1", active: true, poppedOut: false }));
+		await waitFor(() => expect(bridge.ensure).toHaveBeenCalledWith("sess-1"));
+		const querySelector = vi.spyOn(document, "querySelector");
+
+		const unrelated = document.createElement("button");
+		unrelated.setAttribute("data-state", "closed");
+		document.body.appendChild(unrelated);
+		await act(async () => {
+			unrelated.setAttribute("data-state", "open");
+			await Promise.resolve();
+		});
+
+		expect(querySelector).not.toHaveBeenCalledWith(OPEN_BROWSER_OVERLAY_SELECTOR);
 		expect(bridge.setOverlayOpen).not.toHaveBeenCalled();
 	});
 
@@ -1774,11 +1800,11 @@ describe("useBrowserView", () => {
 			await act(async () => {
 				vi.advanceTimersByTime(300);
 			});
-			expect(bridge.setBounds).toHaveBeenLastCalledWith({
+			expect(bridge.setBounds).toHaveBeenLastCalledWith(expect.objectContaining({
 				viewId: "42:sess-1",
 				rect: { x: 0, y: 0, width: 0, height: 0 },
 				visible: false,
-			});
+			}));
 
 			// Exiting fullscreen restores the view at its measured bounds.
 			bridge.setBounds.mockClear();
