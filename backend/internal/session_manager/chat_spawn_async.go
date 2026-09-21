@@ -89,18 +89,26 @@ const asyncChatSpawnBudget = 10 * time.Minute
 // at the session, and their queued messages live in it.
 func (m *Manager) completeAsyncChatSpawn(ctx context.Context, in asyncChatSpawn) {
 	id := in.record.ID
+	totalStarted := time.Now()
+	stageStarted := totalStarted
 	baseRefs := m.refreshDefaultBranchesBestEffort(ctx, in.project)
+	m.logAsyncChatSpawnStage(id, "default_branch_refresh", stageStarted)
+	stageStarted = time.Now()
 	ws, workspaceProject, err := m.createSessionWorkspace(ctx, in.project, in.cfg, id, in.branch, baseRefs)
 	if err != nil {
 		m.failAsyncChatSpawn(ctx, id, wrapSpawnStage(id, ErrWorkspaceCreate, err))
 		return
 	}
+	m.logAsyncChatSpawnStage(id, "workspace_create", stageStarted)
+	stageStarted = time.Now()
 	if err := m.provisionWorkspace(ctx, in.project, ws.Path); err != nil {
 		m.destroySpawnWorkspace(ctx, ws, workspaceProject)
 		m.failAsyncChatSpawn(ctx, id, wrapSpawnStage(id, ErrWorkspaceProvision, err))
 		return
 	}
+	m.logAsyncChatSpawnStage(id, "workspace_provision", stageStarted)
 	if len(in.cfg.Attachments) > 0 {
+		stageStarted = time.Now()
 		// The prompt already references these by name (spawnAttachmentRefs); this
 		// is where the bytes land, before the agent can read them.
 		if _, err := m.writeSpawnAttachments(ctx, id, ws.Path, in.cfg.Attachments); err != nil {
@@ -111,14 +119,17 @@ func (m *Manager) completeAsyncChatSpawn(ctx context.Context, in asyncChatSpawn)
 		if err := m.workspace.AddExclude(ctx, ws, "/"+attachmentsDir+"/"); err != nil {
 			m.logger.Warn("spawn: exclude attachments dir", "sessionID", id, "error", err)
 		}
+		m.logAsyncChatSpawnStage(id, "spawn_attachments", stageStarted)
 	}
 	// Anything the user attached while this was starting was written canonically
 	// only, because there was no worktree to put it in. Replay it now, before the
 	// controller can read the turn that references those paths.
+	stageStarted = time.Now()
 	if err := m.restoreAttachments(ctx, id, ws); err != nil {
 		m.logger.Warn("spawn: materialize attachments staged while provisioning",
 			"sessionID", id, "error", err)
 	}
+	m.logAsyncChatSpawnStage(id, "attachment_restore", stageStarted)
 
 	// Publish the worktree now rather than at the controller commit. Until the
 	// row carries it, every workspace-scoped read answers
@@ -126,7 +137,9 @@ func (m *Manager) completeAsyncChatSpawn(ctx context.Context, in asyncChatSpawn)
 	// enough for the desktop's bounded readiness poll to give up on a session
 	// that is perfectly fine. It also means an interrupted start leaves a row
 	// that knows which worktree to clean up.
+	stageStarted = time.Now()
 	m.publishProvisionedWorkspace(ctx, id, ws)
+	m.logAsyncChatSpawnStage(id, "workspace_publish", stageStarted)
 
 	record, err := m.getRecord(ctx, id)
 	if err != nil {
@@ -134,6 +147,7 @@ func (m *Manager) completeAsyncChatSpawn(ctx context.Context, in asyncChatSpawn)
 		m.failAsyncChatSpawn(ctx, id, err)
 		return
 	}
+	stageStarted = time.Now()
 	if _, err := m.launchChatController(ctx, chatSpawn{
 		cfg:              in.cfg,
 		project:          in.project,
@@ -150,13 +164,27 @@ func (m *Manager) completeAsyncChatSpawn(ctx context.Context, in asyncChatSpawn)
 		m.failAsyncChatSpawn(ctx, id, err)
 		return
 	}
+	m.logAsyncChatSpawnStage(id, "controller_start", stageStarted)
 	m.clearSpawnPublished(id)
+	stageStarted = time.Now()
 	if _, err := m.setProvisionState(ctx, id, domain.SessionProvisionReady, ""); err != nil {
 		m.logger.Error("spawn: publish provisioned session", "sessionID", id, "error", err)
 	}
+	m.logAsyncChatSpawnStage(id, "mark_ready", stageStarted)
+	stageStarted = time.Now()
 	if err := m.chat.DrainChatQueue(ctx, id); err != nil {
 		m.logger.Error("spawn: dispatch queued prompt", "sessionID", id, "error", err)
 	}
+	m.logAsyncChatSpawnStage(id, "queue_drain", stageStarted)
+	m.logAsyncChatSpawnStage(id, "total", totalStarted)
+}
+
+func (m *Manager) logAsyncChatSpawnStage(id domain.SessionID, stage string, started time.Time) {
+	m.logger.Info("spawn: asynchronous chat stage",
+		"sessionID", id,
+		"stage", stage,
+		"duration", time.Since(started),
+	)
 }
 
 // failAsyncChatSpawn records why a background start stopped. The row, its
