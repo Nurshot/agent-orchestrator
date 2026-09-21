@@ -1,50 +1,76 @@
 ---
-title: "Weekly update — Jun 29, 2026 to Jul 5, 2026"
-description: "What changed in Agent Orchestrator this week: 16 features, 18 fixes."
+title: "Safer agent selection, GitHub issue intake, and multi-PR reviews"
+description: "AO can verify agent availability, pull work from GitHub issues, and show review state across more than one pull request."
 date: "2026-07-05"
 rangeStart: "2026-06-29"
 rangeEnd: "2026-07-05"
 historical: true
 ---
 
-## Features
 
-- **Show multi-PR review status** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2193" />
+## Add agent catalog/auth API and safer orchestrator switching <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2309" />
+
+Project settings now show which agents are installed and authenticated, and changing the orchestrator avoids downtime if the replacement cannot start.
+
+## GitHub issue intake (backend + dashboard) <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2325" />
+
+GitHub issues can enter AO as trackable work instead of being copied into a session by hand.
+
+## Show multi-PR review status <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2193" />
+
+A session with several pull requests can show review state for all of them, not only the first one.
+
+## Improvements
+
+### Pull requests
+
+- **Add workspace lifecycle and SCM follow-up** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2328" />
+- **Workspace/project import UI flow** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2315" />
 - **Enforce reviewer read-only via tool allowlist** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2194" />
-- **Apply runtime app icon on macOS** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2296" />
-- **Add required --name flag for sidebar display name** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2302" />
-- **Default reviewer is always claude-code (#2241) - temporary change** [`010c7e4`](https://github.com/Untrivial-ai/agent-orchestrator/commit/010c7e4c1af7d92d38fcf93144b9841c5d65f905)
+- **Default reviewer is always claude-code** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2241" />
+
+### Agents
+
+- **Context-aware agent spawn with agent catalog and auth preflight** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2411" />
+- **Add using-ao skill, install it under the data dir, and wire it into session prompts** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2365" />
+- **Support additional reviewer harnesses** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2306" />
 - **Inline-edit session display name via hover pencil** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2307" />
 - **Default worker and orchestrator agents to claude-code** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2321" />
-- **Support additional reviewer harnesses** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2306" />
-- **Add using-ao skill, install it under the data dir, and wire it into session prompts** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2365" />
-- **Detect cross-fork PRs by scanning all project remotes** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2368" />
-- **Add important flag to nightly feed manifests** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2378" />
-- **Nightly channel badge on the wordmark** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2379" />
-- **GitHub issue intake (backend + dashboard)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2325" />
-- **Add agent catalog/auth API and safer orchestrator switching** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2309" />
-- **Context-aware agent spawn with agent catalog and auth preflight** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2411" />
-- **Instrument renderer failure and CTA events** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2360" />
 
 ---
 
-**Bug fixes**
+## Bug fixes
 
-- **Windows publish shell + fresh-install smoke check (#2267)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2269" />
-- **Deep-link PR attention actions** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2200" />
-- **Fail fast when tmux is missing** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2259" />
-- **Resolve duplicate migration version 20 collision** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2294" />
-- **Use project default agent and expose all agents in spawn dialog** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2291" />
-- **Clear shutdown-saved marker so killed sessions stay dead (#2319)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2320" />
-- **Set terminal type for tmux attach** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2312" />
+### Browser
+
 - **Clear stale preview URL from SQLite and prevent stale white screen on preview clear** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2358" />
-- **Show session display name in terminal toolbar header** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2382" />
-- **Gofmt manager_test.go to unbreak main** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2386" />
-- **Render raw activity state in inspector** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2278" />
-- **Replace orchestrators through safe canonical branch handoff** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2338" />
-- **Remove excess padding around the inspector Browser tab** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2423" />
-- **Simplify kanban pr footer** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2374" />
-- **Deduplicate agent catalog error messages in CreateProjectAgentSheet** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2428" />
+- **Remove excess padding around the inspector browser tab** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2423" />
+
+### Agents
+
+- **Use project default agent in New task dialog** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2291" />
+- **Keep killed sessions dead across restart (clear stale restore marker)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2320" />
+
+### Pull requests
+
+- **Deep-link PR attention actions** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2200" />
 - **Consolidate PR summary status details** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2406" />
-- **Open New Project tooltip rightward when collapsed** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2431" />
-- **Wheel-scroll opencode transcripts and surface native Windows notifications** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2422" />
+- **Simplify kanban PR footer** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2374" />
+
+### Product
+
+- **Replace orchestrators through safe canonical branch handoff** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2338" />
+
+### Desktop
+
+- **Opencode wheel scroll + native Windows notifications** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2422" />
+
+### Terminal
+
+- **Show session display name in terminal toolbar header** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2382" />
+
+
+## Learn more
+
+- [Read the documentation](/docs)
+- [View detailed releases on GitHub](https://github.com/Untrivial-ai/agent-orchestrator/releases)

@@ -1,42 +1,18 @@
 ---
-title: "Weekly update — Jun 8, 2026 to Jun 14, 2026"
-description: "What changed in Agent Orchestrator this week: 9 features, 17 fixes."
+title: "Cleaner pull-request data and more reliable enrichment"
+description: "Duplicate pull-request associations are removed before they reach session views and enrichment."
 date: "2026-06-14"
 rangeStart: "2026-06-08"
 rangeEnd: "2026-06-14"
 historical: true
 ---
 
-## Features
 
-- **Persist per-project agent config and resolve it at spawn** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/154" />
-- **Scaffold for frontend with complimentary backend changes** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/168" />
-- **Add workspace project registration foundation** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/165" />
-- **Clone agent-orchestrator shell and inspector** [`e493de6`](https://github.com/Untrivial-ai/agent-orchestrator/commit/e493de6ad72bfd3eec2155551be869c11df59c1c)
-- **Name orchestrator worktree orchestrator/&#123;prefix&#125;-orchestrator** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/191" />
-- **Full-width shell topbar; retire per-view topbars and review dashboard** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/195" />
-- **Restore remove-project functionality** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/225" />
-- **Add notifications v1** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/181" />
-- **Configurable AO code review backend (V1) (#192)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/197" />
+## Dedup session.prs on parse + dedup writes + cleanup migration for indexed enrichment keys <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2109" />
 
----
+Duplicate pull-request associations are cleaned up before enrichment, preventing repeated or conflicting status data.
 
-**Bug fixes**
+## Learn more
 
-- **Dedup session.prs on parse + dedup writes + cleanup migration for indexed enrichment keys** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2109" />
-- **Remove agent rules spawn path** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/159" />
-- **Reliable activity signals — session-flag hooks, trust bypass, no_signal watchdog** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/170" />
-- **Stop AO hook files from making every worktree permanently dirty** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/169" />
-- **Stop sending branch on spawn, render API errors, wire worker name** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/171" />
-- **Prevent zellij session resurrection** [`0ee86a6`](https://github.com/Untrivial-ai/agent-orchestrator/commit/0ee86a631429adb2a7d3c72ebd96cfefa40500f3)
-- **Preserve zellij mouse mode on reconnect** [`4d3696d`](https://github.com/Untrivial-ai/agent-orchestrator/commit/4d3696df28c1a8f52ce8c446c07d698ed64e150c)
-- **Keep worker modal open on errors** [`f07104d`](https://github.com/Untrivial-ai/agent-orchestrator/commit/f07104dacc996ba4ba182e4190d2d6f39a574fc7)
-- **Set Electron app name** [`0021aa6`](https://github.com/Untrivial-ai/agent-orchestrator/commit/0021aa6097da787e2f1de90202fd73316c3e25ff)
-- **Permission mode select + remove notification stub (#186, #188)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/190" />
-- **Deliver orchestrator instructions via system prompt** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/189" />
-- **Forward project permissions to agent launches** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/198" />
-- **Stabilize onResize ref to prevent rrp constraint race** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/193" />
-- **Remove Add a worker agent button near project name** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/202" />
-- **Remove stale spawn modal references from shell and sidebar** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/224" />
-- **Remove orchestrator kickoff auto-prompt on spawn** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/227" />
-- **Persist the resolved default agent on the session** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/221" />
+- [Read the documentation](/docs)
+- [View detailed releases on GitHub](https://github.com/Untrivial-ai/agent-orchestrator/releases)

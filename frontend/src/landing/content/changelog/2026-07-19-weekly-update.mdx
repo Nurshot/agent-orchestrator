@@ -1,48 +1,70 @@
 ---
-title: "Weekly update — Jul 13, 2026 to Jul 19, 2026"
-description: "What changed in Agent Orchestrator this week: 7 features, 25 fixes."
+title: "Faster session creation, native file drops, and update controls"
+description: "New sessions became easier to launch while terminals gained native file drops and updates became visible from the sidebar."
 date: "2026-07-19"
 rangeStart: "2026-07-13"
 rangeEnd: "2026-07-19"
 historical: true
 ---
 
-## Features
 
-- **Insert dropped file paths like native terminals** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2644" />
-- **Add PostHog active user heartbeat** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2633" />
-- **Restart-to-update sidebar row with per-channel escalation** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2381" />
+## Spawn a new agent session via keyboard shortcut and sidebar action <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2687" />
+
+A keyboard shortcut or sidebar action can start a new agent session without leaving the current workspace.
+
+## Insert dropped file paths like native terminals <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2644" />
+
+Dropping a file into a terminal inserts its path the same way a native terminal does.
+
+## Restart-to-update sidebar row with per-channel escalation <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2381" />
+
+The sidebar now shows when an update is ready and lets you restart into it from the active channel.
+
+## Improvements
+
+### Pull requests
+
+- **Add PR-wise changelog** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2833" />
+
+### Mobile
+
 - **Haptic feedback, and stop long session ids overflowing the card** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2654" />
+
+### Desktop
+
 - **Add close button to Global Settings view** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2748" />
-- **Spawn a new agent session via keyboard shortcut and sidebar action** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2687" />
-- **Deploy landing + docs to GitHub Pages at aoagents.dev** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2846" />
 
 ---
 
-**Bug fixes**
+## Bug fixes
+
+### Pull requests
 
 - **Deliver generated system prompt files** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2273" />
 - **Prefer npm binary over WindowsApps** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2583" />
+
+### Mobile
+
 - **Shared-terminal co-view, phone zoom/pan, width &amp; Android fixes, authenticated LAN preview** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2569" />
-- **Show idle sessions as idle, not working** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2642" />
-- **Use .ico for windows taskbar icon** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2666" />
-- **Keep nil tracker interface in startSession when no token** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2690" />
-- **Apply ProgramFiles(x86)=C:\Program Files (x86)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2691" />
-- **Show error state instead of white screen on browser navigation failure** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2704" />
-- **Remove confirm kill button icon** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2717" />
-- **Improve cursor prompt delivery hooks** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2578" />
-- **Keep notifications above browser preview** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2732" />
-- **Align activity timeline text markers** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2730" />
-- **Show idle activity as passive in working column** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2719" />
-- **Align terminal topbar with inspector** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2718" />
-- **Keep maximized preview controls clear of Windows titlebar** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2710" />
-- **Default project agents from authorized catalog** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2711" />
-- **Resume native agent transcripts** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2753" />
-- **Hide browser preview when terminal enters fullscreen** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2770" />
-- **Improve native session restore across agent harnesses** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2765" />
+
+### Agents
+
 - **Centralize session presentation** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2752" />
-- **Surface legacy config parse errors instead of "no data"** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2684" />
-- **Update landing demo video** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2807" />
-- **Update Kill behavior to mark sessions as terminated when workspace is preserved** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2794" />
+- **Improve native session restore across agent harnesses** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2765" />
+- **Default project agents from authorized catalog** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2711" />
 - **Capture grok session ids for restore** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2796" />
-- **Materialize using-ao skill for skill tool discovery** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2758" />
+- **Update Kill behavior to mark sessions as terminated wh…** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2794" />
+
+### Terminal
+
+- **Opencode fails to launch on Windows (`env` prefix isn't a Windows executable)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2691" />
+
+### Browser
+
+- **Hide browser preview when terminal enters fullscreen** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2770" />
+
+
+## Learn more
+
+- [Read the documentation](/docs)
+- [View detailed releases on GitHub](https://github.com/Untrivial-ai/agent-orchestrator/releases)

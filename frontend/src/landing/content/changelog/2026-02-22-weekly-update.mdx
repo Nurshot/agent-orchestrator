@@ -1,42 +1,78 @@
 ---
-title: "Weekly update — Feb 16, 2026 to Feb 22, 2026"
-description: "What changed in Agent Orchestrator this week: 10 features, 16 fixes."
+title: "Faster setup, clearer sessions, and crash recovery"
+description: "Setup became simpler while sessions gained clearer names, live activity, and recovery after an agent exits."
 date: "2026-02-22"
 rangeStart: "2026-02-16"
 rangeEnd: "2026-02-22"
 historical: true
 ---
 
-## Features
 
-- **Wire up live activity detection for agent sessions** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/45" />
-- **Implement comprehensive security audit and secret leak prevention** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/67" />
-- **Seamless onboarding with enhanced documentation** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/66" />
-- **Overhaul orchestrator prompt with comprehensive CLI reference** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/90" />
-- **First-class orchestrator session + file-based system prompt** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/101" />
-- **Implement session restore for crashed/exited agents** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/104" />
-- **Configurable terminal server ports for multi-dashboard support** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/113" />
-- **Dynamic tab titles and health-aware favicons** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/111" />
+## Seamless onboarding with enhanced documentation <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/66" />
+
+A guided setup path, clearer documentation, and safer defaults reduce the work required to get a first project running.
+
+## Redesign dashboard, session detail, and orchestrator terminal <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/125" />
+
+The dashboard, session detail, and orchestrator terminal were reorganized so active work is easier to scan and control.
+
+## Implement session restore for crashed/exited agents <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/104" />
+
+Exited or crashed agent sessions can be restored instead of being recreated from scratch.
+
+## Improvements
+
+### Agents
+
 - **Session title fallback chain for PR-less sessions** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/105" />
-- **Redesign dashboard, session detail, and orchestrator terminal** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/125" />
+- **Wire up live activity detection for agent sessions** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/45" />
+- **First-class orchestrator session + file-based system prompt** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/101" />
+
+### Terminal
+
+- **Configurable terminal server ports for multi-dashboard support** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/113" />
+
+### Pull requests
+
+- **Implement comprehensive security audit and secret leak prevention** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/67" />
+- **Overhaul orchestrator prompt with comprehensive CLI reference** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/90" />
+
+### Product
+
+- **Dynamic tab titles and health-aware favicons** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/111" />
+
 
 ---
 
-**Bug fixes**
+## Bug fixes
 
-- **Unset CLAUDECODE in spawned sessions to prevent nested session errors** [`a686645`](https://github.com/Untrivial-ai/agent-orchestrator/commit/a6866458ecaa105133bd99c7425880b8cfe3dd0c)
-- **Prevent merged PRs from showing 'Merge conflicts' status** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/60" />
-- **Improve 'Ask Agent to Fix' button UX** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/61" />
-- **Increase delays in spawn prompt submission to ensure Enter is processed** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/62" />
-- **Clean Next.js build artifacts in setup script** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/68" />
-- **Migrate to hash-based project isolation architecture** [`5997102`](https://github.com/Untrivial-ai/agent-orchestrator/commit/599710296d464c41b9d905c1b4cdf53eaf4d5147)
-- **Clean up hash-based test directories in afterEach** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/86" />
-- **Terminal servers compatible with hash-based architecture** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/87" />
-- **Activity detection — fix path encoding bug, add ready state** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/71" />
-- **Decouple activity detection from runtimeHandle** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/89" />
-- **Dashboard config discovery + CLI service layer refactoring** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/70" />
-- **Three spawn regressions from PR #88 session-manager refactor** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/100" />
-- **Destroy old runtime before restore, cleanup clone on failure** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/109" />
+### Agents
+
+- **Use flat directory structure for session metadata** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/58" />
 - **Restore archived sessions that were killed/cleaned up** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/110" />
-- **Tab title followups — empty name guard, dedupe truncation** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/121" />
-- **Auto-detect free port in `ao init` instead of hardcoding 3000** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/120" />
+- **Improve 'Ask Agent to Fix' button UX** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/61" />
+
+### Terminal
+
+- **Terminal servers compatible with hash-based architecture** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/87" />
+
+### CLI
+
+- **Dashboard config discovery + CLI service layer refactoring** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/70" />
+
+### Product
+
+- **Activity detection — fix path encoding bug, add ready state** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/71" />
+- **Destroy old runtime before restore, cleanup clone on failure** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/109" />
+- **Decouple activity detection from runtimeHandle** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/89" />
+- **Auto-detect free port in ao init** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/120" />
+
+### Pull requests
+
+- **Three spawn regressions from PR #88** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/100" />
+
+
+## Learn more
+
+- [Read the documentation](/docs)
+- [View detailed releases on GitHub](https://github.com/Untrivial-ai/agent-orchestrator/releases)

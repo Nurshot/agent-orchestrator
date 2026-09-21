@@ -1,64 +1,70 @@
 ---
-title: "Weekly update — Feb 13, 2026 to Feb 15, 2026"
-description: "What changed in Agent Orchestrator this week: 18 features, 30 fixes."
+title: "The first AO dashboard, CLI, and agent runtime"
+description: "AO's first week established the dashboard, command-line workflow, agent integrations, and managed session foundation."
 date: "2026-02-15"
 rangeStart: "2026-02-13"
 rangeEnd: "2026-02-15"
 historical: true
 ---
 
-## Features
 
-- **Initial commit with orchestrator scripts and dev instructions** [`0273e8f`](https://github.com/Untrivial-ai/agent-orchestrator/commit/0273e8f3d027b988c472d070d3276d937f0eca62)
-- **Add agent-orchestrator (ao) as a self-hosting project** [`1601ad7`](https://github.com/Untrivial-ai/agent-orchestrator/commit/1601ad75c0c47b58be5a54c2fb903a8dd28e78de)
-- **Scaffold TypeScript monorepo with all plugin interfaces** [`5058c40`](https://github.com/Untrivial-ai/agent-orchestrator/commit/5058c409d518a56398834e8bc2cc6c87084529f9)
-- **Implement core services (metadata, event-bus, tmux, session-manager, lifecycle-manager)** [`de86054`](https://github.com/Untrivial-ai/agent-orchestrator/commit/de86054b9d08ed30d4ea89fea17ded4619b3224d)
-- **Agent plugins, OpenCode plugin, integration tests, CI** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/5" />
-- **Implement web dashboard with attention-zone UI and API routes** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1" />
-- **Implement runtime and workspace plugins (tmux, process, worktree, clone)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2" />
+## Implement web dashboard with attention-zone UI and API routes <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1" />
+
+The dashboard organizes sessions by what needs attention, keeps pull-request and CI context close, and exposes the core session actions from one place.
+
+## Implement CLI with all commands (init, status, spawn, session, send, review-check, dashboard, open) <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/6" />
+
+The ao CLI covers setup, status, session creation, messaging, review checks, and opening the dashboard from a terminal.
+
+## Agent plugins, OpenCode plugin, integration tests, CI <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/5" />
+
+Claude Code, Codex, and OpenCode sessions can run through one managed agent interface with shared lifecycle behavior.
+
+## Improvements
+
+### Pull requests
+
 - **Implement SCM and tracker plugins (github, linear)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/4" />
-- **Implement CLI with all commands (init, status, spawn, session, send, review-check, dashboard, open)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/6" />
-- **Notifier-composio plugin + integration tests for all plugins** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/7" />
-- **Enrich ao status with PR, CI, review, threads, and activity columns** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/25" />
-- **Wire web dashboard API routes to real core services** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/26" />
+- **Implement runtime and workspace plugins (tmux, process, worktree, clone)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2" />
+
+### Agents
+
+- **Implement core services (metadata, event-bus, tmux, session-manager, lifecycle-manager)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/3" />
 - **Layered prompt system for agent sessions** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/27" />
 - **Auto-update session metadata via Claude Code hooks** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/34" />
-- **Publish to npm under @composio scope** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/32" />
+
+### Terminal
+
 - **Implement DirectTerminal with XDA clipboard support** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/55" />
-- **Validate tracker issues on spawn with fail-fast behavior** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/44" />
+
+### Product
+
+- **Wire web dashboard API routes to real core services** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/26" />
 - **Implement ao start command for unified orchestrator startup** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/42" />
+
 
 ---
 
-**Bug fixes**
+## Bug fixes
 
-- **Address PR review — unsafe casts, tmux race, concurrent polling** [`d6ec954`](https://github.com/Untrivial-ai/agent-orchestrator/commit/d6ec95402d4bac995bcdd4339c40aff10adaacb0)
-- **Address codex review — path traversal, retry logic, type safety** [`c49649c`](https://github.com/Untrivial-ai/agent-orchestrator/commit/c49649c2c1ce7df7da8d1faead54b8ef1abf5887)
-- **Address all review comments, lint/format, bugbot issues** [`2ecb011`](https://github.com/Untrivial-ai/agent-orchestrator/commit/2ecb011982346698b58b69922652dca6a5cd0ef5)
-- **Execute all-complete reaction and guard workspace postCreate** [`4a80450`](https://github.com/Untrivial-ai/agent-orchestrator/commit/4a804503b6b5956e35a0429096bc9c75725405e5)
-- **Add missing cleanup status to VALID_STATUSES set** [`f6f5e24`](https://github.com/Untrivial-ai/agent-orchestrator/commit/f6f5e24e3cca1bd1bb2e1fc28774b89a81c2aea0)
-- **Ignore next-env.d.ts in ESLint config** [`24391c8`](https://github.com/Untrivial-ai/agent-orchestrator/commit/24391c874e838a0599b154e881ee5409d8b6acb3)
-- **CI handles Next.js build separately, fix web tsconfig** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/14" />
-- **Session recovery, reaction config merge, summary priority** [`ad0b450`](https://github.com/Untrivial-ai/agent-orchestrator/commit/ad0b45006cac652cc63e1a9af00b9752f01c2c43)
-- **Prevent project workspace deletion and agent config workspace leak** [`88ea7d1`](https://github.com/Untrivial-ai/agent-orchestrator/commit/88ea7d1491db00f2c2633aa19ecc7fc7be354d15)
-- **Runtime plugin lookup, post-create guard, restart transition detection** [`a225bc1`](https://github.com/Untrivial-ai/agent-orchestrator/commit/a225bc17f575a30674530335d84e0c2d729a019f)
-- **Use handle.runtimeName for plugin lookup, atomic session ID reservation** [`65787f0`](https://github.com/Untrivial-ai/agent-orchestrator/commit/65787f08e30c4988c4ca499a7af64ff6fba45bc6)
-- **Allow notify reactions when auto is false, clean up reserved IDs on spawn failure** [`07b3a55`](https://github.com/Untrivial-ai/agent-orchestrator/commit/07b3a553f780dd2edbcd2d154aea1551a37c3b5f)
-- **Use literal mode for tmux send-keys, prune stale lifecycle trackers** [`4c47a42`](https://github.com/Untrivial-ai/agent-orchestrator/commit/4c47a42b6e6c4740210eb0ed8b6effdede33e10f)
-- **Notify on significant transitions, preserve stuck state on probe failure** [`9e7a767`](https://github.com/Untrivial-ai/agent-orchestrator/commit/9e7a7677309ede5bf83431d0b49b3366b376fc65)
-- **Suppress immediate notification when send-to-agent reaction handles event** [`4028e5b`](https://github.com/Untrivial-ai/agent-orchestrator/commit/4028e5b77db889597e751f5172b0545c1674b6ff)
-- **Restrict temp file permissions, validate session prefix format** [`660b8bb`](https://github.com/Untrivial-ai/agent-orchestrator/commit/660b8bb13df845fb36ac24d62135143c4dabaaaa)
-- **Filter invalid session IDs in listMetadata to prevent downstream crashes** [`f2e0ac1`](https://github.com/Untrivial-ai/agent-orchestrator/commit/f2e0ac1867d3cdb49f69f6620f25b614d9a30035)
-- **Address Bugbot followup — stale paths in JSDoc, unused exports** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/20" />
-- **Upgrade @testing-library/jest-dom for vitest 2.x type compatibility** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/21" />
-- **Detect agent exit for all agent types, not just idle-reporting ones** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/22" />
-- **Remove sessions/ subdirectory from metadata paths** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/24" />
-- **Wire dashboard to real session data with PR enrichment** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/28" />
-- **Expand WORKING attention zone by default** [`a20cd9a`](https://github.com/Untrivial-ai/agent-orchestrator/commit/a20cd9a8ca1faef65beb038cc18591de8ca77f65)
-- **Don't report CI as failing for merged/closed PRs** [`95dfaa4`](https://github.com/Untrivial-ai/agent-orchestrator/commit/95dfaa4a7d8720b704f9bf41600c0099f3d1fdcc)
-- **Address remaining bugbot review issues from PR #26** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/33" />
+### Pull requests
+
 - **Resolve dashboard GitHub API rate limiting and PR enrichment** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/37" />
-- **Address bugbot comments - deduplicate resolveProject, generic error messages** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/39" />
-- **Recognize terminated/done session states and hide terminal for dead sessions** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/40" />
+
+### Agents
+
+- **Wire dashboard to real session data with PR enrichment** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/28" />
+- **Detect agent exit for all agent types** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/22" />
 - **Remove redundant attention level badge from session detail** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/41" />
 - **Prevent "Leave Site?" dialog on session pages** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/47" />
+- **Remove sessions/ subdirectory from metadata paths** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/24" />
+
+### Terminal
+
+- **Recognize terminated/done session states and hide terminal for dead sessions** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/40" />
+
+
+## Learn more
+
+- [Read the documentation](/docs)
+- [View detailed releases on GitHub](https://github.com/Untrivial-ai/agent-orchestrator/releases)

@@ -84,6 +84,10 @@ async function collectMergedPullRequests(startDate, endDate) {
 						title
 						url
 						mergedAt
+						body
+						additions
+						deletions
+						changedFiles
 						author { login }
 						labels(first: 30) { nodes { name } }
 					}
@@ -104,6 +108,10 @@ async function collectMergedPullRequests(startDate, endDate) {
 				title: node.title,
 				url: node.url,
 				mergedAt: node.mergedAt,
+				body: node.body,
+				additions: node.additions,
+				deletions: node.deletions,
+				changedFiles: node.changedFiles,
 				author: node.author?.login,
 				labels: node.labels.nodes.map((label) => label.name),
 			});

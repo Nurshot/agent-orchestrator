@@ -1,60 +1,18 @@
 ---
-title: "Weekly update — Jun 15, 2026 to Jun 21, 2026"
-description: "What changed in Agent Orchestrator this week: 15 features, 29 fixes."
+title: "A maintenance week with no user-facing changes"
+description: "No separate customer-facing feature was announced this week."
 date: "2026-06-21"
 rangeStart: "2026-06-15"
 rangeEnd: "2026-06-21"
 historical: true
 ---
 
-## Features
 
-- **Support multiple PRs per session** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/230" />
-- **Add kill button to worker session page** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/288" />
-- **Show reviewer worker controls** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/255" />
-- **Move kill session control to topbar beside Open orchestrator** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/298" />
-- **Show dashboard and orchestrator buttons on project hover** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/293" />
-- **Refresh dashboard, orchestrator, and AO logos** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/317" />
-- **Rewrite-side legacy → rewrite first-boot import** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/314" />
-- **ConPTY terminal, zellij discovery, agent launcher trampoline, codex shim resolution** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/310" />
-- **Improve orchestrator board workflows** [`2cb20c2`](https://github.com/Untrivial-ai/agent-orchestrator/commit/2cb20c23e4200e0a9f7c92b832416a2cde095ffa)
-- **Polish board chrome and task actions** [`a8a3056`](https://github.com/Untrivial-ai/agent-orchestrator/commit/a8a3056a6bb1c1c537dcb226f388210f6551e928)
-- **Surface multiple PRs per session + reviewer in inspector** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/335" />
-- **Require explicit project agents** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/355" />
-- **Surface SCM summaries in desktop** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/263" />
-- **Add desktop notifications v1** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/262" />
-- **Add live browser panel** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/375" />
+## Maintenance
 
----
+No separate customer-facing update was announced for this week.
 
-**Bug fixes**
+## Learn more
 
-- **Reject unknown harness with 400 instead of opaque 500** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/211" />
-- **Map invalid branch name to 400 instead of opaque 500** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/213" />
-- **Exclude nested node_modules from the vitest run** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/217" />
-- **Detect the repo's default branch on add** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/209" />
-- **Stamp session timestamps in UTC** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/215" />
-- **Worker session opens orchestrator, not Kanban** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/248" />
-- **Serialize concurrent triggers per worker to stop reviewer double-spawn** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/246" />
-- **Reviewer posts to GitHub and records its verdict autonomously** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/259" />
-- **Populate session.pullRequest from /pr endpoint (#251)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/279" />
-- **Adapt bug-triage skill to ReverbCode stack** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/281" />
-- **Make review inspector panels responsive** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/300" />
-- **Recover clipped Codex terminal via onRender convergence re-fit** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/312" />
-- **Stop fit loop committing transient cell-box mis-measurements (#313)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/316" />
-- **Make worker branch namespace child-safe** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/309" />
-- **Resolve default branch from origin/HEAD, not checked-out branch** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/289" />
-- **Surface missing reviewer harness** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/318" />
-- **Sanitize CI logs and reviewer comments before PTY paste** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/323" />
-- **Renumber telemetry migration to 0015 to resolve 0014 version collision** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/334" />
-- **Append confidentiality guard to agent system prompts** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/341" />
-- **Make project row hover icons clickable and non-overlapping** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/345" />
-- **Always show project row action icons** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/346" />
-- **Green the tag desktop build on Linux/Windows and add app icon** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/348" />
-- **Keep terminal mux persistent across navigation** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/325" />
-- **Recover terminal reattach after daemon idle** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/354" />
-- **Terminate sessions even when handle is missing** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/360" />
-- **Surface session branch in frontend** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/358" />
-- **Pin all app state under ~/.ao, never ~/Library** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/369" />
-- **Notify worker on changes_requested instead of relying on SCM poll (#337)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/340" />
-- **Add terminal controls and restore copy/scroll** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/372" />
+- [Read the documentation](/docs)
+- [View detailed releases on GitHub](https://github.com/Untrivial-ai/agent-orchestrator/releases)

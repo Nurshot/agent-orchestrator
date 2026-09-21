@@ -1,84 +1,18 @@
 ---
-title: "Weekly update — May 25, 2026 to May 31, 2026"
-description: "What changed in Agent Orchestrator this week: 28 features, 1 improvements, 36 fixes."
+title: "Windows folder selection beyond the home directory"
+description: "Windows users can select project folders outside their home directory."
 date: "2026-05-31"
 rangeStart: "2026-05-25"
 rangeEnd: "2026-05-31"
 historical: true
 ---
 
-## Features
 
-- **LCM + Session Manager contract package (domain + ports)** [`d630319`](https://github.com/Untrivial-ai/agent-orchestrator/commit/d630319f0411a635747b9d70a3e85108f73eb8f7)
-- **Implement pure DECIDE core with exhaustive truth-table tests** [`6e90734`](https://github.com/Untrivial-ai/agent-orchestrator/commit/6e907342762668e0572e8eb83849b203a0ade014)
-- **Populate open-PR Evidence; document decision zero-value contract** [`918c5b4`](https://github.com/Untrivial-ai/agent-orchestrator/commit/918c5b4b3ab037759c24de8c3f07315bdf4af5d4)
-- **Implement LCM Apply* pipeline (split A)** [`1420bb9`](https://github.com/Untrivial-ai/agent-orchestrator/commit/1420bb9493d5962ded7fc78b639497a495c487c8)
-- **Activity resolves detecting + review polish** [`9eb5348`](https://github.com/Untrivial-ai/agent-orchestrator/commit/9eb5348604402198d9b0337bd4925287c5f7b3ec)
-- **ACT layer — reaction table + escalation engine (split B)** [`8b8da8e`](https://github.com/Untrivial-ai/agent-orchestrator/commit/8b8da8e6a4221699a5243d141a4fe665aca6b4c9)
-- **Implement Session Manager (spawn/kill/list/get/send/restore/cleanup)** [`5382108`](https://github.com/Untrivial-ai/agent-orchestrator/commit/538210844edb167220a038a8c031a71603ed56f9)
-- **Add tmux runtime adapter** [`f975ca2`](https://github.com/Untrivial-ai/agent-orchestrator/commit/f975ca24c910dd90344a26c2670173d737b7e2c7)
-- **Add git worktree workspace adapter** [`9df3fb5`](https://github.com/Untrivial-ai/agent-orchestrator/commit/9df3fb59bf06f35e90fe92a78e060df4b16d82ba)
-- **Handle draft PR lifecycle state** [`77c01da`](https://github.com/Untrivial-ai/agent-orchestrator/commit/77c01daf42d20e0d179c7c2bc297dc3673f25d15)
-- **Add zellij runtime adapter** [`586931b`](https://github.com/Untrivial-ai/agent-orchestrator/commit/586931b3ffc5febf248d7a6085254c0d05a2f1d1)
-- **HTTP daemon skeleton (Phase 1a) — #10** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/14" />
-- **Reaper for liveness probe + TickEscalations heartbeat** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/9" />
-- **Tracker port + GitHub adapter** [`e5919c7`](https://github.com/Untrivial-ai/agent-orchestrator/commit/e5919c79989d4d15932c4711571406bdd89548aa)
-- **SQLite storage layer + CDC pipeline, LCM/reaper wiring** [`f5bc4c7`](https://github.com/Untrivial-ai/agent-orchestrator/commit/f5bc4c7b8c70ff1bf9577bc8611beb016af174c0)
-- **Add projects and pr_enrichment tables to SQLite store** [`23b8fe4`](https://github.com/Untrivial-ai/agent-orchestrator/commit/23b8fe43cf01fefa0262fe49a30b0776d9b4e612)
-- **Add List + Preflight to the port and GitHub adapter** [`d6cd245`](https://github.com/Untrivial-ai/agent-orchestrator/commit/d6cd24583336c1d34418818ae2605df156a94a8b)
-- **Minimal 6-table schema + trigger-driven CDC (storage layer)** [`e5c4fd6`](https://github.com/Untrivial-ai/agent-orchestrator/commit/e5c4fd6ffde69cdede0a0f7395d8e94128de82d3)
-- **Port lifecycle lane onto the new storage+CDC model** [`cdf55eb`](https://github.com/Untrivial-ai/agent-orchestrator/commit/cdf55ebef506b4f16c8919c180d09c5ffd4f28a0)
-- **Atomic PR-observation write + CDC on check status updates** [`70aab5e`](https://github.com/Untrivial-ai/agent-orchestrator/commit/70aab5eb26352869842b4a96db615422f55acf55)
-- **PTY-attach terminal streaming feature package** [`721b8b3`](https://github.com/Untrivial-ai/agent-orchestrator/commit/721b8b34a272a92232764fee0df32f404b052159)
-- **Mount terminal-streaming WebSocket at /mux** [`edcc631`](https://github.com/Untrivial-ai/agent-orchestrator/commit/edcc6310379e52ec071aa047d6d90312d16c3cd4)
-- **Wire terminal manager into the daemon at /mux** [`4d90d59`](https://github.com/Untrivial-ai/agent-orchestrator/commit/4d90d59bf080cb1cbc25af502451b33d96c54d2a)
-- **Wire Session Manager into the daemon (real tmux + gitworktree, stub Agent)** [`27fb82d`](https://github.com/Untrivial-ai/agent-orchestrator/commit/27fb82dbebeba99fe127a90244e46c3e0c815565)
-- **Implement project routes with mock manager/store** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/47" />
-- **Add cobra cli foundation** [`4671d27`](https://github.com/Untrivial-ai/agent-orchestrator/commit/4671d27307f05184c643f3d68f482717b9fc936c)
-- **Add durable notification foundation** [`5303c51`](https://github.com/Untrivial-ai/agent-orchestrator/commit/5303c51d29406d21fb6196373b5602483a2fb882)
-- **Add notifier delivery runtime** [`217f6b1`](https://github.com/Untrivial-ai/agent-orchestrator/commit/217f6b1652585b37b1056fb6f3fcc804226682ac)
+## Allow Windows add-folder browsing outside home <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1785" />
 
-## Improvements
+The Windows folder picker can browse outside the home directory, so projects can live on other drives or shared locations.
 
-- **Allow concurrent reads; serialize writes via a mutex** [`ba47212`](https://github.com/Untrivial-ai/agent-orchestrator/commit/ba472128021848d3cb223d153b079ca4eed67441)
+## Learn more
 
----
-
-**Bug fixes**
-
-- **Reach mergeable without formal approval; broaden consistency test** [`9920c6d`](https://github.com/Untrivial-ai/agent-orchestrator/commit/9920c6daaadfd069bd973722f8e7b91b642542e6)
-- **Address PR #5 review** [`3945b10`](https://github.com/Untrivial-ai/agent-orchestrator/commit/3945b10f2057743919d33799dd9144c4a4de8324)
-- **Clear ci-failed tracker on recovery/incident-over (PR #6 review)** [`b2161d5`](https://github.com/Untrivial-ai/agent-orchestrator/commit/b2161d5582bfae0e477045bc191ea67ae314b797)
-- **Kill clears trackers, send-failure budget, inclusive escalation (Copilot review)** [`5081cf7`](https://github.com/Untrivial-ai/agent-orchestrator/commit/5081cf794be51379e1840aa7516e0b5bf7ec2508)
-- **Harden Restore — require agent session id, roll back runtime on post-create failure (PR #7 review)** [`162881d`](https://github.com/Untrivial-ai/agent-orchestrator/commit/162881d2bda4f8f34dad5b450576a727ffe71db0)
-- **Harden teardown/restore safety + drop dead reaction flag** [`f03c7c8`](https://github.com/Untrivial-ai/agent-orchestrator/commit/f03c7c8c8866acdaf5f9cea3ffd898908e7f82fe)
-- **Use exact tmux targets** [`b5a344a`](https://github.com/Untrivial-ai/agent-orchestrator/commit/b5a344ac07026c323d67c5cf95863d38f2ce796a)
-- **Harden tmux runtime teardown and ids** [`37f1fe2`](https://github.com/Untrivial-ai/agent-orchestrator/commit/37f1fe269e5e248692f405d7d7c099555309d7de)
-- **Keep draft PR reactions active** [`09a82d9`](https://github.com/Untrivial-ai/agent-orchestrator/commit/09a82d92062d764953a3c5a799172c1aa59a1b25)
-- **Reconcile lifecycle writer contract** [`e66988a`](https://github.com/Untrivial-ai/agent-orchestrator/commit/e66988ab773b7c240c22a36bdf314dc3e64a3016)
-- **Handle SCM observer seam facts** [`f0766eb`](https://github.com/Untrivial-ai/agent-orchestrator/commit/f0766ebd8f6991c2522fa6050bf2abcd6ceb871a)
-- **Tighten zellij runtime attach and launch** [`db6975e`](https://github.com/Untrivial-ai/agent-orchestrator/commit/db6975eb7147e20e7b4d18ee3c8d9f69290f1636)
-- **Handle restore rollback and spawn id collisions** [`fcb3aec`](https://github.com/Untrivial-ai/agent-orchestrator/commit/fcb3aec9886a37513f19fc68475ecfe4afbf44e9)
-- **Restore revision monotonicity** [`1fee016`](https://github.com/Untrivial-ai/agent-orchestrator/commit/1fee0164e2770d8b42bb7d0227171383145f0ba4)
-- **Address LCM/SM review blockers R1, RA, R11, RB** [`650ecdf`](https://github.com/Untrivial-ai/agent-orchestrator/commit/650ecdf08a0a48c1d2c314e6cf93afc9e7032f9d)
-- **Guard spawn initiation and restore metadata** [`fb7dbbb`](https://github.com/Untrivial-ai/agent-orchestrator/commit/fb7dbbbb420e088f02064f855c98786a4a2bf90d)
-- **Align writer contract with schema-2** [`1376b01`](https://github.com/Untrivial-ai/agent-orchestrator/commit/1376b019332f45e3d9b619fde4eff42235c5be7e)
-- **Broaden reaper poll set + always report probe fact** [`1eaaa4c`](https://github.com/Untrivial-ai/agent-orchestrator/commit/1eaaa4ce1d88702ede82d2fe8bb4aae507dc6912)
-- **Drain CDC/lifecycle goroutines without deadlocking on non-signal exit** [`0dbd304`](https://github.com/Untrivial-ai/agent-orchestrator/commit/0dbd304e5832045b050b7e7679a563cd494d3107)
-- **Deliver ring replay and fanout atomically under session lock** [`cd84d94`](https://github.com/Untrivial-ai/agent-orchestrator/commit/cd84d94ee42ab6d25d81e72f9ee5cad4f0629047)
-- **Drain reaper + cdc poller when startSession fails** [`7b9a9f5`](https://github.com/Untrivial-ai/agent-orchestrator/commit/7b9a9f5962bb5f6ff5dbbb28ab5ec9a17583cf01)
-- **Make creackPTY.Close idempotent to avoid shutdown deadlock** [`67f4215`](https://github.com/Untrivial-ai/agent-orchestrator/commit/67f42150b40cce8710f4f09308b16d6569aaffb4)
-- **Address greptile review comments** [`f72facb`](https://github.com/Untrivial-ai/agent-orchestrator/commit/f72facb9e5d345a112b221ba941b40dfd0b6ba89)
-- **Verify daemon ownership before stop signal** [`925e707`](https://github.com/Untrivial-ai/agent-orchestrator/commit/925e70763da188d13869743140a569c97d833c3a)
-- **Allow Windows add-folder browsing outside home** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/1785" />
-- **Preserve live daemon state on probe failures** [`a614462`](https://github.com/Untrivial-ai/agent-orchestrator/commit/a614462d387d28dd8f03585e33a6fbac3aee47b4)
-- **Handle stale start and graceful shutdown** [`2f4662b`](https://github.com/Untrivial-ai/agent-orchestrator/commit/2f4662b470811ab77982a44598053a07cb485c16)
-- **Keep open re-servable after a pane exits** [`a766a80`](https://github.com/Untrivial-ai/agent-orchestrator/commit/a766a80f76b48076cda26ed00e56f783ddf10905)
-- **Clear conn entry before sending exited frame** [`4f77062`](https://github.com/Untrivial-ai/agent-orchestrator/commit/4f77062aedc0e387593fa6e5b18fbe8f47f7df56)
-- **Guard subscribe-to-assign window in openTerminal** [`eda39a1`](https://github.com/Untrivial-ai/agent-orchestrator/commit/eda39a156a35e90a4b08f504cfcbf2f4356555c3)
-- **Address notifier delivery review feedback** [`d4622fe`](https://github.com/Untrivial-ai/agent-orchestrator/commit/d4622fe223ec6b2b1c2686c02808ff7653659813)
-- **Update server_test for termMgr arg after rebase** [`0d8ffcd`](https://github.com/Untrivial-ai/agent-orchestrator/commit/0d8ffcd17a6769ff501610ae03d9fd787eb92c25)
-- **Harden daemon control surface and stop CLI from writing the store** [`2d00e46`](https://github.com/Untrivial-ai/agent-orchestrator/commit/2d00e4675d1575a8942989e39cc75176c73b32f2)
-- **Harden notification delivery leases** [`041c8c8`](https://github.com/Untrivial-ai/agent-orchestrator/commit/041c8c8f7f649acc59f3886353d6eb0f1dd7f1f8)
-- **Address notifier review cleanup** [`d39e8e0`](https://github.com/Untrivial-ai/agent-orchestrator/commit/d39e8e0da3d30ae84e7f7f393cec6ad058695eec)
-- **Preserve notification surface disables** [`5c07e81`](https://github.com/Untrivial-ai/agent-orchestrator/commit/5c07e818a17c8ebfd11cf339244e695eb78077ee)
+- [Read the documentation](/docs)
+- [View detailed releases on GitHub](https://github.com/Untrivial-ai/agent-orchestrator/releases)

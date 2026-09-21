@@ -50,6 +50,9 @@ for (const file of fs.readdirSync(changelogDirectory).filter((name) => name.ends
 	}
 
 	if (file.endsWith("-weekly-update.mdx")) {
+		if (/github\.com\/[^/]+\/[^/]+\/commit\/[a-f0-9]+/i.test(raw)) {
+			errors.push(`${file}: raw commit links are not allowed in the public changelog`);
+		}
 		const references = [
 			...raw.matchAll(/github\.com\/[^/]+\/[^/]+\/pull\/(\d+)/gm),
 		].map((match) => Number(match[1]));

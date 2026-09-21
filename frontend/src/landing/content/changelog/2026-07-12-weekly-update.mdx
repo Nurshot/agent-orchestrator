@@ -1,58 +1,85 @@
 ---
-title: "Weekly update — Jul 6, 2026 to Jul 12, 2026"
-description: "What changed in Agent Orchestrator this week: 13 features, 29 fixes."
+title: "Connect Mobile, in-app browser feedback, and agent switching"
+description: "The phone app can connect securely on a local network, browser previews accept visual feedback, and a session can change agents without losing its worktree."
 date: "2026-07-12"
 rangeStart: "2026-07-06"
 rangeEnd: "2026-07-12"
 historical: true
 ---
 
-## Features
 
-- **Instrument renderer failure and CTA events** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2407" />
-- **Replace empty board shells with first-run onboarding states** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2432" />
-- **Switch a session's agent mid-flight** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2412" />
-- **Update Pi agent to support interactive sessions and adjust command arguments** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2480" />
-- **Combine workspace project stack** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2460" />
-- **Enrich PR observation context** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2492" />
+## Connect Mobile: password-authenticated LAN bridge <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2533" />
+
+Connect Mobile opens a temporary password-protected local connection and pairs a phone by QR code without exposing the loopback daemon.
+
+## Add in-preview annotations <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2548" />
+
+You can mark a point in an in-app browser preview and send that visual feedback back to the agent.
+
+## Switch a session's agent mid-flight <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2412" />
+
+A running session can change agents while keeping its project, branch, worktree, and uncommitted changes.
+
+## Improvements
+
+### Mobile
+
 - **Port supervisor app to current main** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2522" />
-- **Agent driven browser previews + Markdown rendering** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2455" />
+
+### Pull requests
+
+- **Combine workspace project stack** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2460" />
+
+### Terminal
+
+- **Replace empty board shells with first-run onboarding states** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2432" />
 - **Minimal empty state** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2536" />
-- **Connect Mobile: password-authenticated LAN bridge** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2533" />
-- **Add in-preview annotations** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2548" />
+
+### Desktop
+
 - **Migrate renderer to token-based design system** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2535" />
 - **Adding a Confirm Delete component to the Sidebar** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2513" />
 
+### Browser
+
+- **Agent driven browser previews + Markdown rendering** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2455" />
+
+### Agents
+
+- **Update Pi agent to support interactive sessions and adjust …** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2480" />
+
+
 ---
 
-**Bug fixes**
+## Bug fixes
 
-- **Improve prompt delivery strategy handling and update launch command logic** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2450" />
-- **Update launch command to ignore unsupported system prompt flags** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2446" />
-- **Wrong exit code on too many args for review submit and preview** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2457" />
-- **Point Windows NSIS shortcut at the real binary (#2414)** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2467" />
-- **Hydrate tracked PR repo owner and name** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2510" />
-- **Isolate dev daemon from installed app on port and state dir** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2465" />
-- **Maximize the browser preview over the whole app window** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2440" />
-- **Sync topbar activity pill** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2541" />
-- **Stream Vibe worker output** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2521" />
-- **Launch grok prompts interactively** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2518" />
-- **Show startup state for pending terminals** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2512" />
-- **Wheel-scroll codex transcripts via terminal scrollback** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2499" />
-- **Align landing install docs** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2546" />
-- **Smooth sidebar collapse and expand** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2426" />
-- **Stabilize scm observer dispatch** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2531" />
-- **Resolve default reviewer harness** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2572" />
-- **Align docs accordion sizing with legacy CLI dropdown style** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2576" />
-- **Landing nav Features link scrolls to features section** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2574" />
-- **Align new task agent and branch fields** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2563" />
-- **Remove daemon status dot from settings footer** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2588" />
-- **Keep browser preview aligned when zoomed** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2575" />
-- **Stop Ctrl+Arrow/Ctrl+Backspace/Ctrl+V from double-firing** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2586" />
+### Agents
+
 - **Submit multiline prompts + never nudge a session paused on a permission dialog** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2357" />
-- **Remove duplicate CreateProjectFlow from Sidebar** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2612" />
-- **Force UTF-8 client mode on tmux attach** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2602" />
-- **Hide root topbar crumb on macOS** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2613" />
+
+### Pull requests
+
 - **Scope reviews tab to open PRs** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2506" />
+
+### Browser
+
 - **Keep preview live and under modal dialogs** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2618" />
-- **Omit unsupported Amp permission flags** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2573" />
+- **Maximize the browser preview over the whole app window** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2440" />
+- **Keep browser preview aligned when zoomed** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2575" />
+- **Wrong exit code on too many args for review submit and preview** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2457" />
+
+### Terminal
+
+- **Wheel-scroll codex transcripts via terminal scrollback** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2499" />
+- **Show startup state for pending terminals** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2512" />
+- **Stop Ctrl+Arrow/Ctrl+Backspace/Ctrl+V from double-firing** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2586" />
+
+### Product
+
+- **Point Windows NSIS shortcut at the real binary** <PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/2467" />
+
+
+## Learn more
+
+- [Read the documentation](/docs)
+- [View detailed releases on GitHub](https://github.com/Untrivial-ai/agent-orchestrator/releases)

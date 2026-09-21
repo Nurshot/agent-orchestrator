@@ -3,6 +3,7 @@ import test from "node:test";
 import {
 	classifyPullRequest,
 	extractPullRequestNumbers,
+	pullRequestSummary,
 	renderHistoricalWeek,
 	renderWeeklyDraft,
 } from "./changelog-core.mjs";
@@ -24,6 +25,14 @@ test("classifies conventional user-facing changes", () => {
 	);
 	assert.equal(
 		classifyPullRequest(pullRequest({ title: "chore: update dependencies" })),
+		"skip",
+	);
+	assert.equal(
+		classifyPullRequest(pullRequest({ title: "fix(ci): repair release workflow" })),
+		"skip",
+	);
+	assert.equal(
+		classifyPullRequest(pullRequest({ title: "fix: address bugbot follow-up" })),
 		"skip",
 	);
 });
@@ -62,8 +71,62 @@ test("renders a reviewable weekly MDX draft", () => {
 	assert.ok(result);
 	assert.match(result.content, /rangeStart: "2026-09-14"/);
 	assert.match(result.content, /<PRBadge url=".*\/pull\/42" \/>/);
-	assert.match(result.content, /\*\*Bug fixes\*\*/);
+	assert.match(result.content, /## Bug fixes/);
+	assert.match(result.content, /### Product/);
+	assert.match(result.content, /View detailed releases on GitHub/);
 	assert.equal(result.counts.included, 2);
+});
+
+test("never publishes raw commit references", () => {
+	const result = renderHistoricalWeek({
+		changes: [
+			pullRequest({
+				number: undefined,
+				sha: "1234567890abcdef",
+				url: "https://github.com/Untrivial-ai/agent-orchestrator/commit/1234567890abcdef",
+			}),
+		],
+		startDate: "2026-09-14",
+		endDate: "2026-09-20",
+		totalCommits: 1,
+	});
+	assert.doesNotMatch(result.content, /1234567|\/commit\//);
+	assert.match(result.content, /no separately announced user-facing updates/i);
+});
+
+test("credits contributors only when explicitly marked", () => {
+	const regular = renderWeeklyDraft({
+		pullRequests: [pullRequest({ author: "great-contributor" })],
+		startDate: "2026-09-14",
+		endDate: "2026-09-20",
+	});
+	assert.doesNotMatch(regular.content, /great-contributor/);
+
+	const exceptional = renderWeeklyDraft({
+		pullRequests: [
+			pullRequest({ author: "great-contributor", labels: ["changelog:credit"] }),
+		],
+		startDate: "2026-09-14",
+		endDate: "2026-09-20",
+	});
+	assert.match(exceptional.content, /contributed by \[@great-contributor\]/);
+});
+
+test("feature summaries use factual PR context and reject an empty template", () => {
+	assert.equal(
+		pullRequestSummary(
+			pullRequest({
+				body: "## Summary\n\nUsers can now open links in the in-app browser without leaving their session.\n\n## Testing\n\nCovered.",
+			}),
+		),
+		"Users can now open links in the in-app browser without leaving their session.",
+	);
+	assert.equal(
+		pullRequestSummary(
+			pullRequest({ body: "## What\n\nBrief description of the change." }),
+		),
+		"Keep queued messages after restart.",
+	);
 });
 
 test("renders historical weeks without an editorial checklist", () => {
