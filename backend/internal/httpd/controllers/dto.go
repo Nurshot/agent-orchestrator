@@ -1260,7 +1260,7 @@ type AgentReadinessResponse = agentsvc.Readiness
 // An omitted or empty agentIds list selects all supported harnesses.
 type EnsureAgentReadinessRequest struct {
 	AgentIDs []string                     `json:"agentIds,omitempty"`
-	Purpose  domain.AgentReadinessPurpose `json:"purpose" enum:"display,settings,launch"`
+	Purpose  domain.AgentReadinessPurpose `json:"purpose" enum:"display,launch"`
 }
 
 // CodexAccountsResponse is the controller-owned, redacted cached account view.
