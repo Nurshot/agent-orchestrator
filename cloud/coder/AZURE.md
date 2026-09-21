@@ -140,10 +140,18 @@ Setup (on top of the base Coder from provision-coder-azure.sh):
    <rg>`, then re-run the coder container with `ARM_CLIENT_ID/ARM_CLIENT_SECRET/
    ARM_TENANT_ID/ARM_SUBSCRIPTION_ID` env (persisted in /etc/ao-coder.env).
 2. **Bake the native VM image** (`ao-coder-workspace-image`): a temp Ubuntu VM
-   installs node + `@anthropic-ai/claude-code` natively, extracts the `ao-worker`
-   and `ao` Go binaries from the control-plane image, adds a `coder` user with
-   NOPASSWD sudo, then Docker is removed - so nothing runs in a container. Then
-   `az vm deallocate/generalize` + `az image create --hyper-v-generation V2`.
+   installs node + **all AO harnesses natively** (`@anthropic-ai/claude-code`,
+   `@openai/codex`, `cursor-agent`) + `gh`, extracts the `ao-worker` and `ao` Go
+   binaries from the control-plane image, adds a `coder` user with NOPASSWD sudo,
+   then Docker is removed - so nothing runs in a container. Then
+   `az vm deallocate/generalize` + `az image create --hyper-v-generation V2`. All
+   three harnesses are baked into the ONE shared image (matching `cloud/Dockerfile`,
+   which is what lets nodeops/ecs sessions switch harness mid-session with zero
+   install); the harness chosen at project setup only decides which binary the
+   worker launches, not what is installed. To refresh harness versions (or add a
+   new harness) without a full rebuild, run
+   `cloud/scripts/bake-coder-azure-image.sh`, which bakes FROM the current image
+   and only adds/updates harnesses, then re-point the template at the new image.
 3. **Publish the template:** `coder templates push ao-azure-vm -d <dir>
    --variable subnet_id=<subnet> --variable image_id=<managed-image-id>`.
 4. **Repoint** `ao-cloud/staging/coder` `template_id` at it and redeploy the CP
@@ -156,10 +164,20 @@ stop/start). The control plane then bootstraps the baked `ao-worker` natively
 over the agent - exactly like eleven_x's EC2 setup. No Docker install, no image
 pull at boot.
 
-**Follow-ups for this variant** (not blockers): persist the OS disk across
-stop/start via a separate managed disk (Coder's stop currently destroys the VM);
-move the baked image into a Compute Gallery for multi-region/versioning; and give
-each workspace VM an NSG that only allows outbound (the agent dials out).
+**Durable root + stop/start persistence:** the AO worker bootstrap refuses unless
+the durable root (`/home/coder`) is a real MOUNTED directory (`mountpoint -q`) -
+matching eleven_x's dev-kit, which mounts a persistent disk there. So the template
+attaches a persistent per-workspace managed disk (`azurerm_managed_disk.durable`,
+`count = 1` so it survives a Coder **stop**; the attachment is `count = start_count`)
+and cloud-init formats+mounts it at `/home/coder` before the agent starts. Coder
+`Pause` maps to `Stop` (`sandbox/coder/client.go`), which destroys the VM but keeps
+the disk, so on `Resume` a fresh VM re-mounts the same disk and `/home/coder`
+workspace state persists. Only `Delete`/terminate (e.g. an orchestrator reaping a
+finished child) tears the disk down.
+
+**Follow-ups for this variant** (not blockers): move the baked image into a Compute
+Gallery for multi-region/versioning; and give each workspace VM an NSG that only
+allows outbound (the agent dials out).
 
 ## Teardown
 
