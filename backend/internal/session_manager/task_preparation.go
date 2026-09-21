@@ -107,13 +107,17 @@ func (m *Manager) createTaskPreparation(ctx context.Context, prep *taskPreparati
 		Kind:      domain.KindWorker,
 	}, prep.record.ID, prep.branch, baseRefs)
 	if err == nil {
-		writer := m.store.(taskPreparationStore)
-		var updated bool
-		updated, err = writer.SetSessionProvisionedWorkspace(
-			ctx, prep.record.ID, ws.Branch, ws.Path, ws.RepoPath, m.clock(),
-		)
-		if err == nil && !updated {
-			err = errors.New("preparation row no longer exists")
+		writer, ok := m.store.(taskPreparationStore)
+		if !ok {
+			err = errors.New("task preparation store unavailable")
+		} else {
+			var updated bool
+			updated, err = writer.SetSessionProvisionedWorkspace(
+				ctx, prep.record.ID, ws.Branch, ws.Path, ws.RepoPath, m.clock(),
+			)
+			if err == nil && !updated {
+				err = errors.New("preparation row no longer exists")
+			}
 		}
 		if err != nil {
 			cleanupCtx, cancel := spawnRollbackContext(ctx)
@@ -151,7 +155,10 @@ func (m *Manager) claimTaskPreparation(token string, projectID domain.ProjectID)
 }
 
 func (m *Manager) promoteTaskPreparation(ctx context.Context, prep *taskPreparation, rec domain.SessionRecord) (domain.SessionRecord, error) {
-	promoter := m.store.(taskPreparationStore)
+	promoter, ok := m.store.(taskPreparationStore)
+	if !ok {
+		return domain.SessionRecord{}, errors.New("task preparation store unavailable")
+	}
 	updated, err := promoter.PromoteTaskPreparation(ctx, prep.record.ID, rec)
 	if err != nil {
 		return domain.SessionRecord{}, err
@@ -226,8 +233,14 @@ func (m *Manager) cleanupTaskPreparation(ctx context.Context, prep *taskPreparat
 			}
 			m.rollbackSpawnSeedRow(ctx, prep.record.ID)
 		}
-	} else if _, err := m.store.(taskPreparationStore).DeleteTaskPreparation(ctx, prep.record.ID); err != nil {
-		return err
+	} else {
+		store, ok := m.store.(taskPreparationStore)
+		if !ok {
+			return errors.New("task preparation store unavailable")
+		}
+		if _, err := store.DeleteTaskPreparation(ctx, prep.record.ID); err != nil {
+			return err
+		}
 	}
 	m.taskPreparationsMu.Lock()
 	delete(m.taskPreparations, prep.token)
@@ -294,6 +307,10 @@ func (m *Manager) cleanupTaskPreparationRecord(ctx context.Context, rec domain.S
 			return err
 		}
 	}
-	_, err := m.store.(taskPreparationStore).DeleteTaskPreparation(ctx, rec.ID)
+	store, ok := m.store.(taskPreparationStore)
+	if !ok {
+		return errors.New("task preparation store unavailable")
+	}
+	_, err := store.DeleteTaskPreparation(ctx, rec.ID)
 	return err
 }

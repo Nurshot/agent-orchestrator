@@ -35,6 +35,7 @@ type ProjectIDParam struct {
 	ID string `path:"id" description:"Project identifier (registry key)."`
 }
 
+// TaskPreparationTokenParam identifies an unclaimed speculative task workspace.
 type TaskPreparationTokenParam struct {
 	Token string `path:"token" description:"Opaque speculative task-worktree token."`
 }
@@ -891,6 +892,7 @@ type DelegateTaskRequest struct {
 	TaskPreparation string `json:"taskPreparation,omitempty"`
 }
 
+// PrepareTaskResponse returns the opaque token for a speculative task workspace.
 type PrepareTaskResponse struct {
 	OK              bool   `json:"ok"`
 	TaskPreparation string `json:"taskPreparation,omitempty"`
