@@ -346,6 +346,7 @@ vi.mock("./CenterPane", () => ({
 		workspaceTabs,
 		workspaceTabActions,
 		reviewerTerminal,
+		reviewerChatContent,
 		terminalTarget,
 		auxiliaryTabOrder,
 	}: {
@@ -362,6 +363,7 @@ vi.mock("./CenterPane", () => ({
 		workspaceTabs?: Array<{ key: string; content: ReactNode; onSelect: () => void }>;
 		workspaceTabActions?: ReactNode;
 		reviewerTerminal?: { handleId: string; harness: string };
+		reviewerChatContent?: ReactNode;
 		terminalTarget?: { kind: string; handleId?: string };
 		auxiliaryTabOrder?: string[];
 	}) => (
@@ -382,6 +384,7 @@ vi.mock("./CenterPane", () => ({
 			</div>
 			<div data-testid="session-tab">{session?.title ?? ""}</div>
 			<div data-testid="reviewer-harness">{reviewerTerminal?.harness ?? ""}</div>
+			{reviewerChatContent}
 			{reviewerTerminal ? (
 				<button type="button" onClick={() => onSelectReviewerTerminal?.(reviewerTerminal)}>
 					select reviewer tab
@@ -2562,6 +2565,61 @@ describe("SessionView", () => {
 		fireEvent.click(screen.getByRole("button", { name: "send review feedback" }));
 		expect(screen.queryByTestId("reviewer-chat-surface")).not.toBeInTheDocument();
 		expect(screen.getByTestId("chat-surface")).toBeInTheDocument();
+	});
+
+	it("returns to worker Chat when the selected reviewer Chat is replaced", async () => {
+		const worker = workerSession("sess-1");
+		worker.mode = "chat";
+		const view = render(<SessionView sessionId="sess-1" />);
+		act(() => {
+			view.client.setQueryData(["session-reviews", "sess-1"], {
+				reviewerHandleId: "review-chat:review-1",
+				reviewerSurface: { mode: "chat", reviewId: "review-1", harness: "codex" },
+				reviews: [],
+				runs: [],
+			});
+		});
+
+		fireEvent.click(screen.getByRole("button", { name: "open reviewer chat" }));
+		expect(screen.getByTestId("reviewer-chat-surface")).toHaveTextContent("review-1");
+
+		act(() => {
+			view.client.setQueryData(["session-reviews", "sess-1"], {
+				reviewerHandleId: "review-chat:review-2",
+				reviewerSurface: { mode: "chat", reviewId: "review-2", harness: "claude-code" },
+				reviews: [],
+				runs: [],
+			});
+		});
+
+		await waitFor(() => expect(screen.queryByTestId("reviewer-chat-surface")).not.toBeInTheDocument());
+		expect(screen.getByTestId("chat-surface")).toBeInTheDocument();
+	});
+
+	it("returns to the worker terminal when the selected reviewer Chat disappears", async () => {
+		const view = render(<SessionView sessionId="sess-1" />);
+		act(() => {
+			view.client.setQueryData(["session-reviews", "sess-1"], {
+				reviewerHandleId: "review-chat:review-1",
+				reviewerSurface: { mode: "chat", reviewId: "review-1", harness: "codex" },
+				reviews: [],
+				runs: [],
+			});
+		});
+
+		fireEvent.click(screen.getByRole("button", { name: "open reviewer chat" }));
+		expect(screen.getByTestId("reviewer-chat-surface")).toHaveTextContent("review-1");
+
+		act(() => {
+			view.client.setQueryData(["session-reviews", "sess-1"], {
+				reviewerHandleId: "",
+				reviews: [],
+				runs: [],
+			});
+		});
+
+		await waitFor(() => expect(screen.queryByTestId("reviewer-chat-surface")).not.toBeInTheDocument());
+		expect(screen.getByTestId("terminal-target")).toHaveTextContent("worker");
 	});
 
 	it("returns to the session terminal when the reviewer handle is cleared", async () => {

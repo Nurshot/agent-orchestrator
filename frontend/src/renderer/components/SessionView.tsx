@@ -887,6 +887,12 @@ export function SessionView({ sessionId }: SessionViewProps) {
 	const reviewerTerminal = session && sessionIsActive(session) ? availableReviewerTerminal : undefined;
 	const availableReviewerChat = reviewerChatFromReviews(reviewerQuery.data);
 	const reviewerChat = session && sessionIsActive(session) ? availableReviewerChat : undefined;
+	useEffect(() => {
+		if (!reviewerChatId || !reviewerQuery.isFetched) return;
+		if (availableReviewerChat?.reviewId !== reviewerChatId) {
+			setReviewerChatId(null);
+		}
+	}, [availableReviewerChat?.reviewId, reviewerChatId, reviewerQuery.isFetched]);
 
 	// Shell terminals opened inside a session live beside its pane as extra tabs,
 	// scoped to the session on screen so each session has its own shell set.
