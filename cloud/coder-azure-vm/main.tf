@@ -97,9 +97,30 @@ locals {
     WantedBy=multi-user.target
   UNIT
 
+  # The AO worker bootstrap requires the durable root (/home/coder) to be a real
+  # MOUNTED directory (mountpoint -q), which also gives stop/start disk
+  # persistence. So format+mount the attached data disk at /home/coder BEFORE
+  # starting the coder agent.
+  mount_script = <<-MOUNT
+    #!/bin/bash
+    set -e
+    for i in $(seq 1 60); do [ -b /dev/disk/azure/scsi1/lun0 ] && break; sleep 2; done
+    DISK=/dev/disk/azure/scsi1/lun0
+    blkid "$DISK" >/dev/null 2>&1 || mkfs.ext4 -F "$DISK"
+    mkdir -p /home/coder
+    grep -q " /home/coder " /etc/fstab || echo "$DISK /home/coder ext4 defaults,nofail 0 2" >> /etc/fstab
+    mountpoint -q /home/coder || mount "$DISK" /home/coder
+    chown coder:coder /home/coder
+    chmod 0755 /home/coder
+  MOUNT
+
   custom_data = base64encode(join("\n", [
     "#cloud-config",
     "write_files:",
+    "  - path: /opt/mount-durable.sh",
+    "    encoding: b64",
+    "    permissions: '0755'",
+    "    content: ${base64encode(local.mount_script)}",
     "  - path: /opt/coder-init.sh",
     "    encoding: b64",
     "    permissions: '0755'",
@@ -109,9 +130,31 @@ locals {
     "    permissions: '0644'",
     "    content: ${base64encode(local.agent_unit)}",
     "runcmd:",
+    "  - [ bash, /opt/mount-durable.sh ]",
     "  - [ systemctl, daemon-reload ]",
     "  - [ systemctl, enable, --now, coder-agent ]",
   ]))
+}
+
+# Persistent per-workspace data disk mounted at /home/coder (the durable root).
+# count = 1 (not start_count) so it survives stop/start; destroyed on workspace
+# delete. Satisfies the bootstrap's mountpoint check + persists workspace state.
+resource "azurerm_managed_disk" "durable" {
+  count                = 1
+  name                 = "${local.name}-durable"
+  resource_group_name  = var.resource_group
+  location             = var.location
+  storage_account_type = "StandardSSD_LRS"
+  create_option        = "Empty"
+  disk_size_gb         = 30
+}
+
+resource "azurerm_virtual_machine_data_disk_attachment" "durable" {
+  count              = data.coder_workspace.me.start_count
+  managed_disk_id    = azurerm_managed_disk.durable[0].id
+  virtual_machine_id = azurerm_linux_virtual_machine.main[0].id
+  lun                = 0
+  caching            = "ReadWrite"
 }
 
 resource "azurerm_public_ip" "main" {
