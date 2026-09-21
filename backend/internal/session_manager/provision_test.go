@@ -332,6 +332,16 @@ func TestResolveChatAgentConfigValidatesAndResetsDependentTuning(t *testing.T) {
 	}
 	resolved, err = m.resolveChatAgentConfig(context.Background(), ports.SpawnConfig{
 		ProjectID: "p", Kind: domain.KindWorker, Harness: domain.HarnessCodex,
+		AgentConfig: ports.AgentConfig{Model: "new", Effort: "low"}, EffortOverride: true,
+	}, project)
+	if err != nil || resolved.Model != "new" || resolved.Effort != "low" {
+		t.Fatalf("per-session effort override = %#v, %v; want new/low", resolved, err)
+	}
+	if project.Worker.AgentConfig.Effort != "high" {
+		t.Fatalf("project effort mutated to %q, want high", project.Worker.AgentConfig.Effort)
+	}
+	resolved, err = m.resolveChatAgentConfig(context.Background(), ports.SpawnConfig{
+		ProjectID: "p", Kind: domain.KindWorker, Harness: domain.HarnessCodex,
 		AgentConfig: ports.AgentConfig{Model: "old"}, EffortOverride: true,
 	}, project)
 	if err != nil || resolved.Effort != "" {

@@ -11898,6 +11898,9 @@ components:
         displayName:
           maxLength: 20
           type: string
+        effort:
+          maxLength: 64
+          type: string
         harness:
           enum:
           - claude-code
