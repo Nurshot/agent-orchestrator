@@ -139,12 +139,11 @@
 	--color-settings-menu: var(--color-bg-settings-menu);
 	--color-settings-menu-selected: var(--color-bg-settings-menu-selected);
 	--color-settings-title: var(--color-text-settings-title);
-	--color-settings-muted: var(--color-text-settings-muted);
 	--color-settings-label: var(--color-text-settings-row);
 	--color-bg-settings-row-hover: color-mix(in oklch, var(--color-bg-settings-row) 94%, var(--color-text-settings-title));
 	--color-bg-settings-trigger: color-mix(in oklch, var(--color-bg-settings-row) 97%, var(--color-text-settings-title));
 	--color-bg-settings-trigger-hover: color-mix(in oklch, var(--color-bg-settings-row) 91%, var(--color-text-settings-title));
-	--color-text-settings-trigger: color-mix(in oklch, var(--color-text-settings-title) 80%, var(--color-text-settings-muted));
+	--color-text-settings-trigger: color-mix(in oklch, var(--color-text-settings-title) 80%, var(--muted-foreground));
 	--radius-settings-row: var(--radius-settings-row);
 	--radius-settings-panel: var(--radius-settings-panel);
 
@@ -280,7 +279,6 @@
 	--color-success: var(--bridge-success);
 	--color-success-bright: var(--color-success-bright);
 	--color-warning: var(--bridge-warning);
-	--color-error: var(--bridge-danger);
 	--color-status-working: var(--bridge-status-working);
 	--color-status-needs-you: var(--bridge-status-needs-you);
 	--color-status-validating: var(--bridge-status-validating);
@@ -292,7 +290,7 @@
 	--color-status-terminated: var(--bridge-status-terminated);
 	--color-status-terminated-foreground: var(--bridge-status-terminated-foreground);
 	--color-status-unknown: var(--bridge-status-unknown);
-	--color-destructive: var(--bridge-danger);
+	--color-destructive: var(--destructive);
 	--color-destructive-foreground: var(--color-accent-foreground);
 
 	--color-interactive-hover: var(--bridge-interactive-hover);
@@ -436,12 +434,12 @@
 	background-color: var(--color-bg-settings-dialog);
 }
 
-@utility bg-settings-accent {
-	background-color: var(--color-settings-accent);
+@utility bg-accent {
+	background-color: var(--color-accent);
 }
 
-@utility text-settings-accent {
-	color: var(--color-settings-accent);
+@utility text-accent {
+	color: var(--color-accent);
 }
 
 @utility bg-settings-switch-on {
@@ -790,11 +788,18 @@ button.settings-row-bar {
 	padding-inline: var(--space-2);
 	padding-block: var(--space-1);
 	font-size: var(--font-size-base);
-	color: var(--color-text-settings-muted);
+	color: var(--muted-foreground);
 	outline: none;
 	box-shadow: none;
 	transition-property: color, background-color;
 	transition-duration: var(--duration-fast);
+
+	/* The trigger is a real button in the settings rows, so it needs a visible
+	 * focus ring; the outline above only clears the UA default. */
+	&:focus-visible {
+		outline: 2px solid var(--ring);
+		outline-offset: 1px;
+	}
 }
 
 .review-run-controls-container {
@@ -850,28 +855,6 @@ button.settings-row-bar {
 	color: var(--color-text-settings-row);
 }
 
-@utility settings-field-control {
-	width: 100%;
-	border-radius: var(--radius-settings-action);
-	border: 1px solid var(--color-border-settings-input);
-	background-color: var(--color-bg-settings-input);
-	padding-inline: calc(var(--spacing) * 3.5);
-	font-size: var(--font-size-md);
-	line-height: 1.25rem;
-	color: var(--color-text-settings-input);
-	outline: none;
-	transition-property: border-color, box-shadow;
-	transition-duration: var(--duration-normal);
-
-	&::placeholder {
-		color: var(--color-text-settings-placeholder);
-	}
-
-	&:focus-visible {
-		border-color: var(--color-border-settings-input);
-		box-shadow: none;
-	}
-}
 
 @utility settings-inline-edit-trigger {
 	display: inline-flex;
@@ -884,7 +867,7 @@ button.settings-row-bar {
 	border: 0;
 	background: transparent;
 	padding: 0;
-	color: var(--color-text-settings-muted);
+	color: var(--muted-foreground);
 	outline: none;
 	cursor: pointer;
 	transition-property: color;
@@ -940,47 +923,13 @@ button.settings-row-bar {
 	}
 
 	&:focus-visible {
-		border-color: var(--color-border-settings-input);
-		box-shadow: none;
 		color: var(--color-text-settings-row);
-		outline: none;
+		/* Replaces the outline the base rule removes, so keyboard focus stays visible. */
+		outline: 2px solid var(--ring);
+		outline-offset: 1px;
 	}
 }
 
-@utility settings-inline-input {
-	width: auto;
-	max-width: min(var(--size-settings-inline-input-max), var(--size-settings-inline-input-max-percent));
-	min-width: var(--size-settings-inline-input-min);
-	flex: 0 1 auto;
-	height: var(--size-settings-inline-input-height);
-	border: 1px solid var(--color-border-settings-input);
-	border-radius: var(--radius-lg);
-	background-color: var(--color-bg-settings-input);
-	padding-inline: calc(var(--spacing) * 2.5);
-	font-size: var(--font-size-base);
-	line-height: 1.25rem;
-	color: var(--color-text-settings-input);
-	text-align: right;
-	outline: none;
-	box-shadow: none;
-	transition-property: border-color, box-shadow, color;
-	transition-duration: var(--duration-normal);
-
-	&::placeholder {
-		color: var(--color-text-settings-placeholder);
-	}
-
-	&:hover {
-		color: var(--color-text-settings-row);
-	}
-
-	&:focus-visible {
-		border-color: var(--color-border-settings-input);
-		box-shadow: none;
-		color: var(--color-text-settings-row);
-		outline: none;
-	}
-}
 
 @utility settings-model-control {
 	width: var(--size-settings-inline-input-max);
@@ -1132,45 +1081,19 @@ button.settings-row-bar {
 /* Search field inside a dropdown menu. settings-inline-input cannot be reused
    here: it is a settings-ROW control, so it caps at 42% width and right-aligns
    its text, which reads as a stray half-width box once it sits in a menu. */
-@utility menu-search-input {
-	width: 100%;
-	height: var(--size-settings-action-height);
-	border: 1px solid var(--color-border-settings-input);
-	border-radius: var(--radius-md);
-	background-color: var(--color-bg-settings-input);
-	padding-inline: var(--space-2_5);
-	font-size: var(--font-size-md);
-	line-height: 1.25rem;
-	color: var(--color-text-settings-input);
-	text-align: left;
-	outline: none;
-	box-shadow: none;
-	transition-property: border-color, box-shadow, color;
-	transition-duration: var(--duration-normal);
-
-	&::placeholder {
-		color: var(--color-text-settings-placeholder);
-	}
-
-	&:focus-visible {
-		border-color: var(--color-border-settings-input);
-		box-shadow: none;
-		color: var(--color-text-settings-row);
-		outline: none;
-	}
-
-	/* The clear affordance is secondary to the query itself, so it recedes
-	   until pointed at. */
-	&::-webkit-search-cancel-button {
-		opacity: 0.4;
-		cursor: pointer;
-		transition: opacity var(--duration-fast) ease-out;
-	}
-
-	&::-webkit-search-cancel-button:hover {
-		opacity: 1;
-	}
+/* The clear affordance is secondary to the query, so it recedes until pointed
+ * at. One rule for every search input, rather than one utility every search
+ * input has to remember to wear. */
+input[type="search"]::-webkit-search-cancel-button {
+	opacity: 0.4;
+	cursor: pointer;
+	transition: opacity var(--duration-fast) ease-out;
 }
+
+input[type="search"]::-webkit-search-cancel-button:hover {
+	opacity: 1;
+}
+
 
 @utility settings-row-value {
 	min-width: 0;
@@ -1183,7 +1106,7 @@ button.settings-row-bar {
 	/* Match settings-option-trigger (Refresh / agent selects) size. */
 	font-size: var(--font-size-base);
 	line-height: 1.25rem;
-	color: var(--color-text-settings-muted);
+	color: var(--muted-foreground);
 }
 
 @utility settings-footer-button {
@@ -1216,7 +1139,7 @@ button.settings-row-bar {
 
 @utility settings-footer-button-primary {
 	border-color: transparent;
-	background-color: var(--color-settings-accent);
+	background-color: var(--color-accent);
 	padding-inline: var(--size-settings-footer-button-padding-x);
 	color: var(--color-settings-footer-button-primary-fg);
 	transition-property: opacity;
@@ -1252,7 +1175,7 @@ button.settings-row-bar {
 	padding-inline: var(--space-3);
 	font-size: var(--font-size-base);
 	line-height: 1;
-	color: var(--color-text-settings-muted);
+	color: var(--muted-foreground);
 	outline: none;
 	transition-property: color, background-color;
 	transition-duration: var(--duration-normal);
@@ -1276,7 +1199,7 @@ button.settings-row-bar {
 	padding-left: var(--space-4);
 	font-size: var(--font-size-caption);
 	line-height: var(--leading-settings-mobile-hint);
-	color: var(--color-text-settings-muted);
+	color: var(--muted-foreground);
 
 	& > li + li {
 		margin-top: calc(var(--spacing) * 1.5);
@@ -1296,7 +1219,7 @@ button.settings-row-bar {
 	height: calc(var(--spacing) * 8);
 	place-items: center;
 	border-radius: var(--radius-md);
-	color: var(--color-text-settings-muted);
+	color: var(--muted-foreground);
 	transition-property: color, background-color;
 	transition-duration: var(--duration-normal);
 
@@ -1323,7 +1246,7 @@ button.settings-row-bar {
 	font-size: 20px;
 	font-weight: 700;
 	line-height: 1.75rem;
-	color: var(--color-text-import-title);
+	color: var(--foreground);
 }
 
 @utility import-description {
@@ -1349,7 +1272,7 @@ button.settings-row-bar {
 
 	&:hover {
 		background-color: var(--color-interactive-hover);
-		color: var(--color-text-import-title);
+		color: var(--foreground);
 	}
 
 	&:disabled {
@@ -2074,8 +1997,10 @@ body.is-resizing-x .session-split[data-workspace-resizing="true"] [data-slot="in
 	box-shadow: none !important;
 }
 
-/* Icon-only trailing controls (project kebab/orchestrator, session pin/kill,
-   Projects "+") tint the glyph only — never pick up the focus fill above. */
+/* Controls that draw their own focus treatment opt out of the wash above so the
+   app's standard focus ring shows instead: the icon-only trailing controls
+   (project kebab/orchestrator, session pin/kill, Projects "+") and the footer
+   rail buttons, which are Buttons now. Nothing here paints a fill. */
 .sidebar-focusless .sidebar-icon-action:focus-visible {
 	background-color: transparent !important;
 }
@@ -2398,15 +2323,11 @@ html.sidebar-reordering * {
 	--composer-bg: var(--color-bg-secondary);
 	--composer-bg-active: var(--color-bg-secondary);
 	--composer-border: color-mix(in oklch, var(--color-border-strong) 36%, transparent);
-	--composer-border-hover: color-mix(in oklch, var(--color-border-strong) 100%, var(--color-text-muted) 15%);
-	--composer-border-focus: color-mix(in oklch, var(--color-border-strong) 100%, var(--color-text-muted) 15%);
 
 	border-radius: var(--radius-chat-composer);
 	border-color: var(--composer-border);
 	background: var(--composer-bg);
 	box-shadow: none;
-	/* Border only — background must snap with the view-transition theme cut. */
-	transition: border-color 150ms ease-out;
 }
 
 .cursor-chat-composer[data-attached-top] {
@@ -2601,19 +2522,20 @@ html.sidebar-reordering * {
 }
 
 .cursor-chat-composer:hover:not(:focus-within) {
-	border-color: var(--composer-border-hover);
 	background: var(--composer-bg-active);
 }
 
-.cursor-chat-composer:focus-within,
+.cursor-chat-composer:focus-within {
+	background: var(--composer-bg-active);
+	box-shadow: none;
+}
+
 .cursor-chat-composer:has([data-state="open"]) {
-	border-color: var(--composer-border-focus);
 	background: var(--composer-bg-active);
 	box-shadow: none;
 }
 
 .cursor-chat-composer[data-dragging] {
-	border-color: var(--color-logo-accent);
 	background: var(--composer-bg-active);
 }
 
@@ -2739,8 +2661,6 @@ html.sidebar-reordering * {
 	--composer-bg: var(--color-bg-secondary);
 	--composer-bg-active: var(--color-bg-secondary);
 	--composer-border: color-mix(in oklch, var(--color-text-primary) 10%, transparent);
-	--composer-border-hover: color-mix(in oklch, var(--color-text-primary) 20%, transparent);
-	--composer-border-focus: color-mix(in oklch, var(--color-text-primary) 32%, transparent);
 
 	box-shadow: none;
 }
