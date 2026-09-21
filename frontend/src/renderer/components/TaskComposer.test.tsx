@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
+	delete: vi.fn(),
 	get: vi.fn(),
 	post: vi.fn(),
 	capture: vi.fn(),
@@ -53,6 +54,7 @@ vi.mock("./CreateProjectAgentSheet", () => ({
 
 vi.mock("../lib/api-client", () => ({
 	apiClient: {
+		DELETE: h.delete,
 		GET: h.get,
 		POST: h.post,
 	},
@@ -93,6 +95,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+	h.delete.mockReset();
 	h.get.mockReset();
 	h.post.mockReset();
 	h.capture.mockReset();

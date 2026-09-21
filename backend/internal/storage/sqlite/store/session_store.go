@@ -97,6 +97,65 @@ func (s *Store) SetSessionProvisionState(
 	return rows > 0, nil
 }
 
+// PromoteTaskPreparation makes a hidden speculative row visible without
+// touching workspace facts that may be published by the preparation goroutine.
+func (s *Store) PromoteTaskPreparation(ctx context.Context, id domain.SessionID, rec domain.SessionRecord) (bool, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	activity := normalActivity(rec.Activity, rec.UpdatedAt)
+	rows, err := s.qw.PromoteTaskPreparation(ctx, gen.PromoteTaskPreparationParams{
+		IssueID:            rec.IssueID,
+		Kind:               rec.Kind,
+		Harness:            rec.Harness,
+		AutoReviewEnabled:  rec.AutoReviewEnabled,
+		DisplayName:        rec.DisplayName,
+		ActivityState:      activity.State,
+		ActivityLastAt:     activity.LastActivityAt,
+		SessionMode:        domain.NormalizeSessionMode(rec.Mode),
+		Model:              rec.Metadata.Model,
+		SessionPermissions: string(rec.Metadata.Permissions),
+		CreatedAt:          rec.CreatedAt,
+		UpdatedAt:          rec.UpdatedAt,
+		AutoInjectReview:   rec.AutoInjectReview,
+		AutoInjectCI:       rec.AutoInjectCI,
+		ProvisionState:     rec.ProvisionState.WithDefault(),
+		ID:                 id,
+	})
+	if err != nil {
+		return false, fmt.Errorf("promote task preparation %s: %w", id, err)
+	}
+	return rows > 0, nil
+}
+
+// DeleteTaskPreparation removes only a row that has not been claimed.
+func (s *Store) DeleteTaskPreparation(ctx context.Context, id domain.SessionID) (bool, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	tx, err := s.writeDB.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("begin delete task preparation %s: %w", id, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `
+DELETE FROM change_log
+WHERE session_id = ?
+  AND EXISTS (SELECT 1 FROM sessions WHERE id = ? AND is_task_preparation = 1)`, id, id); err != nil {
+		return false, fmt.Errorf("delete task preparation %s change log: %w", id, err)
+	}
+	res, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE id = ? AND is_task_preparation = 1`, id)
+	if err != nil {
+		return false, fmt.Errorf("delete task preparation %s: %w", id, err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("delete task preparation %s rows affected: %w", id, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("commit delete task preparation %s: %w", id, err)
+	}
+	return rows > 0, nil
+}
+
 // UpdateSession writes the full mutable state of an existing session. The
 // id/project/num/created_at are immutable and not touched here.
 func (s *Store) UpdateSession(ctx context.Context, rec domain.SessionRecord) error {
@@ -560,6 +619,7 @@ func rowToRecord(row gen.GetSessionRow) domain.SessionRecord {
 		UpdatedAt:         row.UpdatedAt,
 		ProvisionState:    row.ProvisionState.WithDefault(),
 		ProvisionError:    row.ProvisionError,
+		IsTaskPreparation: row.IsTaskPreparation,
 	}
 }
 
@@ -632,6 +692,7 @@ func recordToInsert(rec domain.SessionRecord, num int64) gen.InsertSessionParams
 		UpdatedAt:                        rec.UpdatedAt,
 		ProvisionState:                   rec.ProvisionState.WithDefault(),
 		ProvisionError:                   rec.ProvisionError,
+		IsTaskPreparation:                rec.IsTaskPreparation,
 	}
 }
 

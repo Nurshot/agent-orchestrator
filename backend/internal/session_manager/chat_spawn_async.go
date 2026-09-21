@@ -38,6 +38,7 @@ type asyncChatSpawn struct {
 	systemPrompt      string
 	promptBytes       int
 	systemPromptBytes int
+	preparation       *taskPreparation
 }
 
 // asyncChatSpawnEligible reports whether a resolved spawn can answer early.
@@ -51,18 +52,28 @@ func asyncChatSpawnEligible(cfg ports.SpawnConfig, mode domain.SessionMode) bool
 // durable queue, and hands the rest to the background.
 func (m *Manager) beginAsyncChatSpawn(ctx context.Context, in asyncChatSpawn) (domain.SessionRecord, int, int, error) {
 	id := in.record.ID
+	rollback := func() {
+		if in.preparation == nil {
+			m.rollbackSpawnSeedRowAfterFailure(ctx, id)
+			return
+		}
+		cleanupCtx, cancel := spawnRollbackContext(ctx)
+		m.discardClaimedTaskPreparation(cleanupCtx, in.preparation)
+		cancel()
+	}
 	rec, err := m.setProvisionState(ctx, id, domain.SessionProvisionProvisioning, "")
 	if err != nil {
-		m.rollbackSpawnSeedRowAfterFailure(ctx, id)
+		rollback()
 		return domain.SessionRecord{}, 0, 0, wrapSpawnStage(id, ErrSpawnCreate, err)
 	}
 	if in.prompt != "" {
 		if _, err := m.chat.QueueChatPrompt(ctx, id, in.prompt); err != nil {
-			m.rollbackSpawnSeedRowAfterFailure(ctx, id)
+			rollback()
 			return domain.SessionRecord{}, 0, 0, wrapSpawnStage(id, ErrSpawnDeliverPrompt, err)
 		}
 		rec, err = m.getRecord(ctx, id)
 		if err != nil {
+			rollback()
 			return domain.SessionRecord{}, 0, 0, err
 		}
 	}
@@ -91,10 +102,29 @@ func (m *Manager) completeAsyncChatSpawn(ctx context.Context, in asyncChatSpawn)
 	id := in.record.ID
 	totalStarted := time.Now()
 	stageStarted := totalStarted
-	baseRefs := m.refreshDefaultBranchesBestEffort(ctx, in.project)
-	m.logAsyncChatSpawnStage(id, "default_branch_refresh", stageStarted)
-	stageStarted = time.Now()
-	ws, workspaceProject, err := m.createSessionWorkspace(ctx, in.project, in.cfg, id, in.branch, baseRefs)
+	var ws ports.WorkspaceInfo
+	var workspaceProject *ports.WorkspaceProjectInfo
+	var err error
+	if in.preparation != nil {
+		ws, workspaceProject, err = m.awaitTaskPreparation(ctx, in.preparation)
+		if err != nil && ctx.Err() != nil {
+			in.preparation.cancel()
+			m.taskPreparationsMu.Lock()
+			delete(m.taskPreparations, in.preparation.token)
+			m.taskPreparationsMu.Unlock()
+			m.failAsyncChatSpawn(ctx, id, wrapSpawnStage(id, ErrWorkspaceCreate, err))
+			return
+		}
+	}
+	if ws.Path == "" {
+		baseRefs := m.refreshDefaultBranchesBestEffort(ctx, in.project)
+		m.logAsyncChatSpawnStage(id, "default_branch_refresh", stageStarted)
+		stageStarted = time.Now()
+		ws, workspaceProject, err = m.createSessionWorkspace(ctx, in.project, in.cfg, id, in.branch, baseRefs)
+	} else {
+		m.logAsyncChatSpawnStage(id, "prepared_workspace_wait", stageStarted)
+		stageStarted = time.Now()
+	}
 	if err != nil {
 		m.failAsyncChatSpawn(ctx, id, wrapSpawnStage(id, ErrWorkspaceCreate, err))
 		return

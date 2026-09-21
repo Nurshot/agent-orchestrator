@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { agentReadiness } from "../test/agent-readiness-fixtures";
 import { NewTaskDialog } from "./NewTaskDialog";
 
-const { getMock, postMock, ensureAgentReadinessMock } = vi.hoisted(() => ({
+const { deleteMock, getMock, postMock, ensureAgentReadinessMock } = vi.hoisted(() => ({
+	deleteMock: vi.fn(),
 	getMock: vi.fn(),
 	postMock: vi.fn(),
 	ensureAgentReadinessMock: vi.fn(),
@@ -18,6 +19,7 @@ vi.mock("../hooks/useAgentReadinessQuery", async (importOriginal) => {
 
 vi.mock("../lib/api-client", () => ({
 	apiClient: {
+		DELETE: (...args: unknown[]) => deleteMock(...args),
 		GET: (...args: unknown[]) => getMock(...args),
 		POST: (...args: unknown[]) => postMock(...args),
 	},
@@ -38,12 +40,12 @@ vi.mock("../lib/api-client", () => ({
 function renderDialog() {
 	const onCreated = vi.fn();
 	const onOpenChange = vi.fn();
-	render(
+	const view = render(
 		<QueryClientProvider client={new QueryClient()}>
 			<NewTaskDialog open projectId="proj-1" onCreated={onCreated} onOpenChange={onOpenChange} />
 		</QueryClientProvider>,
 	);
-	return { onCreated, onOpenChange };
+	return { ...view, onCreated, onOpenChange };
 }
 
 function requestBody() {
@@ -82,6 +84,7 @@ async function waitForAgentCatalog() {
 
 beforeEach(() => {
 	ensureAgentReadinessMock.mockReset();
+	deleteMock.mockReset().mockResolvedValue({ data: undefined, error: undefined });
 	getMock.mockReset().mockImplementation(async (path: string) => {
 		if (path === "/api/v1/agents/readiness") {
 			return { data: agentInventory, error: undefined };
@@ -96,6 +99,9 @@ beforeEach(() => {
 	});
 	postMock.mockReset().mockImplementation(async (path: string) => {
 		if (path === "/api/v1/agents/readiness/ensure") return { data: agentInventory, error: undefined };
+		if (path === "/api/v1/projects/{id}/tasks/prepare") {
+			return { data: { ok: true, taskPreparation: "prep-token" }, error: undefined };
+		}
 		return { data: { ok: true, workerId: "worker-1", orchestratorId: "orch-1" }, error: undefined };
 	});
 });
@@ -107,7 +113,7 @@ describe("NewTaskDialog", () => {
 		renderDialog();
 		await waitForAgentCatalog();
 		await waitFor(() =>
-			expect(postMock).toHaveBeenCalledWith("/api/v1/projects/{id}/git/fetch", {
+			expect(postMock).toHaveBeenCalledWith("/api/v1/projects/{id}/tasks/prepare", {
 				params: { path: { id: "proj-1" } },
 			}),
 		);
@@ -135,12 +141,30 @@ describe("NewTaskDialog", () => {
 		expect(onOpenChange).toHaveBeenCalledWith(false);
 	});
 
+	it("cancels an unused prepared worktree when the composer closes", async () => {
+		const { unmount } = renderDialog();
+		await waitFor(() =>
+			expect(postMock).toHaveBeenCalledWith("/api/v1/projects/{id}/tasks/prepare", {
+				params: { path: { id: "proj-1" } },
+			}),
+		);
+		unmount();
+		expect(deleteMock).toHaveBeenCalledWith("/api/v1/task-preparations/{token}", {
+			params: { path: { token: "prep-token" } },
+		});
+	});
+
 	it("starts the original task naming the preselected project-default agent and optional model", async () => {
 		const { onCreated, onOpenChange } = renderDialog();
 		const user = userEvent.setup();
 		const brief = "  Restore the fallback renderer after WebGL init fails.  ";
 
 		await waitForAgentCatalog();
+		await waitFor(() =>
+			expect(postMock).toHaveBeenCalledWith("/api/v1/projects/{id}/tasks/prepare", {
+				params: { path: { id: "proj-1" } },
+			}),
+		);
 
 		await user.type(screen.getByLabelText("Task"), brief);
 		await user.click(await screen.findByRole("button", { name: "Model" }));
@@ -157,6 +181,7 @@ describe("NewTaskDialog", () => {
 				// call names it instead of relying on a server-side fallback.
 				agent: "claude-code",
 				model: "placeholder-model",
+				taskPreparation: "prep-token",
 			},
 		});
 		expect(requestBody()).not.toHaveProperty("issueId");
@@ -170,7 +195,9 @@ describe("NewTaskDialog", () => {
 		let delegateAttempts = 0;
 		postMock.mockImplementation(async (path: string) => {
 			if (path === "/api/v1/agents/readiness/ensure") return { data: agentInventory, error: undefined };
-			if (path === "/api/v1/projects/{id}/git/fetch") return { data: undefined, error: undefined };
+			if (path === "/api/v1/projects/{id}/tasks/prepare") {
+				return { data: { ok: true, taskPreparation: "prep-token" }, error: undefined };
+			}
 			delegateAttempts += 1;
 			if (delegateAttempts === 1) {
 				return {
@@ -335,7 +362,9 @@ describe("NewTaskDialog", () => {
 		},
 	])("displays daemon start errors for $code", async ({ code, message }) => {
 		postMock.mockImplementation(async (path: string) => {
-			if (path === "/api/v1/projects/{id}/git/fetch") return { data: undefined, error: undefined };
+			if (path === "/api/v1/projects/{id}/tasks/prepare") {
+				return { data: { ok: true, taskPreparation: "prep-token" }, error: undefined };
+			}
 			return {
 				data: undefined,
 				error: { code, message },

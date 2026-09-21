@@ -20,9 +20,9 @@ INSERT INTO sessions (
     preview_url, preview_revision, terminate_on_pr_merge, cleanup_generation, browser_capability_verifier,
     session_mode, provider_conversation_id, controller_generation, model, session_permissions,
     created_at, updated_at, is_pinned, pinned_at, auto_inject_review, auto_inject_ci,
-    provision_state, provision_error
+    provision_state, provision_error, is_task_preparation
 ) VALUES (
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 );
 
 -- name: UpdateSession :exec
@@ -176,7 +176,7 @@ SELECT id, project_id, num, issue_id, kind, harness,
     conversation_checkpoint_state, conversation_checkpoint_generation, conversation_checkpoint_native_id,
     conversation_checkpoint_unsettled, conversation_checkpoint_turn_id, native_checkpoint_evidence,
     native_transcript_path, auto_inject_review, auto_inject_ci, auto_review_enabled, model, session_permissions,
-    provision_state, provision_error
+    provision_state, provision_error, is_task_preparation
 FROM sessions WHERE id = ?;
 
 -- name: ListSessionsByProject :many
@@ -192,7 +192,7 @@ SELECT id, project_id, num, issue_id, kind, harness,
     conversation_checkpoint_state, conversation_checkpoint_generation, conversation_checkpoint_native_id,
     conversation_checkpoint_unsettled, conversation_checkpoint_turn_id, native_checkpoint_evidence,
     native_transcript_path, auto_inject_review, auto_inject_ci, auto_review_enabled, model, session_permissions,
-    provision_state, provision_error
+    provision_state, provision_error, is_task_preparation
 FROM sessions WHERE project_id IS ? ORDER BY num;
 
 -- name: ListAllSessions :many
@@ -208,9 +208,32 @@ SELECT id, project_id, num, issue_id, kind, harness,
     conversation_checkpoint_state, conversation_checkpoint_generation, conversation_checkpoint_native_id,
     conversation_checkpoint_unsettled, conversation_checkpoint_turn_id, native_checkpoint_evidence,
     native_transcript_path, auto_inject_review, auto_inject_ci, auto_review_enabled, model, session_permissions,
-    provision_state, provision_error
+    provision_state, provision_error, is_task_preparation
 FROM sessions ORDER BY project_id, num;
 
+-- name: PromoteTaskPreparation :execrows
+-- Claim the hidden row without touching branch/workspace facts that may be
+-- published concurrently by speculative worktree creation.
+UPDATE sessions SET
+    issue_id = sqlc.arg(issue_id),
+    kind = sqlc.arg(kind),
+    harness = sqlc.arg(harness),
+    auto_review_enabled = sqlc.arg(auto_review_enabled),
+    display_name = sqlc.arg(display_name),
+    activity_state = sqlc.arg(activity_state),
+    activity_last_at = sqlc.arg(activity_last_at),
+    is_terminated = 0,
+    session_mode = sqlc.arg(session_mode),
+    model = sqlc.arg(model),
+    session_permissions = sqlc.arg(session_permissions),
+    created_at = sqlc.arg(created_at),
+    updated_at = sqlc.arg(updated_at),
+    auto_inject_review = sqlc.arg(auto_inject_review),
+    auto_inject_ci = sqlc.arg(auto_inject_ci),
+    provision_state = sqlc.arg(provision_state),
+    provision_error = '',
+    is_task_preparation = 0
+WHERE id = sqlc.arg(id) AND is_task_preparation = 1;
 
 -- name: RenameSession :execrows
 UPDATE sessions SET display_name = ?, updated_at = ? WHERE id = ?;

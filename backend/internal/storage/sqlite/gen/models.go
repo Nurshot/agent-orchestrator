@@ -575,6 +575,7 @@ type Session struct {
 	NativeIdentityObservedAt         sql.NullTime
 	ProvisionState                   domain.SessionProvisionState
 	ProvisionError                   string
+	IsTaskPreparation                bool
 }
 
 type SessionCleanupFact struct {

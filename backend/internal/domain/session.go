@@ -194,6 +194,11 @@ type SessionRecord struct {
 	UpdatedAt         time.Time  `json:"updatedAt"`
 	IsPinned          bool       `json:"isPinned"`
 	PinnedAt          *time.Time `json:"pinnedAt,omitempty"`
+	// IsTaskPreparation marks a hidden row that only reserves identity and a
+	// speculative worktree for the New Task dialog. Claiming it clears the flag
+	// before the session becomes visible; cancellation and startup reconciliation
+	// delete it after reclaiming the worktree.
+	IsTaskPreparation bool `json:"-"`
 	// ProvisionState is how far a Chat spawn has got. A Chat spawn answers the
 	// API as soon as the row and its conversation exist, so a session can be
 	// visible — and receive queued messages — before its worktree and controller

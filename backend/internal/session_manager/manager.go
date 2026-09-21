@@ -410,6 +410,9 @@ type Manager struct {
 	defaultBranchRefreshGroup   singleflight.Group
 	defaultBranchRefreshMu      sync.Mutex
 	defaultBranchRefreshes      map[string]defaultBranchRefresh
+	taskPreparationsMu          sync.Mutex
+	taskPreparations            map[string]*taskPreparation
+	taskPreparationTTL          time.Duration
 	// runBackground runs an asynchronous spawn's remaining work. Nil means a
 	// plain goroutine; tests substitute a synchronous runner.
 	runBackground    func(func())
@@ -766,6 +769,8 @@ func New(d Deps) *Manager {
 		reconcileWorkers:               d.ReconcileWorkers,
 		defaultBranchRefreshTimeout:    defaultBranchRefreshTimeout,
 		defaultBranchRefreshes:         make(map[string]defaultBranchRefresh),
+		taskPreparations:               make(map[string]*taskPreparation),
+		taskPreparationTTL:             defaultTaskPreparationTTL,
 		openTranscriptFile:             os.Open,
 		lookPath:                       d.LookPath,
 		executable:                     d.Executable,
@@ -946,20 +951,49 @@ func (m *Manager) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Sess
 	promptBytes := len(prompt)
 	systemPromptBytes := len(systemPrompt)
 
-	rec, err := m.store.CreateSession(ctx, seedRecord(cfg, project.Config, m.clock()))
-	if err != nil {
-		return domain.SessionRecord{}, 0, 0, wrapSpawnStageEarly(ErrSpawnCreate, err)
+	var prep *taskPreparation
+	if cfg.Branch == "" {
+		prep = m.claimTaskPreparation(cfg.TaskPreparation, cfg.ProjectID)
 	}
-	m.markFreshSessionStatusReady(rec.ID)
+	var rec domain.SessionRecord
+	if prep != nil {
+		rec = prep.record
+	} else {
+		rec, err = m.store.CreateSession(ctx, seedRecord(cfg, project.Config, m.clock()))
+		if err != nil {
+			return domain.SessionRecord{}, 0, 0, wrapSpawnStageEarly(ErrSpawnCreate, err)
+		}
+	}
 	id := rec.ID
 	systemPromptFile, err := m.prepareSystemPromptFile(id, cfg.Harness, systemPrompt)
 	if err != nil {
-		m.rollbackSpawnSeedRowAfterFailure(ctx, id)
+		if prep != nil {
+			cleanupCtx, cancel := spawnRollbackContext(ctx)
+			m.discardClaimedTaskPreparation(cleanupCtx, prep)
+			cancel()
+		} else {
+			m.rollbackSpawnSeedRowAfterFailure(ctx, id)
+		}
 		return domain.SessionRecord{}, 0, 0, wrapSpawnStage(id, ErrSpawnSystemPrompt, err)
 	}
+	if prep != nil {
+		seed := seedRecord(cfg, project.Config, m.clock())
+		seed.ID = id
+		seed.ProvisionState = domain.SessionProvisionProvisioning
+		rec, err = m.promoteTaskPreparation(ctx, prep, seed)
+		if err != nil {
+			cleanupCtx, cancel := spawnRollbackContext(ctx)
+			m.discardClaimedTaskPreparation(cleanupCtx, prep)
+			cancel()
+			return domain.SessionRecord{}, 0, 0, wrapSpawnStageEarly(ErrSpawnCreate, err)
+		}
+	}
+	m.markFreshSessionStatusReady(id)
 
 	branch := cfg.Branch
-	if branch == "" {
+	if prep != nil {
+		branch = prep.branch
+	} else if branch == "" {
 		branch = DefaultSpawnBranch(id, cfg.Kind, sessionPrefix(project), projectKind, m.dataDir)
 	}
 
@@ -979,11 +1013,25 @@ func (m *Manager) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Sess
 			systemPrompt:      systemPrompt,
 			promptBytes:       promptBytes,
 			systemPromptBytes: systemPromptBytes,
+			preparation:       prep,
 		})
 	}
 
-	baseRefs := m.refreshDefaultBranchesBestEffort(ctx, project)
-	ws, workspaceProject, err := m.createSessionWorkspace(ctx, project, cfg, id, branch, baseRefs)
+	var ws ports.WorkspaceInfo
+	var workspaceProject *ports.WorkspaceProjectInfo
+	if prep != nil {
+		ws, workspaceProject, err = m.awaitTaskPreparation(ctx, prep)
+		if err != nil && ctx.Err() != nil {
+			cleanupCtx, cancel := spawnRollbackContext(ctx)
+			m.discardClaimedTaskPreparation(cleanupCtx, prep)
+			cancel()
+			return domain.SessionRecord{}, 0, 0, wrapSpawnStage(id, ErrWorkspaceCreate, err)
+		}
+	}
+	if ws.Path == "" {
+		baseRefs := m.refreshDefaultBranchesBestEffort(ctx, project)
+		ws, workspaceProject, err = m.createSessionWorkspace(ctx, project, cfg, id, branch, baseRefs)
+	}
 	if err != nil {
 		// Nothing observable exists yet — no worktree, no runtime — so the seed
 		// row is deleted outright instead of accumulating as a terminated orphan
@@ -2732,7 +2780,7 @@ func (m *Manager) SaveAndTeardownAll(ctx context.Context) error {
 		return fmt.Errorf("save-teardown-all: list sessions: %w", err)
 	}
 	for _, rec := range recs {
-		if rec.IsTerminated {
+		if rec.IsTerminated || rec.IsTaskPreparation {
 			continue
 		}
 		if rec.Metadata.WorkspacePath == "" || rec.Metadata.Branch == "" {
@@ -3067,6 +3115,9 @@ func (m *Manager) ReconcileStartupSafety(ctx context.Context) error {
 	_, err := m.recoverInterruptedInterfaceTransitions(ctx)
 	if err != nil {
 		return fmt.Errorf("reconcile: interface transitions: %w", err)
+	}
+	if err := m.CleanupInterruptedTaskPreparations(ctx); err != nil {
+		return fmt.Errorf("reconcile: task preparations: %w", err)
 	}
 	// An asynchronous spawn lives in one daemon's memory. Anything still
 	// "starting" after a restart has no one left to finish it, so say so rather

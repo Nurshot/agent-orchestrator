@@ -68,6 +68,54 @@ func TestSessionCreateAllowsPrimeAgentHarness(t *testing.T) {
 	}
 }
 
+func TestTaskPreparationPromotionPreservesWorkspace(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	seedProject(t, s, "mer")
+	prepared := sampleRecord("mer")
+	prepared.IsTaskPreparation = true
+	prepared.ProvisionState = domain.SessionProvisionProvisioning
+	prepared.Metadata.WorkspacePath = ""
+	created, err := s.CreateSession(ctx, prepared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := s.SetSessionProvisionedWorkspace(ctx, created.ID, "ao/mer-1/root", "/prepared", "/repo", created.UpdatedAt); err != nil || !ok {
+		t.Fatalf("publish prepared workspace = %v, %v", ok, err)
+	}
+
+	visible := sampleRecord("mer")
+	visible.Harness = domain.HarnessCodex
+	if ok, err := s.PromoteTaskPreparation(ctx, created.ID, visible); err != nil || !ok {
+		t.Fatalf("promote preparation = %v, %v", ok, err)
+	}
+	got, ok, err := s.GetSession(ctx, created.ID)
+	if err != nil || !ok {
+		t.Fatalf("get promoted session = %v, %v", ok, err)
+	}
+	if got.IsTaskPreparation || got.Harness != domain.HarnessCodex || got.Metadata.Branch != "ao/mer-1/root" || got.Metadata.WorkspacePath != "/prepared" {
+		t.Fatalf("promoted session = %+v", got)
+	}
+}
+
+func TestDeleteTaskPreparationRemovesItsCDC(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	seedProject(t, s, "mer")
+	prepared := sampleRecord("mer")
+	prepared.IsTaskPreparation = true
+	created, err := s.CreateSession(ctx, prepared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deleted, err := s.DeleteTaskPreparation(ctx, created.ID); err != nil || !deleted {
+		t.Fatalf("delete preparation = %v, %v", deleted, err)
+	}
+	if _, ok, err := s.GetSession(ctx, created.ID); err != nil || ok {
+		t.Fatalf("get deleted preparation = %v, %v", ok, err)
+	}
+}
+
 func TestSessionPersistsReviewerHarness(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

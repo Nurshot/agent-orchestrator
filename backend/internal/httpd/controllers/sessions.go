@@ -214,6 +214,8 @@ func (c *SessionsController) Register(r chi.Router) {
 	r.Post("/orchestrators", c.spawnOrchestrator)
 	r.Post("/orchestrators/delegate", c.delegateTask)
 	r.Post("/projects/{id}/git/fetch", c.prefetchDefaultBranches)
+	r.Post("/projects/{id}/tasks/prepare", c.prepareTask)
+	r.Delete("/task-preparations/{token}", c.cancelTaskPreparation)
 	r.Get("/orchestrators/{id}", c.getOrchestrator)
 }
 
@@ -1545,20 +1547,52 @@ func (c *SessionsController) delegateTask(w http.ResponseWriter, r *http.Request
 	}
 
 	out, err := c.Svc.DelegateTask(r.Context(), sessionsvc.DelegateTaskInput{
-		ProjectID:      in.ProjectID,
-		Brief:          domain.SanitizeControlChars(in.Brief),
-		RequestedAgent: in.Agent,
-		Model:          domain.SanitizeControlChars(strings.TrimSpace(in.Model)),
-		Effort:         sanitizedOptionalString(in.Effort),
-		ApprovalMode:   in.ApprovalMode,
-		RequestedMode:  in.Mode,
-		Attachments:    attachments,
+		ProjectID:       in.ProjectID,
+		Brief:           domain.SanitizeControlChars(in.Brief),
+		RequestedAgent:  in.Agent,
+		Model:           domain.SanitizeControlChars(strings.TrimSpace(in.Model)),
+		Effort:          sanitizedOptionalString(in.Effort),
+		ApprovalMode:    in.ApprovalMode,
+		RequestedMode:   in.Mode,
+		Attachments:     attachments,
+		TaskPreparation: strings.TrimSpace(in.TaskPreparation),
 	})
 	if err != nil {
 		envelope.WriteError(w, r, err)
 		return
 	}
 	envelope.WriteJSON(w, http.StatusAccepted, DelegateTaskResponse{OK: true, WorkerID: out.WorkerID, OrchestratorID: out.OrchestratorID})
+}
+
+func (c *SessionsController) prepareTask(w http.ResponseWriter, r *http.Request) {
+	preparer, ok := c.Svc.(interface {
+		PrepareTask(context.Context, domain.ProjectID) (string, error)
+	})
+	if !ok {
+		apispec.NotImplemented(w, r, "POST", "/api/v1/projects/{id}/tasks/prepare")
+		return
+	}
+	token, err := preparer.PrepareTask(r.Context(), projectID(r))
+	if err != nil {
+		envelope.WriteError(w, r, err)
+		return
+	}
+	envelope.WriteJSON(w, http.StatusAccepted, PrepareTaskResponse{OK: true, TaskPreparation: token})
+}
+
+func (c *SessionsController) cancelTaskPreparation(w http.ResponseWriter, r *http.Request) {
+	preparer, ok := c.Svc.(interface {
+		CancelTaskPreparation(context.Context, string) error
+	})
+	if !ok {
+		apispec.NotImplemented(w, r, "DELETE", "/api/v1/task-preparations/{token}")
+		return
+	}
+	if err := preparer.CancelTaskPreparation(r.Context(), chi.URLParam(r, "token")); err != nil {
+		envelope.WriteError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (c *SessionsController) prefetchDefaultBranches(w http.ResponseWriter, r *http.Request) {

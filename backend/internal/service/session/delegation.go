@@ -24,14 +24,15 @@ const (
 // may be empty to open an idle worker that the user can instruct later. Empty
 // RequestedAgent means the spawn uses the project's worker-agent default.
 type DelegateTaskInput struct {
-	ProjectID      domain.ProjectID
-	Brief          string
-	RequestedAgent domain.AgentHarness
-	Model          string
-	Effort         *string
-	ApprovalMode   domain.PermissionMode
-	RequestedMode  domain.SessionMode
-	Attachments    []ports.SpawnAttachment
+	ProjectID       domain.ProjectID
+	Brief           string
+	RequestedAgent  domain.AgentHarness
+	Model           string
+	Effort          *string
+	ApprovalMode    domain.PermissionMode
+	RequestedMode   domain.SessionMode
+	Attachments     []ports.SpawnAttachment
+	TaskPreparation string
 }
 
 // DelegateTaskOutcome identifies the spawned worker. OrchestratorID remains
@@ -44,6 +45,37 @@ type DelegateTaskOutcome struct {
 
 type defaultBranchPrefetcher interface {
 	PrefetchDefaultBranches(domain.ProjectRecord)
+}
+
+type taskPreparationCommander interface {
+	PrepareTaskWorkspace(context.Context, domain.ProjectRecord) (string, error)
+	CancelTaskPreparation(context.Context, string) error
+}
+
+// PrepareTask starts the reversible worktree-only half of task creation. The
+// returned token is optional so older embedders retain the existing fetch-only
+// optimization.
+func (s *Service) PrepareTask(ctx context.Context, projectID domain.ProjectID) (string, error) {
+	project, err := s.requireProject(ctx, projectID)
+	if err != nil {
+		return "", err
+	}
+	if preparer, ok := s.manager.(taskPreparationCommander); ok {
+		return preparer.PrepareTaskWorkspace(ctx, project)
+	}
+	if prefetcher, ok := s.manager.(defaultBranchPrefetcher); ok {
+		prefetcher.PrefetchDefaultBranches(project)
+	}
+	return "", nil
+}
+
+// CancelTaskPreparation releases an unclaimed speculative worktree. Unknown or
+// already-claimed tokens are intentionally idempotent.
+func (s *Service) CancelTaskPreparation(ctx context.Context, token string) error {
+	if preparer, ok := s.manager.(taskPreparationCommander); ok {
+		return preparer.CancelTaskPreparation(ctx, token)
+	}
+	return nil
 }
 
 // PrefetchDefaultBranches moves the task's best-effort Git refresh ahead of
@@ -96,7 +128,8 @@ func (s *Service) DelegateTask(ctx context.Context, in DelegateTaskInput) (Deleg
 		// This is the desktop's new-task path: there is a UI waiting to navigate
 		// to the session. A Chat worker answers as soon as it is addressable and
 		// finishes starting in the background.
-		Async: true,
+		Async:           true,
+		TaskPreparation: in.TaskPreparation,
 	})
 	if err != nil {
 		return DelegateTaskOutcome{}, toSpawnAPIError(err)

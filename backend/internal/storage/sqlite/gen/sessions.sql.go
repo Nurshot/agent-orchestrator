@@ -145,7 +145,7 @@ SELECT id, project_id, num, issue_id, kind, harness,
     conversation_checkpoint_state, conversation_checkpoint_generation, conversation_checkpoint_native_id,
     conversation_checkpoint_unsettled, conversation_checkpoint_turn_id, native_checkpoint_evidence,
     native_transcript_path, auto_inject_review, auto_inject_ci, auto_review_enabled, model, session_permissions,
-    provision_state, provision_error
+    provision_state, provision_error, is_task_preparation
 FROM sessions WHERE id = ?
 `
 
@@ -205,6 +205,7 @@ type GetSessionRow struct {
 	SessionPermissions               string
 	ProvisionState                   domain.SessionProvisionState
 	ProvisionError                   string
+	IsTaskPreparation                bool
 }
 
 func (q *Queries) GetSession(ctx context.Context, id domain.SessionID) (GetSessionRow, error) {
@@ -266,6 +267,7 @@ func (q *Queries) GetSession(ctx context.Context, id domain.SessionID) (GetSessi
 		&i.SessionPermissions,
 		&i.ProvisionState,
 		&i.ProvisionError,
+		&i.IsTaskPreparation,
 	)
 	return i, err
 }
@@ -283,9 +285,9 @@ INSERT INTO sessions (
     preview_url, preview_revision, terminate_on_pr_merge, cleanup_generation, browser_capability_verifier,
     session_mode, provider_conversation_id, controller_generation, model, session_permissions,
     created_at, updated_at, is_pinned, pinned_at, auto_inject_review, auto_inject_ci,
-    provision_state, provision_error
+    provision_state, provision_error, is_task_preparation
 ) VALUES (
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 )
 `
 
@@ -344,6 +346,7 @@ type InsertSessionParams struct {
 	AutoInjectCI                     bool
 	ProvisionState                   domain.SessionProvisionState
 	ProvisionError                   string
+	IsTaskPreparation                bool
 }
 
 func (q *Queries) InsertSession(ctx context.Context, arg InsertSessionParams) error {
@@ -402,6 +405,7 @@ func (q *Queries) InsertSession(ctx context.Context, arg InsertSessionParams) er
 		arg.AutoInjectCI,
 		arg.ProvisionState,
 		arg.ProvisionError,
+		arg.IsTaskPreparation,
 	)
 	return err
 }
@@ -419,7 +423,7 @@ SELECT id, project_id, num, issue_id, kind, harness,
     conversation_checkpoint_state, conversation_checkpoint_generation, conversation_checkpoint_native_id,
     conversation_checkpoint_unsettled, conversation_checkpoint_turn_id, native_checkpoint_evidence,
     native_transcript_path, auto_inject_review, auto_inject_ci, auto_review_enabled, model, session_permissions,
-    provision_state, provision_error
+    provision_state, provision_error, is_task_preparation
 FROM sessions ORDER BY project_id, num
 `
 
@@ -479,6 +483,7 @@ type ListAllSessionsRow struct {
 	SessionPermissions               string
 	ProvisionState                   domain.SessionProvisionState
 	ProvisionError                   string
+	IsTaskPreparation                bool
 }
 
 func (q *Queries) ListAllSessions(ctx context.Context) ([]ListAllSessionsRow, error) {
@@ -546,6 +551,7 @@ func (q *Queries) ListAllSessions(ctx context.Context) ([]ListAllSessionsRow, er
 			&i.SessionPermissions,
 			&i.ProvisionState,
 			&i.ProvisionError,
+			&i.IsTaskPreparation,
 		); err != nil {
 			return nil, err
 		}
@@ -573,7 +579,7 @@ SELECT id, project_id, num, issue_id, kind, harness,
     conversation_checkpoint_state, conversation_checkpoint_generation, conversation_checkpoint_native_id,
     conversation_checkpoint_unsettled, conversation_checkpoint_turn_id, native_checkpoint_evidence,
     native_transcript_path, auto_inject_review, auto_inject_ci, auto_review_enabled, model, session_permissions,
-    provision_state, provision_error
+    provision_state, provision_error, is_task_preparation
 FROM sessions WHERE project_id IS ? ORDER BY num
 `
 
@@ -633,6 +639,7 @@ type ListSessionsByProjectRow struct {
 	SessionPermissions               string
 	ProvisionState                   domain.SessionProvisionState
 	ProvisionError                   string
+	IsTaskPreparation                bool
 }
 
 func (q *Queries) ListSessionsByProject(ctx context.Context, projectID *domain.ProjectID) ([]ListSessionsByProjectRow, error) {
@@ -700,6 +707,7 @@ func (q *Queries) ListSessionsByProject(ctx context.Context, projectID *domain.P
 			&i.SessionPermissions,
 			&i.ProvisionState,
 			&i.ProvisionError,
+			&i.IsTaskPreparation,
 		); err != nil {
 			return nil, err
 		}
@@ -734,6 +742,75 @@ func (q *Queries) NextStandaloneSessionNum(ctx context.Context) (int64, error) {
 	var next int64
 	err := row.Scan(&next)
 	return next, err
+}
+
+const promoteTaskPreparation = `-- name: PromoteTaskPreparation :execrows
+UPDATE sessions SET
+    issue_id = ?1,
+    kind = ?2,
+    harness = ?3,
+    auto_review_enabled = ?4,
+    display_name = ?5,
+    activity_state = ?6,
+    activity_last_at = ?7,
+    is_terminated = 0,
+    session_mode = ?8,
+    model = ?9,
+    session_permissions = ?10,
+    created_at = ?11,
+    updated_at = ?12,
+    auto_inject_review = ?13,
+    auto_inject_ci = ?14,
+    provision_state = ?15,
+    provision_error = '',
+    is_task_preparation = 0
+WHERE id = ?16 AND is_task_preparation = 1
+`
+
+type PromoteTaskPreparationParams struct {
+	IssueID            domain.IssueID
+	Kind               domain.SessionKind
+	Harness            domain.AgentHarness
+	AutoReviewEnabled  bool
+	DisplayName        string
+	ActivityState      domain.ActivityState
+	ActivityLastAt     time.Time
+	SessionMode        domain.SessionMode
+	Model              string
+	SessionPermissions string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	AutoInjectReview   bool
+	AutoInjectCI       bool
+	ProvisionState     domain.SessionProvisionState
+	ID                 domain.SessionID
+}
+
+// Claim the hidden row without touching branch/workspace facts that may be
+// published concurrently by speculative worktree creation.
+func (q *Queries) PromoteTaskPreparation(ctx context.Context, arg PromoteTaskPreparationParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, promoteTaskPreparation,
+		arg.IssueID,
+		arg.Kind,
+		arg.Harness,
+		arg.AutoReviewEnabled,
+		arg.DisplayName,
+		arg.ActivityState,
+		arg.ActivityLastAt,
+		arg.SessionMode,
+		arg.Model,
+		arg.SessionPermissions,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+		arg.AutoInjectReview,
+		arg.AutoInjectCI,
+		arg.ProvisionState,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const recordSessionHumanMessage = `-- name: RecordSessionHumanMessage :execrows

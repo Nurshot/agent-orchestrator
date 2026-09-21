@@ -113,6 +113,28 @@ func (f *fakeStore) SetSessionProvisionState(_ context.Context, id domain.Sessio
 	return true, nil
 }
 
+func (f *fakeStore) PromoteTaskPreparation(_ context.Context, id domain.SessionID, rec domain.SessionRecord) (bool, error) {
+	current, ok := f.sessions[id]
+	if !ok || !current.IsTaskPreparation {
+		return false, nil
+	}
+	rec.ID = id
+	rec.Metadata.Branch = current.Metadata.Branch
+	rec.Metadata.WorkspacePath = current.Metadata.WorkspacePath
+	rec.Metadata.WorkspaceRepoPath = current.Metadata.WorkspaceRepoPath
+	f.sessions[id] = rec
+	return true, nil
+}
+
+func (f *fakeStore) DeleteTaskPreparation(_ context.Context, id domain.SessionID) (bool, error) {
+	rec, ok := f.sessions[id]
+	if !ok || !rec.IsTaskPreparation {
+		return false, nil
+	}
+	delete(f.sessions, id)
+	return true, nil
+}
+
 func (f *fakeStore) UpdateBrowserCapabilityVerifier(_ context.Context, id domain.SessionID, expected domain.SessionControllerOwner, verifier string) (bool, error) {
 	if f.updateSessionErr != nil {
 		return false, f.updateSessionErr
@@ -906,9 +928,10 @@ type missingAgents struct{}
 func (missingAgents) Agent(domain.AgentHarness) (ports.Agent, bool) { return nil, false }
 
 type fakeWorkspace struct {
-	createErr  error
-	destroyErr error
-	destroyed  int
+	createErr   error
+	createCount int
+	destroyErr  error
+	destroyed   int
 	// destroyReclaim, when set, is the reclaim outcome DestroyReclaim reports.
 	destroyReclaim ports.WorkspaceReclaim
 	// destroyReclaimByPath overrides destroyReclaim for one workspace path, so a
@@ -1002,6 +1025,7 @@ func (w *fakeWorkspace) FetchDefaultBranch(ctx context.Context, repoPath string,
 }
 
 func (w *fakeWorkspace) Create(_ context.Context, cfg ports.WorkspaceConfig) (ports.WorkspaceInfo, error) {
+	w.createCount++
 	if w.createErr != nil {
 		return ports.WorkspaceInfo{}, w.createErr
 	}
