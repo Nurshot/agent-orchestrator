@@ -355,6 +355,14 @@ describe("sessionArtifacts", () => {
 		expect(sessionArtifacts(session)).toEqual([]);
 	});
 
+	it("returns the artifact files when outputType is pr_artifact (a session with both)", () => {
+		const session = sessionWith({
+			outputType: "pr_artifact",
+			artifactFiles: [artifact({ path: "report.md", kind: "markdown" })],
+		});
+		expect(sessionArtifacts(session)).toEqual([artifact({ path: "report.md", kind: "markdown" })]);
+	});
+
 	it("is empty when outputType is artifact but artifactFiles is absent", () => {
 		expect(sessionArtifacts(sessionWith({ outputType: "artifact" }))).toEqual([]);
 	});

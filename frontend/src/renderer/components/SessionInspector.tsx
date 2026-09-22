@@ -346,16 +346,19 @@ const SummaryView = memo(function SummaryView({
 	const showUsageError = developerMode && usageQuery.isError;
 	const prSummaries = sessionPRDisplaySummaries(session, query.data);
 	const hasPRs = prSummaries.length > 0;
-	// V1 keeps PR presentation unchanged: the artifacts panel only ever takes
-	// the place of the "no PR opened" empty state, never a real PR list.
-	const artifacts = hasPRs ? [] : sessionArtifacts(session);
+	// V1 keeps PR presentation unchanged: when a session has both (outputType
+	// "pr_artifact"), PR cards render exactly as before and artifacts append
+	// below them in the same section, rather than replacing anything.
+	const artifacts = sessionArtifacts(session);
 	const hasArtifacts = artifacts.length > 0;
-	const prSectionTitle = hasArtifacts
-		? artifacts.length > 1
-			? t("inspector.artifacts", { count: artifacts.length })
-			: t("inspector.artifact")
-		: prSummaries.length > 1
+	const prSectionTitle = hasPRs
+		? prSummaries.length > 1
 			? t("inspector.pullRequests", { count: prSummaries.length })
+			: t("inspector.pullRequest")
+		: hasArtifacts
+			? artifacts.length > 1
+				? t("inspector.artifacts", { count: artifacts.length })
+				: t("inspector.artifact")
 			: t("inspector.pullRequest");
 	// Cloud orchestrators list the workers they spawned; local orchestrators
 	// have no parent/child model and every other session has no children.
@@ -377,7 +380,7 @@ const SummaryView = memo(function SummaryView({
 			completion={<SessionControls session={session} />}
 			pullRequestCards={
 				<div className="flex flex-col gap-1.5">
-					{hasPRs ? (
+					{hasPRs &&
 						prSummaries.map((pr) => (
 							<PRSummaryCard
 								canOpenReviews={canOpenReviews}
@@ -386,8 +389,8 @@ const SummaryView = memo(function SummaryView({
 								pr={pr}
 								sessionId={session.id}
 							/>
-						))
-					) : hasArtifacts ? (
+						))}
+					{hasArtifacts &&
 						artifacts.map((artifact) => (
 							<ArtifactSummaryCard
 								artifact={artifact}
@@ -395,10 +398,10 @@ const SummaryView = memo(function SummaryView({
 								onOpenReviewFile={onOpenReviewFile}
 								session={session}
 							/>
-						))
-					) : (
+						))}
+					{!hasPRs && !hasArtifacts ? (
 						<p className={inspectorEmptyClass}>{t("inspector.noPROpened")}</p>
-					)}
+					) : null}
 				</div>
 			}
 			pullRequestTitle={prSectionTitle}

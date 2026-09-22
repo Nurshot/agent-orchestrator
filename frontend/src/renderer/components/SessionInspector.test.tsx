@@ -894,18 +894,26 @@ describe("SessionInspector Artifacts section", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("keeps PR presentation unchanged: PRs take priority over artifacts", () => {
+  it("does not show artifacts for a plain PR session with no artifact files", () => {
+    renderWithQuery(<SessionInspector session={session([pr(7, "open")], { outputType: "pr" })} />);
+
+    expect(screen.getByText("Pull request")).toBeInTheDocument();
+    expect(screen.queryByText(/Artifacts? /)).not.toBeInTheDocument();
+  });
+
+  it("keeps PR presentation unchanged and appends artifacts when a session has both (pr_artifact)", () => {
     renderWithQuery(
       <SessionInspector
         session={session([pr(7, "open")], {
-          outputType: "artifact",
+          outputType: "pr_artifact",
           artifactFiles: [artifact({ path: "notes.md" })],
         })}
       />,
     );
 
     expect(screen.getByText("Pull request")).toBeInTheDocument();
-    expect(screen.queryByText("notes.md")).not.toBeInTheDocument();
+    expect(screen.getAllByText("PR #7").length).toBeGreaterThan(0);
+    expect(screen.getByText("notes.md")).toBeInTheDocument();
   });
 
   it("opens an html artifact through the Browser preview flow", async () => {

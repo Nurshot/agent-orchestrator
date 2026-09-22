@@ -49,7 +49,7 @@ export type PullRequestFacts = {
 };
 
 /** What kind of durable output a session has produced, when known. */
-export type SessionOutputType = "none" | "pr" | "artifact";
+export type SessionOutputType = "none" | "pr" | "artifact" | "pr_artifact";
 
 /** One kind of file a worker can leave in its session-owned artifact directory. */
 export type ArtifactKind = "html" | "markdown" | "file";
@@ -255,9 +255,9 @@ export function primaryPR(session: WorkspaceSession): PullRequestFacts | undefin
 	return sortedPRs(session)[0];
 }
 
-/** Artifact files to show in the Summary panel, when this session's output is artifacts rather than a PR. */
+/** Artifact files to show in the Summary panel, for sessions whose output includes artifacts. */
 export function sessionArtifacts(session: WorkspaceSession): SessionArtifact[] {
-	if (session.outputType !== "artifact") return [];
+	if (session.outputType !== "artifact" && session.outputType !== "pr_artifact") return [];
 	return session.artifactFiles ?? [];
 }
 
