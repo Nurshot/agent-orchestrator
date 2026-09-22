@@ -52,12 +52,20 @@ test("uses activity timestamps, includes self-reviews, and excludes bots", () =>
 				reviews: [
 					{ author: { login: "author" }, submittedAt: "2026-09-16T00:00:00.000Z" },
 					{ author: { login: "robot[bot]" }, submittedAt: "2026-09-16T00:00:00.000Z" },
+					{
+						author: { __typename: "Bot", login: "github-actions" },
+						submittedAt: "2026-09-16T00:00:00.000Z",
+					},
 					{ author: { login: "early" }, submittedAt: window.start },
 					{ author: { login: "late" }, submittedAt: window.end },
 				],
 				comments: [
 					{ author: { login: "author" }, createdAt: "2026-09-16T00:00:00.000Z" },
 					{ author: { login: "robot[bot]" }, createdAt: "2026-09-16T00:00:00.000Z" },
+					{
+						author: { __typename: "Bot", login: "github-actions" },
+						createdAt: "2026-09-16T00:00:00.000Z",
+					},
 				],
 			},
 		],
@@ -70,14 +78,18 @@ test("uses activity timestamps, includes self-reviews, and excludes bots", () =>
 	]);
 });
 
-test("renders unambiguous columns and the exact UTC window", () => {
+test("combines review submissions and distinct PRs in one column", () => {
 	const comment = buildComment(
-		[{ login: "reviewer", reviews: 31, pullRequests: 18, comments: 37 }],
+		[
+			{ login: "reviewer", reviews: 31, pullRequests: 18, comments: 37 },
+			{ login: "another-reviewer", reviews: 1, pullRequests: 1, comments: 0 },
+		],
 		window,
 	);
 
-	assert.match(comment, /Review submissions \| PRs reviewed \| PR comments/);
-	assert.match(comment, /reviewer \| 31 \| 18 \| 37/);
+	assert.match(comment, /User \| Reviews \| PR comments/);
+	assert.match(comment, /reviewer \| 31 reviews \(18 PRs\) \| 37/);
+	assert.match(comment, /another-reviewer \| 1 review \(1 PR\) \| 0/);
 	assert.match(comment, /2026-09-15T00:00:00\.000Z/);
 });
 

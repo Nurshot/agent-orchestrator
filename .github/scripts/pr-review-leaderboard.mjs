@@ -11,11 +11,11 @@ const SEARCH_QUERY = `
           number
           reviews(first: ${PAGE_SIZE}) {
             pageInfo { hasNextPage endCursor }
-            nodes { author { login } submittedAt }
+            nodes { author { __typename login } submittedAt }
           }
           comments(first: ${PAGE_SIZE}) {
             pageInfo { hasNextPage endCursor }
-            nodes { author { login } createdAt }
+            nodes { author { __typename login } createdAt }
           }
         }
       }
@@ -29,18 +29,19 @@ const CONNECTION_QUERY = `
       ... on PullRequest {
         reviews(first: ${PAGE_SIZE}, after: $reviewsCursor) @include(if: $includeReviews) {
           pageInfo { hasNextPage endCursor }
-          nodes { author { login } submittedAt }
+          nodes { author { __typename login } submittedAt }
         }
         comments(first: ${PAGE_SIZE}, after: $commentsCursor) @include(if: $includeComments) {
           pageInfo { hasNextPage endCursor }
-          nodes { author { login } createdAt }
+          nodes { author { __typename login } createdAt }
         }
       }
     }
   }
 `;
 
-const isBot = (login) => /\[bot\]$/i.test(login ?? "");
+const isBot = (author) =>
+	author?.__typename === "Bot" || /\[bot\]$/i.test(author?.login ?? "");
 const isWithin = (timestamp, start, end) => {
 	const time = Date.parse(timestamp);
 	return time >= Date.parse(start) && time < Date.parse(end);
@@ -57,10 +58,11 @@ export function calculateStats(pullRequests, { start, end }) {
 
 	for (const pullRequest of pullRequests) {
 		for (const review of pullRequest.reviews) {
-			const login = review.author?.login;
+			const { author } = review;
+			const login = author?.login;
 			if (
 				!login ||
-				isBot(login) ||
+				isBot(author) ||
 				!isWithin(review.submittedAt, start, end)
 			) {
 				continue;
@@ -71,8 +73,9 @@ export function calculateStats(pullRequests, { start, end }) {
 		}
 
 		for (const comment of pullRequest.comments) {
-			const login = comment.author?.login;
-			if (!login || isBot(login) || !isWithin(comment.createdAt, start, end)) continue;
+			const { author } = comment;
+			const login = author?.login;
+			if (!login || isBot(author) || !isWithin(comment.createdAt, start, end)) continue;
 			entryFor(login).comments += 1;
 		}
 	}
@@ -87,10 +90,11 @@ export function calculateStats(pullRequests, { start, end }) {
 }
 
 export function buildComment(stats, { start, end }) {
+	const countLabel = (count, label) => `${count} ${label}${count === 1 ? "" : "s"}`;
 	const rows = stats
 		.map(
 			(entry) =>
-				`| ${entry.login} | ${entry.reviews} | ${entry.pullRequests} | ${entry.comments} |`,
+				`| ${entry.login} | ${countLabel(entry.reviews, "review")} (${countLabel(entry.pullRequests, "PR")}) | ${entry.comments} |`,
 		)
 		.join("\n");
 
@@ -99,9 +103,9 @@ export function buildComment(stats, { start, end }) {
 		"",
 		`Activity from ${start} (inclusive) to ${end} (exclusive).`,
 		"",
-		"| User | Review submissions | PRs reviewed | PR comments |",
-		"| --- | ---: | ---: | ---: |",
-		rows || "| _No review activity_ | 0 | 0 | 0 |",
+		"| User | Reviews | PR comments |",
+		"| --- | ---: | ---: |",
+		rows || "| _No review activity_ | 0 reviews (0 PRs) | 0 |",
 		"",
 		"Reviews are counted by submission time, including repeated review rounds on the same PR. PR comments are conversation comments created during the same window.",
 	].join("\n");
