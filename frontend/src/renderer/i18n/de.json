@@ -421,6 +421,8 @@
 	"inspector.activity": "Aktivität",
 	"inspector.agent": "Agent",
 	"inspector.aria": "Sitzungs-Inspektor",
+	"inspector.artifact": "Artefakt",
+	"inspector.artifacts": "Artefakte ({{count}})",
 	"inspector.branch": "Branch",
 	"inspector.ci.autoInject": "Automatically fix CI failures",
 	"inspector.ci.autoInjectDescription": "Sendet CI-Fehler für die Pull Requests dieser Sitzung an den Worker-Agenten.",

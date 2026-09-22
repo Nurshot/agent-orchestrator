@@ -421,6 +421,8 @@
 	"inspector.activity": "活动",
 	"inspector.agent": "代理",
 	"inspector.aria": "会话检查器",
+	"inspector.artifact": "工件",
+	"inspector.artifacts": "工件（{{count}}）",
 	"inspector.branch": "分支",
 	"inspector.ci.autoInject": "Automatically fix CI failures",
 	"inspector.ci.autoInjectDescription": "将此会话的拉取请求 CI 失败发送给 worker 代理。",
