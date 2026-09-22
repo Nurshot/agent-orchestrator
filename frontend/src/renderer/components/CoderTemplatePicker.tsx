@@ -11,13 +11,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 
 const SIZES: CoderSize[] = ["small", "medium", "large"];
 
-// The coder template picker shown in the new-task composer when the coder
-// provider is active. Kept deliberately compact: a row of template tiles
-// (Default + whatever the deployment offers), an inline repositories list, and
-// — only once a non-default template is chosen — a size selector and an
-// Advanced disclosure for a startup script. "Default" sends no options, so the
-// session behaves exactly as it does today.
-export function CoderTemplatePicker({ orgId }: { orgId: string | undefined }) {
+// The coder dev-kit picker shown at project setup. Kept deliberately compact: a
+// row of template tiles (Default + whatever the deployment offers), an inline
+// additional-repositories list, and — only once a non-default template is
+// chosen — a size selector and an Advanced disclosure for a startup script.
+// "Default" with no extra repos sends nothing, so the project behaves exactly as
+// it does today. `repos` are the org's GitHub repositories, used to offer a
+// picker for each extra repo (mirroring the primary repository selector); when
+// the list is unavailable it falls back to a free-text URL field.
+export function CoderTemplatePicker({
+	orgId,
+	repos = [],
+}: {
+	orgId: string | undefined;
+	repos?: { label: string; url: string }[];
+}) {
 	const { t } = useTranslation();
 	const { templates } = useCoderTemplates(orgId, true);
 	const templateId = useCoderSessionOptionsStore((s) => s.templateId);
@@ -91,13 +99,31 @@ export function CoderTemplatePicker({ orgId }: { orgId: string | undefined }) {
 						{extraRepos.map((repo, index) => (
 							// eslint-disable-next-line react/no-array-index-key
 							<div key={index} className="flex items-center gap-2">
-								<Input
-									value={repo.url}
-									onChange={(e) => updateRepo(index, { url: e.target.value })}
-									placeholder={t("coder.repos.urlPlaceholder", { defaultValue: "https://github.com/owner/repo" })}
-									className="flex-1"
-									aria-label={t("coder.repos.url", { defaultValue: "Repository URL" })}
-								/>
+								{repos.length > 0 ? (
+									<Select value={repo.url || undefined} onValueChange={(url) => updateRepo(index, { url })}>
+										<SelectTrigger
+											className="flex-1"
+											aria-label={t("coder.repos.url", { defaultValue: "Repository" })}
+										>
+											<SelectValue placeholder={t("coder.repos.select", { defaultValue: "Select a repository" })} />
+										</SelectTrigger>
+										<SelectContent>
+											{repos.map((option) => (
+												<SelectItem key={option.url} value={option.url}>
+													{option.label}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								) : (
+									<Input
+										value={repo.url}
+										onChange={(e) => updateRepo(index, { url: e.target.value })}
+										placeholder={t("coder.repos.urlPlaceholder", { defaultValue: "https://github.com/owner/repo" })}
+										className="flex-1"
+										aria-label={t("coder.repos.url", { defaultValue: "Repository" })}
+									/>
+								)}
 								<Input
 									value={repo.branch ?? ""}
 									onChange={(e) => updateRepo(index, { branch: e.target.value })}

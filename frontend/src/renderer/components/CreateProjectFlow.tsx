@@ -1533,7 +1533,7 @@ function CloudProjectCard({
 				</button>
 			) : null}
 
-			<div className={cn(onboardingPanelBodyClass, dialog && onClose ? "pt-12" : "pt-4")}>
+			<div className={cn(onboardingPanelBodyClass, "pt-4")}>
 				{/* Project name */}
 				<div className="space-y-2">
 					<Label htmlFor="cloudProjectName" className={onboardingFormLabelClass}>
@@ -1814,7 +1814,13 @@ function CloudProjectCard({
 					project and inherited by every session. Only when coder is offered. */}
 				{coderAvailable && (hasGithubConnection || useManualPat) ? (
 					<div className="space-y-2">
-						<CoderTemplatePicker orgId={org?.id} />
+						<CoderTemplatePicker
+							orgId={org?.id}
+							repos={(githubRepos.data ?? []).map((repo) => ({
+								label: repo.fullName,
+								url: `https://github.com/${repo.fullName}`,
+							}))}
+						/>
 					</div>
 				) : null}
 
