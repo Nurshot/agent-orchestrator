@@ -198,9 +198,7 @@ function commonGetsResponder(
 ) {
   return async (path: string) => {
     if (path === "/api/v1/agents/readiness") {
-      const agents = ["claude-code", "codex", "opencode"].map((id) =>
-        agentReadiness(id),
-      );
+      const agents = ["claude-code", "codex", "opencode"].map((id) => agentReadiness(id));
       return { data: { agents } };
     }
     if (path === "/api/v1/agents/{agent}/models") {
@@ -252,14 +250,7 @@ function mockCommonGets(
   reviews: unknown[] = [],
   reviewerActivityState?: string,
 ) {
-  getMock.mockImplementation(
-    commonGetsResponder(
-      _unusedRuns,
-      reviewerHandleId,
-      reviews,
-      reviewerActivityState,
-    ),
-  );
+  getMock.mockImplementation(commonGetsResponder(_unusedRuns, reviewerHandleId, reviews, reviewerActivityState));
 }
 
 const approvedReview = {
@@ -301,11 +292,7 @@ beforeEach(() => {
   navigateMock.mockReset();
   patchMock.mockReset();
   postMock.mockReset();
-  useUiStore.setState({
-    developerMode: false,
-    inspectorSessions: {},
-    settingsModal: null,
-  });
+  useUiStore.setState({ developerMode: false, inspectorSessions: {}, settingsModal: null });
   putMock.mockReset();
   mockCommonGets();
   patchMock.mockResolvedValue({
@@ -330,25 +317,12 @@ afterEach(() => {
 
 describe("SessionInspector tabs", () => {
   it("shows only Browser content without navigation tabs for an orchestrator", () => {
-    renderWithQuery(
-      <SessionInspector
-        browserOnly
-        session={session([], { kind: "orchestrator" })}
-      />,
-    );
+    renderWithQuery(<SessionInspector browserOnly session={session([], { kind: "orchestrator" })} />);
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     expect(screen.getByText("Browser")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("tab", { name: "Summary" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("tab", { name: "Files" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen
-        .getByRole("complementary", { name: "Session inspector" })
-        .querySelector(".session-inspector__body--browser"),
-    ).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Summary" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Files" })).not.toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Session inspector" }).querySelector(".session-inspector__body--browser")).toBeInTheDocument();
   });
 
   it("gives the Browser viewport the full inspector body without the default content gutter", async () => {
@@ -376,11 +350,12 @@ describe("SessionInspector tabs", () => {
 
     const summaryTab = screen.getByRole("tab", { name: "Summary" });
 
-    expect(summaryTab).not.toHaveClass("flex-1");
-    expect(summaryTab).toHaveClass("size-control-md", "p-0", "shrink-0");
-    expect(summaryTab).not.toHaveClass("h-control-md", "px-1");
-    expect(summaryTab).toHaveAttribute("title", "Summary");
-  });
+
+		expect(summaryTab).not.toHaveClass("flex-1");
+		expect(summaryTab).toHaveClass("size-control-md", "p-0", "shrink-0");
+		expect(summaryTab).not.toHaveClass("h-control-md", "px-1");
+		expect(summaryTab).toHaveAttribute("title", "Summary");
+	});
 
   it("shows the glow only while real browser activity is unseen", () => {
     const currentSession = session([]);
@@ -423,9 +398,7 @@ describe("SessionInspector tabs", () => {
 
     const filesTab = screen.getByRole("tab", { name: "Files" });
     expect(within(filesTab).getByText("Files")).toBeInTheDocument();
-    expect(
-      within(filesTab).getByTestId("files-viewer-icon"),
-    ).toBeInTheDocument();
+    expect(within(filesTab).getByTestId("files-viewer-icon")).toBeInTheDocument();
     await waitFor(() =>
       expect(getMock).toHaveBeenCalledWith(
         "/api/v1/sessions/{sessionId}/workspace/files",
@@ -560,9 +533,7 @@ describe("SessionInspector PR section", () => {
     expect(
       prSection("Pull request").getByText("Mergeable"),
     ).toBeInTheDocument();
-    expect(
-      prSection("Pull request").getByText("PR approved"),
-    ).toBeInTheDocument();
+    expect(prSection("Pull request").getByText("PR approved")).toBeInTheDocument();
     expect(
       prSection("Pull request").getByText("Checks passing"),
     ).toBeInTheDocument();
@@ -642,23 +613,13 @@ describe("SessionInspector PR section", () => {
           client.setQueryData(sessionScmSummaryQueryKey("sess-1"), [
             prSummary(7, "open", {
               ci: { autoInjectCI: true, state: "passing", failingChecks: [] },
-              review: {
-                decision: "approved",
-                hasUnresolvedHumanComments: false,
-                unresolvedBy: [],
-              },
-              mergeability: {
-                state: mergeability,
-                reasons: [],
-                prUrl: "https://example.com/pr/7",
-              },
+              review: { decision: "approved", hasUnresolvedHumanComments: false, unresolvedBy: [] },
+              mergeability: { state: mergeability, reasons: [], prUrl: "https://example.com/pr/7" },
             }),
           ]);
         },
       );
-      expect(
-        screen.queryByRole("button", { name: "Merge PR #7" }),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Merge PR #7" })).not.toBeInTheDocument();
     },
   );
 
@@ -671,45 +632,27 @@ describe("SessionInspector PR section", () => {
           prSummary(7, "open", {
             headSha: "",
             ci: { autoInjectCI: true, state: "passing", failingChecks: [] },
-            review: {
-              decision: "approved",
-              hasUnresolvedHumanComments: false,
-              unresolvedBy: [],
-            },
-            mergeability: {
-              state: "mergeable",
-              reasons: [],
-              prUrl: "https://example.com/pr/7",
-            },
+            review: { decision: "approved", hasUnresolvedHumanComments: false, unresolvedBy: [] },
+            mergeability: { state: "mergeable", reasons: [], prUrl: "https://example.com/pr/7" },
           }),
         ]);
       },
     );
-    expect(
-      screen.queryByRole("button", { name: "Merge PR #7" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Merge PR #7" })).not.toBeInTheDocument();
   });
 
   it("offers Merge when the provider requires no review", () => {
     renderWithQuery(
-      <SessionInspector
-        session={session([pr(7, "open", { review: "none" })])}
-      />,
+      <SessionInspector session={session([pr(7, "open", { review: "none" })])} />,
       undefined,
       (client) => {
-        client.setQueryData(sessionScmSummaryQueryKey("sess-1"), [
-          prSummary(7, "open"),
-        ]);
+        client.setQueryData(sessionScmSummaryQueryKey("sess-1"), [prSummary(7, "open")]);
       },
     );
 
     expect(screen.getByRole("button", { name: "Merge PR #7" })).toBeEnabled();
-    expect(
-      prSection("Pull request").getByText("No review required"),
-    ).toBeInTheDocument();
-    expect(
-      prSection("Pull request").queryByText("Review pending"),
-    ).not.toBeInTheDocument();
+    expect(prSection("Pull request").getByText("No review required")).toBeInTheDocument();
+    expect(prSection("Pull request").queryByText("Review pending")).not.toBeInTheDocument();
   });
 
   it.each(["review_required", "changes_requested"] as const)(
@@ -721,18 +664,12 @@ describe("SessionInspector PR section", () => {
         (client) => {
           client.setQueryData(sessionScmSummaryQueryKey("sess-1"), [
             prSummary(7, "open", {
-              review: {
-                decision,
-                hasUnresolvedHumanComments: false,
-                unresolvedBy: [],
-              },
+              review: { decision, hasUnresolvedHumanComments: false, unresolvedBy: [] },
             }),
           ]);
         },
       );
-      expect(
-        screen.queryByRole("button", { name: "Merge PR #7" }),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Merge PR #7" })).not.toBeInTheDocument();
     },
   );
 
@@ -743,18 +680,12 @@ describe("SessionInspector PR section", () => {
       (client) => {
         client.setQueryData(sessionScmSummaryQueryKey("sess-1"), [
           prSummary(7, "open", {
-            review: {
-              decision: "none",
-              hasUnresolvedHumanComments: true,
-              unresolvedBy: [],
-            },
+            review: { decision: "none", hasUnresolvedHumanComments: true, unresolvedBy: [] },
           }),
         ]);
       },
     );
-    expect(
-      screen.queryByRole("button", { name: "Merge PR #7" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Merge PR #7" })).not.toBeInTheDocument();
   });
 
   it("uses the state chip as the single merged-state indicator", () => {
@@ -814,6 +745,7 @@ describe("SessionInspector PR section", () => {
       "bg-surface",
     );
 
+
     for (const name of [
       "Automatically fix CI failures",
       "Automatically fix review comments",
@@ -842,13 +774,10 @@ describe("SessionInspector PR section", () => {
       await screen.findByRole("button", { name: "Run review" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("switch", {
-        name: "Automatically fix review comments",
-      }),
+      screen.queryByRole("switch", { name: "Automatically fix review comments" }),
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("switch", { name: "Auto review" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Auto review" })).toBeInTheDocument();
+
   });
 
   it("persists the CI injection policy before a PR exists", async () => {
@@ -922,9 +851,7 @@ describe("SessionInspector PR section", () => {
       .getByText("PR #7")
       .closest("article") as HTMLElement;
     expect(within(card).getByText("Checks failing")).toBeInTheDocument();
-    expect(
-      within(card).queryByText("CI failures not injected"),
-    ).not.toBeInTheDocument();
+    expect(within(card).queryByText("CI failures not injected")).not.toBeInTheDocument();
   });
 
   it("links each PR to its url", () => {
@@ -947,345 +874,286 @@ describe("SessionInspector PR section", () => {
 });
 
 describe("SessionInspector usage", () => {
-  const canonicalTotals = {
-    inputTokens: 1200,
-    cachedInputTokens: 1000,
-    uncachedInputTokens: 200,
-    outputTokens: 300,
-    processedTokens: 1500,
-  };
+	const canonicalTotals = {
+		inputTokens: 1200,
+		cachedInputTokens: 1000,
+		uncachedInputTokens: 200,
+		outputTokens: 300,
+		processedTokens: 1500,
+	};
 
-  const tokenTotals = (estimatedCost: unknown) => ({
-    ...canonicalTotals,
-    estimatedCost,
-  });
+	const tokenTotals = (estimatedCost: unknown) => ({ ...canonicalTotals, estimatedCost });
 
-  function mockUsage(estimatedCost: unknown, harnesses?: unknown[]) {
-    const totals = tokenTotals(estimatedCost);
-    getMock.mockImplementation(async (path: string) => {
-      if (path === "/api/v1/usage/sessions/{sessionId}") {
-        return {
-          data: {
-            sessionId: "sess-1",
-            incomplete: false,
-            totals,
-            harnesses: harnesses ?? [
-              {
-                harness: "codex",
-                totals,
-                models: [
-                  { modelId: "gpt-5.5", totals },
-                  { modelId: "gpt-5.5-mini", totals },
-                ],
-              },
-            ],
-          },
-          error: undefined,
-        };
-      }
-      return { data: undefined };
-    });
-  }
+	function mockUsage(estimatedCost: unknown, harnesses?: unknown[]) {
+		const totals = tokenTotals(estimatedCost);
+		getMock.mockImplementation(async (path: string) => {
+			if (path === "/api/v1/usage/sessions/{sessionId}") {
+				return {
+					data: {
+						sessionId: "sess-1",
+						incomplete: false,
+						totals,
+						harnesses: harnesses ?? [
+							{
+								harness: "codex",
+								totals,
+								models: [
+									{ modelId: "gpt-5.5", totals },
+									{ modelId: "gpt-5.5-mini", totals },
+								],
+							},
+						],
+					},
+					error: undefined,
+				};
+			}
+			return { data: undefined };
+		});
+	}
 
-  it("shows detailed token statistics only when Developer Mode is enabled", async () => {
-    useUiStore.getState().setDeveloperMode(true);
-    mockUsage(null);
+	it("shows detailed token statistics only when Developer Mode is enabled", async () => {
+		useUiStore.getState().setDeveloperMode(true);
+		mockUsage(null);
 
-    renderWithQuery(<SessionInspector session={session([])} />);
-    expect(await screen.findByText("Usage & cost")).toBeInTheDocument();
-    expect(screen.getByText("Tokens processed")).toBeInTheDocument();
-    expect(screen.getByLabelText("1,500 tokens processed")).toBeInTheDocument();
-    expect(
-      screen.getByText("Estimated cost").parentElement?.nextElementSibling,
-    ).toHaveTextContent("Unavailable");
-    expect(screen.queryByText("Coming soon")).not.toBeInTheDocument();
-    const metrics = screen.getAllByTestId("session-usage-metrics")[0];
-    expect(
-      within(metrics)
-        .getAllByRole("term")
-        .map((term) => term.textContent),
-    ).toEqual(["Fresh Input", "Cache Reads", "Output", "Cache Hit Rate"]);
-    expect(
-      within(metrics).getByLabelText("Cache Reads: 1,000 tokens"),
-    ).toHaveTextContent("1K");
-    expect(
-      within(metrics).getByLabelText(
-        "83.3% cache hit rate (cache reads / total input)",
-      ),
-    ).toHaveTextContent("83.3%");
-    expect(
-      within(metrics).queryByText("Cached Output"),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText("Cache write tokens")).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("Reasoning (included in output)"),
-    ).not.toBeInTheDocument();
-    const agentAttribution = screen.getByText("Codex").parentElement;
-    expect(agentAttribution?.querySelector("img")).toBeInTheDocument();
-    const agentDisclosure = screen.getByRole("button", {
-      name: "Codex usage details",
-    });
-    await userEvent.click(agentDisclosure);
-    const details = screen.getByRole("region", { name: "Codex usage peek" });
-    expect(
-      within(details).getByRole("button", { name: "GPT 5.5 usage details" }),
-    ).toBeInTheDocument();
-    expect(
-      within(details).getByRole("button", {
-        name: "GPT 5.5 Mini usage details",
-      }),
-    ).toBeInTheDocument();
-    expect(within(details).queryByText("2 models")).not.toBeInTheDocument();
-    expect(within(details).queryByText("Processed")).not.toBeInTheDocument();
-    expect(within(details).queryByText("Cost")).not.toBeInTheDocument();
-  });
+		renderWithQuery(<SessionInspector session={session([])} />);
+		expect(await screen.findByText("Usage & cost")).toBeInTheDocument();
+		expect(screen.getByText("Tokens processed")).toBeInTheDocument();
+		expect(screen.getByLabelText("1,500 tokens processed")).toBeInTheDocument();
+		expect(screen.getByText("Estimated cost").parentElement?.nextElementSibling).toHaveTextContent("Unavailable");
+		expect(screen.queryByText("Coming soon")).not.toBeInTheDocument();
+		const metrics = screen.getAllByTestId("session-usage-metrics")[0];
+		expect(within(metrics).getAllByRole("term").map((term) => term.textContent)).toEqual([
+			"Fresh Input", "Cache Reads", "Output", "Cache Hit Rate",
+		]);
+		expect(within(metrics).getByLabelText("Cache Reads: 1,000 tokens")).toHaveTextContent("1K");
+		expect(within(metrics).getByLabelText("83.3% cache hit rate (cache reads / total input)")).toHaveTextContent("83.3%");
+		expect(within(metrics).queryByText("Cached Output")).not.toBeInTheDocument();
+		expect(screen.queryByText("Cache write tokens")).not.toBeInTheDocument();
+		expect(screen.queryByText("Reasoning (included in output)")).not.toBeInTheDocument();
+		const agentAttribution = screen.getByText("Codex").parentElement;
+		expect(agentAttribution?.querySelector("img")).toBeInTheDocument();
+		const agentDisclosure = screen.getByRole("button", { name: "Codex usage details" });
+		await userEvent.click(agentDisclosure);
+		const details = screen.getByRole("region", { name: "Codex usage peek" });
+		expect(within(details).getByRole("button", { name: "GPT 5.5 usage details" })).toBeInTheDocument();
+		expect(within(details).getByRole("button", { name: "GPT 5.5 Mini usage details" })).toBeInTheDocument();
+		expect(within(details).queryByText("2 models")).not.toBeInTheDocument();
+		expect(within(details).queryByText("Processed")).not.toBeInTheDocument();
+		expect(within(details).queryByText("Cost")).not.toBeInTheDocument();
+	});
 
-  it("shows icon disclosures without repeated metrics when multiple agents contributed", async () => {
-    useUiStore.getState().setDeveloperMode(true);
-    const totals = { ...canonicalTotals, estimatedCost: null };
-    mockUsage(null, [
-      { harness: "codex", totals, models: [{ modelId: "gpt-5.5", totals }] },
-      {
-        harness: "claude-code",
-        totals,
-        models: [{ modelId: "claude-haiku-4-5-20251001", totals }],
-      },
-    ]);
+	it("shows icon disclosures without repeated metrics when multiple agents contributed", async () => {
+		useUiStore.getState().setDeveloperMode(true);
+		const totals = { ...canonicalTotals, estimatedCost: null };
+		mockUsage(null, [
+			{ harness: "codex", totals, models: [{ modelId: "gpt-5.5", totals }] },
+			{ harness: "claude-code", totals, models: [{ modelId: "claude-haiku-4-5-20251001", totals }] },
+		]);
 
-    renderWithQuery(<SessionInspector session={session([])} />);
-    const codexDisclosure = await screen.findByRole("button", {
-      name: "Codex usage details",
-    });
-    expect(codexDisclosure.querySelector("img")).toBeInTheDocument();
+		renderWithQuery(<SessionInspector session={session([])} />);
+		const codexDisclosure = await screen.findByRole("button", { name: "Codex usage details" });
+		expect(codexDisclosure.querySelector("img")).toBeInTheDocument();
 
-    await userEvent.click(codexDisclosure);
-    const details = screen.getByRole("region", { name: "Codex usage peek" });
-    expect(
-      within(details).getByRole("button", { name: "GPT 5.5 usage details" }),
-    ).toBeInTheDocument();
-    expect(within(details).queryByText("1 model")).not.toBeInTheDocument();
-    expect(within(details).queryByText("Processed")).not.toBeInTheDocument();
-    expect(within(details).queryByText("Cost")).not.toBeInTheDocument();
-    expect(within(details).queryByText("Fresh Input")).not.toBeInTheDocument();
+		await userEvent.click(codexDisclosure);
+		const details = screen.getByRole("region", { name: "Codex usage peek" });
+		expect(within(details).getByRole("button", { name: "GPT 5.5 usage details" })).toBeInTheDocument();
+		expect(within(details).queryByText("1 model")).not.toBeInTheDocument();
+		expect(within(details).queryByText("Processed")).not.toBeInTheDocument();
+		expect(within(details).queryByText("Cost")).not.toBeInTheDocument();
+		expect(within(details).queryByText("Fresh Input")).not.toBeInTheDocument();
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Claude usage details" }),
-    );
-    const claudeDetails = screen.getByRole("region", {
-      name: "Claude usage peek",
-    });
-    const haikuDisclosure = within(claudeDetails).getByRole("button", {
-      name: "Haiku 4.5 usage details",
-    });
-    expect(within(haikuDisclosure).getByText("Haiku 4.5")).toHaveAttribute(
-      "title",
-      "claude-haiku-4-5-20251001",
-    );
-  });
+		await userEvent.click(screen.getByRole("button", { name: "Claude usage details" }));
+		const claudeDetails = screen.getByRole("region", { name: "Claude usage peek" });
+		const haikuDisclosure = within(claudeDetails).getByRole("button", { name: "Haiku 4.5 usage details" });
+		expect(within(haikuDisclosure).getByText("Haiku 4.5")).toHaveAttribute(
+			"title",
+			"claude-haiku-4-5-20251001",
+		);
+	});
 
-  it("renders complete costs and provider/model attribution", async () => {
-    useUiStore.getState().setDeveloperMode(true);
-    const completeCost = {
-      cachedInputNanos: 100_000_000,
-      coverage: "complete",
-      inputNanos: 540_000_000,
-      outputNanos: 600_000_000,
-      providerAttribution: "observed",
-      totalNanos: 1_240_000_000,
-    };
-    mockUsage(completeCost, [
-      {
-        harness: "claude-code",
-        totals: tokenTotals(completeCost),
-        models: [
-          {
-            modelId: "claude-sonnet-4",
-            totals: tokenTotals({ ...completeCost, totalNanos: 600_000_000 }),
-          },
-        ],
-      },
-    ]);
+	it("renders complete costs and provider/model attribution", async () => {
+		useUiStore.getState().setDeveloperMode(true);
+		const completeCost = {
+			cachedInputNanos: 100_000_000,
+			coverage: "complete",
+			inputNanos: 540_000_000,
+			outputNanos: 600_000_000,
+			providerAttribution: "observed",
+			totalNanos: 1_240_000_000,
+		};
+		mockUsage(completeCost, [
+			{
+				harness: "claude-code",
+				totals: tokenTotals(completeCost),
+				models: [
+					{
+						modelId: "claude-sonnet-4",
+						totals: tokenTotals({ ...completeCost, totalNanos: 600_000_000 }),
+					},
+				],
+			},
+		]);
 
-    renderWithQuery(<SessionInspector session={session([])} />);
+		renderWithQuery(<SessionInspector session={session([])} />);
 
-    const section = (await screen.findByText("Usage & cost")).closest(
-      "[data-testid='inspector-section']",
-    ) as HTMLElement;
-    // The value carries no coverage qualifier, and the disclosure beside the
-    // heading explains the estimate without claiming it is billing.
-    expect(within(section).getAllByText("$1.24").length).toBeGreaterThan(0);
-    expect(section).not.toHaveTextContent(/[≈≥]\$/);
-    // The row already sits under its agent, so the billing provider is not
-    // repeated in the model name.
-    expect(within(section).getByText("Sonnet 4")).toBeInTheDocument();
-    expect(section).not.toHaveTextContent("anthropic ·");
+		const section = (await screen.findByText("Usage & cost")).closest(
+			"[data-testid='inspector-section']",
+		) as HTMLElement;
+		// The value carries no coverage qualifier, and the disclosure beside the
+		// heading explains the estimate without claiming it is billing.
+		expect(within(section).getAllByText("$1.24").length).toBeGreaterThan(0);
+		expect(section).not.toHaveTextContent(/[≈≥]\$/);
+		// The row already sits under its agent, so the billing provider is not
+		// repeated in the model name.
+		expect(within(section).getByText("Sonnet 4")).toBeInTheDocument();
+		expect(section).not.toHaveTextContent("anthropic ·");
 
-    await userEvent.hover(
-      within(section).getByRole("button", { name: "About estimated cost" }),
-    );
-    const tooltip = await screen.findByRole("tooltip");
-    expect(tooltip).toHaveTextContent(/published API list prices/);
-    expect(tooltip).not.toHaveTextContent(/could not be priced/);
-  });
+		await userEvent.hover(within(section).getByRole("button", { name: "About estimated cost" }));
+		const tooltip = await screen.findByRole("tooltip");
+		expect(tooltip).toHaveTextContent(/published API list prices/);
+		expect(tooltip).not.toHaveTextContent(/could not be priced/);
+	});
 
-  it("explains when the displayed price uses an inferred billing provider", async () => {
-    useUiStore.getState().setDeveloperMode(true);
-    mockUsage({
-      cachedInputNanos: 100_000_000,
-      coverage: "complete",
-      inputNanos: 540_000_000,
-      outputNanos: 600_000_000,
-      providerAttribution: "inferred",
-      totalNanos: 1_240_000_000,
-    });
+	it("explains when the displayed price uses an inferred billing provider", async () => {
+		useUiStore.getState().setDeveloperMode(true);
+		mockUsage({
+			cachedInputNanos: 100_000_000,
+			coverage: "complete",
+			inputNanos: 540_000_000,
+			outputNanos: 600_000_000,
+			providerAttribution: "inferred",
+			totalNanos: 1_240_000_000,
+		});
 
-    renderWithQuery(<SessionInspector session={session([])} />);
+		renderWithQuery(<SessionInspector session={session([])} />);
 
-    const section = (await screen.findByText("Usage & cost")).closest(
-      "[data-testid='inspector-section']",
-    ) as HTMLElement;
-    expect(within(section).getAllByText("$1.24").length).toBeGreaterThan(0);
+		const section = (await screen.findByText("Usage & cost")).closest(
+			"[data-testid='inspector-section']",
+		) as HTMLElement;
+		expect(within(section).getAllByText("$1.24").length).toBeGreaterThan(0);
 
-    await userEvent.hover(
-      within(section).getByRole("button", { name: "About estimated cost" }),
-    );
-    const tooltip = await screen.findByRole("tooltip");
-    expect(tooltip).toHaveTextContent(/Billing provider not confirmed/);
-    expect(tooltip).toHaveTextContent(/inferred from the model/);
-    expect(tooltip).toHaveTextContent(/Actual charges may differ/);
-  });
+		await userEvent.hover(within(section).getByRole("button", { name: "About estimated cost" }));
+		const tooltip = await screen.findByRole("tooltip");
+		expect(tooltip).toHaveTextContent(/Billing provider not confirmed/);
+		expect(tooltip).toHaveTextContent(/inferred from the model/);
+		expect(tooltip).toHaveTextContent(/Actual charges may differ/);
+	});
 
-  it("explains when an aggregate mixes detected and inferred providers", async () => {
-    useUiStore.getState().setDeveloperMode(true);
-    mockUsage({
-      cachedInputNanos: 100_000_000,
-      coverage: "complete",
-      inputNanos: 540_000_000,
-      outputNanos: 600_000_000,
-      providerAttribution: "mixed",
-      totalNanos: 1_240_000_000,
-    });
+	it("explains when an aggregate mixes detected and inferred providers", async () => {
+		useUiStore.getState().setDeveloperMode(true);
+		mockUsage({
+			cachedInputNanos: 100_000_000,
+			coverage: "complete",
+			inputNanos: 540_000_000,
+			outputNanos: 600_000_000,
+			providerAttribution: "mixed",
+			totalNanos: 1_240_000_000,
+		});
 
-    renderWithQuery(<SessionInspector session={session([])} />);
-    const section = (await screen.findByText("Usage & cost")).closest(
-      "[data-testid='inspector-section']",
-    ) as HTMLElement;
-    await userEvent.hover(
-      within(section).getByRole("button", { name: "About estimated cost" }),
-    );
+		renderWithQuery(<SessionInspector session={session([])} />);
+		const section = (await screen.findByText("Usage & cost")).closest(
+			"[data-testid='inspector-section']",
+		) as HTMLElement;
+		await userEvent.hover(within(section).getByRole("button", { name: "About estimated cost" }));
 
-    const tooltip = await screen.findByRole("tooltip");
-    expect(tooltip).toHaveTextContent(/Some billing providers were detected/);
-    expect(tooltip).toHaveTextContent(/others inferred from their models/);
-    expect(tooltip).toHaveTextContent(/actual charges may differ/i);
-  });
+		const tooltip = await screen.findByRole("tooltip");
+		expect(tooltip).toHaveTextContent(/Some billing providers were detected/);
+		expect(tooltip).toHaveTextContent(/others inferred from their models/);
+		expect(tooltip).toHaveTextContent(/actual charges may differ/i);
+	});
 
-  it("presents a partial total as a plain value and discloses the gap in words", async () => {
-    useUiStore.getState().setDeveloperMode(true);
-    mockUsage({
-      cachedInputNanos: null,
-      coverage: "partial",
-      inputNanos: 2_000_000,
-      outputNanos: 5_000_000,
-      providerAttribution: "observed",
-      totalNanos: 7_000_000,
-    });
+	it("presents a partial total as a plain value and discloses the gap in words", async () => {
+		useUiStore.getState().setDeveloperMode(true);
+		mockUsage({
+			cachedInputNanos: null,
+			coverage: "partial",
+			inputNanos: 2_000_000,
+			outputNanos: 5_000_000,
+			providerAttribution: "observed",
+			totalNanos: 7_000_000,
+		});
 
-    renderWithQuery(<SessionInspector session={session([])} />);
+		renderWithQuery(<SessionInspector session={session([])} />);
 
-    const section = (await screen.findByText("Usage & cost")).closest(
-      "[data-testid='inspector-section']",
-    ) as HTMLElement;
-    expect(within(section).getAllByText("$0.007").length).toBeGreaterThan(0);
-    expect(section).not.toHaveTextContent(/[≈≥]\$/);
-    expect(section).not.toHaveTextContent(/partial/i);
+		const section = (await screen.findByText("Usage & cost")).closest(
+			"[data-testid='inspector-section']",
+		) as HTMLElement;
+		expect(within(section).getAllByText("$0.007").length).toBeGreaterThan(0);
+		expect(section).not.toHaveTextContent(/[≈≥]\$/);
+		expect(section).not.toHaveTextContent(/partial/i);
 
-    await userEvent.hover(
-      within(section).getByRole("button", { name: "About estimated cost" }),
-    );
-    const tooltip = await screen.findByRole("tooltip");
-    expect(tooltip).toHaveTextContent(/Some usage could not be priced/);
-  });
+		await userEvent.hover(within(section).getByRole("button", { name: "About estimated cost" }));
+		const tooltip = await screen.findByRole("tooltip");
+		expect(tooltip).toHaveTextContent(/Some usage could not be priced/);
+	});
 
-  // The column itself carries the "nothing here is priced" case: it disappears
-  // when no row has an estimate, so an install without pricing shows no empty
-  // column at all. Once any row is priced the column earns its place, and the
-  // rows that are not priced say so in words rather than trailing a dash.
-  it("drops the cost column only when no agent has an estimate", async () => {
-    useUiStore.getState().setDeveloperMode(true);
-    const totals = tokenTotals(null);
-    mockUsage(null, [
-      { harness: "codex", totals, models: [{ modelId: "gpt-5.5", totals }] },
-      {
-        harness: "claude-code",
-        totals,
-        models: [{ modelId: "claude-sonnet-4", totals }],
-      },
-    ]);
+	// The column itself carries the "nothing here is priced" case: it disappears
+	// when no row has an estimate, so an install without pricing shows no empty
+	// column at all. Once any row is priced the column earns its place, and the
+	// rows that are not priced say so in words rather than trailing a dash.
+	it("drops the cost column only when no agent has an estimate", async () => {
+		useUiStore.getState().setDeveloperMode(true);
+		const totals = tokenTotals(null);
+		mockUsage(null, [
+			{ harness: "codex", totals, models: [{ modelId: "gpt-5.5", totals }] },
+			{ harness: "claude-code", totals, models: [{ modelId: "claude-sonnet-4", totals }] },
+		]);
 
-    renderWithQuery(<SessionInspector session={session([])} />);
+		renderWithQuery(<SessionInspector session={session([])} />);
 
-    const section = (await screen.findByText("Usage & cost")).closest(
-      "[data-testid='inspector-section']",
-    ) as HTMLElement;
-    // The header row's parent is the list container holding every agent row.
-    const agentList = within(section).getByText("Agent").parentElement
-      ?.parentElement as HTMLElement;
-    expect(within(agentList).queryByText("Cost")).not.toBeInTheDocument();
-    expect(agentList).not.toHaveTextContent("Unavailable");
-  });
+		const section = (await screen.findByText("Usage & cost")).closest(
+			"[data-testid='inspector-section']",
+		) as HTMLElement;
+		// The header row's parent is the list container holding every agent row.
+		const agentList = within(section).getByText("Agent").parentElement?.parentElement as HTMLElement;
+		expect(within(agentList).queryByText("Cost")).not.toBeInTheDocument();
+		expect(agentList).not.toHaveTextContent("Unavailable");
+	});
 
-  it("keeps the cost column and marks unpriced agents unavailable", async () => {
-    useUiStore.getState().setDeveloperMode(true);
-    const priced = tokenTotals({
-      cachedInputNanos: 100_000_000,
-      coverage: "complete",
-      inputNanos: 540_000_000,
-      outputNanos: 600_000_000,
-      providerAttribution: "observed",
-      totalNanos: 1_240_000_000,
-    });
-    const unpriced = tokenTotals(null);
-    mockUsage(null, [
-      {
-        harness: "codex",
-        totals: priced,
-        models: [{ modelId: "gpt-5.5", totals: priced }],
-      },
-      {
-        harness: "claude-code",
-        totals: unpriced,
-        models: [{ modelId: "claude-sonnet-4", totals: unpriced }],
-      },
-    ]);
+	it("keeps the cost column and marks unpriced agents unavailable", async () => {
+		useUiStore.getState().setDeveloperMode(true);
+		const priced = tokenTotals({
+			cachedInputNanos: 100_000_000,
+			coverage: "complete",
+			inputNanos: 540_000_000,
+			outputNanos: 600_000_000,
+			providerAttribution: "observed",
+			totalNanos: 1_240_000_000,
+		});
+		const unpriced = tokenTotals(null);
+		mockUsage(null, [
+			{ harness: "codex", totals: priced, models: [{ modelId: "gpt-5.5", totals: priced }] },
+			{
+				harness: "claude-code",
+				totals: unpriced,
+				models: [{ modelId: "claude-sonnet-4", totals: unpriced }],
+			},
+		]);
 
-    renderWithQuery(<SessionInspector session={session([])} />);
+		renderWithQuery(<SessionInspector session={session([])} />);
 
-    const section = (await screen.findByText("Usage & cost")).closest(
-      "[data-testid='inspector-section']",
-    ) as HTMLElement;
-    // The header row's parent is the list container holding every agent row.
-    const agentList = within(section).getByText("Agent").parentElement
-      ?.parentElement as HTMLElement;
-    expect(within(agentList).getByText("Cost")).toBeInTheDocument();
-    expect(within(agentList).getByText("$1.24")).toBeInTheDocument();
-    expect(within(agentList).getByText("Unavailable")).toBeInTheDocument();
-    expect(within(agentList).queryByText("—")).not.toBeInTheDocument();
-  });
+		const section = (await screen.findByText("Usage & cost")).closest(
+			"[data-testid='inspector-section']",
+		) as HTMLElement;
+		// The header row's parent is the list container holding every agent row.
+		const agentList = within(section).getByText("Agent").parentElement?.parentElement as HTMLElement;
+		expect(within(agentList).getByText("Cost")).toBeInTheDocument();
+		expect(within(agentList).getByText("$1.24")).toBeInTheDocument();
+		expect(within(agentList).getByText("Unavailable")).toBeInTheDocument();
+		expect(within(agentList).queryByText("—")).not.toBeInTheDocument();
+	});
 
-  it("shows an unavailable estimate as words rather than a dash", async () => {
-    useUiStore.getState().setDeveloperMode(true);
-    mockUsage(null);
+	it("shows an unavailable estimate as words rather than a dash", async () => {
+		useUiStore.getState().setDeveloperMode(true);
+		mockUsage(null);
 
-    renderWithQuery(<SessionInspector session={session([])} />);
+		renderWithQuery(<SessionInspector session={session([])} />);
 
-    const section = (await screen.findByText("Usage & cost")).closest(
-      "[data-testid='inspector-section']",
-    ) as HTMLElement;
-    expect(within(section).getAllByText("Unavailable").length).toBeGreaterThan(
-      0,
-    );
-  });
+		const section = (await screen.findByText("Usage & cost")).closest(
+			"[data-testid='inspector-section']",
+		) as HTMLElement;
+		expect(within(section).getAllByText("Unavailable").length).toBeGreaterThan(0);
+	});
 });
 
 describe("SessionInspector completion controls", () => {
@@ -1369,9 +1237,7 @@ describe("SessionInspector completion controls", () => {
       screen.queryByRole("switch", { name: "Automatically fix CI failures" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("switch", {
-        name: "Automatically fix review comments",
-      }),
+      screen.queryByRole("switch", { name: "Automatically fix review comments" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("switch", {
@@ -1800,12 +1666,17 @@ describe("SessionInspector Activity section", () => {
     }
   });
 
-  it("keeps execution context out of the summary", () => {
-    renderWithQuery(
-      <SessionInspector session={session([], { branch: "feature/session" })} />,
-    );
+  it("surfaces project, repository, branch, and active agent context in the summary", async () => {
+    renderWithQuery(<SessionInspector session={session([], { branch: "feature/session" })} />);
 
-    expect(screen.queryByTestId("execution-context")).not.toBeInTheDocument();
+    const context = await screen.findByTestId("execution-context");
+    await waitFor(() => expect(context).toHaveTextContent("feature/session"));
+    expect(within(context).getByText("Branch", { exact: true })).toBeInTheDocument();
+    expect(within(context).getByText("Default branch", { exact: true })).toBeInTheDocument();
+    expect(context).toHaveTextContent("main");
+    expect(context).toHaveTextContent("my-app");
+    expect(context).toHaveTextContent("/repo");
+    expect(context).toHaveTextContent("Claude");
   });
 
   it("keeps workspace, PR, and SCM context rows in the Activity timeline", () => {
@@ -2028,16 +1899,11 @@ describe("SessionInspector tabs", () => {
     await userEvent.click(screen.getByRole("tab", { name: "Reviews" }));
 
     expect(await screen.findByText("Review controls")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Review latest commit" }),
-    ).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "Review latest commit" })).not.toBeDisabled();
   });
 
   it("hides the Reviews tab when every PR is merged or closed", async () => {
-    mockCommonGets([], "", [
-      reviewState(1, "up_to_date"),
-      reviewState(2, "up_to_date"),
-    ]);
+    mockCommonGets([], "", [reviewState(1, "up_to_date"), reviewState(2, "up_to_date")]);
     renderWithQuery(
       <SessionInspector
         session={session([pr(1, "merged"), pr(2, "closed")])}
@@ -2045,9 +1911,7 @@ describe("SessionInspector tabs", () => {
       />,
     );
 
-    expect(
-      screen.queryByRole("tab", { name: "Reviews" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Reviews" })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Summary" })).toHaveAttribute(
       "aria-selected",
       "true",
@@ -2171,9 +2035,7 @@ describe("SessionInspector summary reviews", () => {
   it("labels the default reviewer with its display name, not the raw id", async () => {
     getMock.mockImplementation(async (path: string) => {
       if (path === "/api/v1/agents/readiness") {
-        const agents = ["claude-code", "codex", "opencode"].map((id) =>
-          agentReadiness(id),
-        );
+        const agents = ["claude-code", "codex", "opencode"].map((id) => agentReadiness(id));
         return { data: { agents } };
       }
       if (path === "/api/v1/sessions/{sessionId}/workspace/files") {
@@ -2226,9 +2088,7 @@ describe("SessionInspector summary reviews", () => {
           data: {
             agents: [
               agentReadiness("claude-code", "Claude Code"),
-              agentReadiness("codex", "Codex", {
-                authentication: "unauthorized",
-              }),
+              agentReadiness("codex", "Codex", { authentication: "unauthorized" }),
             ],
           },
         };
@@ -2238,15 +2098,9 @@ describe("SessionInspector summary reviews", () => {
 
     renderWithQuery(<SessionInspector session={session([pr(3, "open")])} />);
     await openReviewsSection();
-    await userEvent.click(
-      await screen.findByRole("button", { name: /Select reviewer agent/ }),
-    );
-    await userEvent.click(
-      screen.getByRole("menuitem", { name: "Manage agents…" }),
-    );
-    await waitFor(() =>
-      expect(useUiStore.getState().settingsModal).not.toBeNull(),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: /Select reviewer agent/ }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Manage agents…" }));
+    await waitFor(() => expect(useUiStore.getState().settingsModal).not.toBeNull());
 
     expect(useUiStore.getState().settingsModal).toEqual({
       scope: "global",
@@ -2258,9 +2112,7 @@ describe("SessionInspector summary reviews", () => {
   it("configures session auto-review and disables manual controls", async () => {
     getMock.mockImplementation(async (path: string) => {
       if (path === "/api/v1/agents/readiness") {
-        const agents = ["claude-code", "codex", "opencode"].map((id) =>
-          agentReadiness(id),
-        );
+        const agents = ["claude-code", "codex", "opencode"].map((id) => agentReadiness(id));
         return { data: { agents } };
       }
       if (path === "/api/v1/sessions/{sessionId}/reviews") {
@@ -2348,9 +2200,7 @@ describe("SessionInspector summary reviews", () => {
     };
     getMock.mockImplementation(async (path: string) => {
       if (path === "/api/v1/agents/readiness") {
-        const agents = ["claude-code", "codex", "opencode"].map((id) =>
-          agentReadiness(id),
-        );
+        const agents = ["claude-code", "codex", "opencode"].map((id) => agentReadiness(id));
         return { data: { agents } };
       }
       if (path === "/api/v1/sessions/{sessionId}/reviews") {
@@ -2529,9 +2379,7 @@ describe("SessionInspector summary reviews", () => {
     expect(summary).toHaveClass("line-clamp-4");
     setRenderedOverflow(summary, true);
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Show more" }),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: "Show more" }));
     expect(screen.getByTestId("review-run-summary")).not.toHaveClass(
       "line-clamp-4",
     );
@@ -2594,14 +2442,11 @@ describe("SessionInspector summary reviews", () => {
     await openReviewsSection();
 
     expect(await screen.findByTestId("review-run-summary")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: /View on PR/ }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /View on PR/ })).not.toBeInTheDocument();
   });
 
   it("opens an AO review in Browser and sends its summary to the worker", async () => {
-    const reviewUrl =
-      "https://github.com/acme/repo/pull/3#pullrequestreview-98765";
+    const reviewUrl = "https://github.com/acme/repo/pull/3#pullrequestreview-98765";
     mockCommonGets([], "reviewer-pane", [
       {
         ...reviewState(3, "up_to_date", "abc123"),
@@ -2617,44 +2462,26 @@ describe("SessionInspector summary reviews", () => {
     renderWithQuery(<SessionInspector session={session([pr(3, "open")])} />);
     await openReviewsSection();
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Review actions" }),
-    );
-    await userEvent.click(
-      screen.getByRole("button", { name: "Open in AO Browser" }),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: "Review actions" }));
+    await userEvent.click(screen.getByRole("button", { name: "Open in AO Browser" }));
 
     await waitFor(() =>
-      expect(postMock).toHaveBeenCalledWith(
-        "/api/v1/sessions/{sessionId}/preview",
-        {
-          params: { path: { sessionId: "sess-1" } },
-          body: { url: reviewUrl },
-        },
-      ),
+      expect(postMock).toHaveBeenCalledWith("/api/v1/sessions/{sessionId}/preview", {
+        params: { path: { sessionId: "sess-1" } },
+        body: { url: reviewUrl },
+      }),
     );
-    expect(useUiStore.getState().inspectorSessions["sess-1"]?.view).toBe(
-      "browser",
-    );
-    expect(useUiStore.getState().inspectorSessions["sess-1"]?.isOpen).toBe(
-      true,
-    );
+    expect(useUiStore.getState().inspectorSessions["sess-1"]?.view).toBe("browser");
+    expect(useUiStore.getState().inspectorSessions["sess-1"]?.isOpen).toBe(true);
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Send to worker agent" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Send to worker agent" }));
     await waitFor(() =>
-      expect(postMock).toHaveBeenCalledWith(
-        "/api/v1/sessions/{sessionId}/send",
-        {
-          params: { path: { sessionId: "sess-1" } },
-          body: {
-            message: expect.stringContaining(
-              "Review summary:\nPlease tighten validation and add a regression test.",
-            ),
-          },
+      expect(postMock).toHaveBeenCalledWith("/api/v1/sessions/{sessionId}/send", {
+        params: { path: { sessionId: "sess-1" } },
+        body: {
+          message: expect.stringContaining("Review summary:\nPlease tighten validation and add a regression test."),
         },
-      ),
+      }),
     );
     expect(postMock).toHaveBeenCalledWith("/api/v1/sessions/{sessionId}/send", {
       params: { path: { sessionId: "sess-1" } },
@@ -2678,81 +2505,43 @@ describe("SessionInspector summary reviews", () => {
       prUrl: "https://example.com/pr/3",
       createdAt: "2026-06-15T10:06:00Z",
     };
-    mockCommonGets([], "reviewer-pane", [
-      {
-        ...reviewState(3, "up_to_date", "abc123"),
-        latestRun: currentRun,
-        previousRun,
-      },
-    ]);
+    mockCommonGets([], "reviewer-pane", [{
+      ...reviewState(3, "up_to_date", "abc123"),
+      latestRun: currentRun,
+      previousRun,
+    }]);
     const previousGet = getMock.getMockImplementation()!;
     getMock.mockImplementation(async (path: string, opts?: unknown) => {
       if (path === "/api/v1/sessions/{sessionId}/pr") {
         return {
           data: {
-            prs: [
-              prSummary(3, "open", {
-                author: "codebanditssss",
-                review: {
-                  decision: "changes_requested",
-                  hasUnresolvedHumanComments: true,
-                  reviews: [],
-                  unresolvedBy: [
-                    {
-                      reviewerId: "codebanditssss",
-                      count: 2,
-                      links: [
-                        {
-                          reviewId: "111",
-                          body: "Current-pass comment.",
-                          file: "src/current.ts",
-                          line: 11,
-                          url: "https://example.com/current",
-                          autoInjectReview: false,
-                        },
-                        {
-                          reviewId: "222",
-                          body: "Earlier-pass comment.",
-                          file: "src/earlier.ts",
-                          line: 22,
-                          url: "https://example.com/earlier",
-                          autoInjectReview: true,
-                        },
-                      ],
-                    },
-                    {
-                      reviewerId: "maya",
-                      count: 1,
-                      links: [
-                        {
-                          body: "Legacy external comment.",
-                          file: "src/legacy.ts",
-                          line: 33,
-                          url: "https://example.com/legacy",
-                          autoInjectReview: true,
-                        },
-                      ],
-                    },
+            prs: [prSummary(3, "open", {
+              author: "codebanditssss",
+              review: {
+                decision: "changes_requested",
+                hasUnresolvedHumanComments: true,
+                reviews: [],
+                unresolvedBy: [{
+                  reviewerId: "codebanditssss",
+                  count: 2,
+                  links: [
+                    { reviewId: "111", body: "Current-pass comment.", file: "src/current.ts", line: 11, url: "https://example.com/current", autoInjectReview: false },
+                    { reviewId: "222", body: "Earlier-pass comment.", file: "src/earlier.ts", line: 22, url: "https://example.com/earlier", autoInjectReview: true },
                   ],
-                  resolvedBy: [
-                    {
-                      reviewerId: "codebanditssss",
-                      count: 1,
-                      links: [
-                        {
-                          reviewId: "111",
-                          body: "Resolved current-pass comment.",
-                          file: "src/current.ts",
-                          line: 9,
-                          url: "https://example.com/resolved",
-                          autoInjectReview: true,
-                        },
-                      ],
-                    },
+                }, {
+                  reviewerId: "maya",
+                  count: 1,
+                  links: [
+                    { body: "Legacy external comment.", file: "src/legacy.ts", line: 33, url: "https://example.com/legacy", autoInjectReview: true },
                   ],
-                },
-              }),
-            ],
+                }],
+                resolvedBy: [{
+                  reviewerId: "codebanditssss",
+                  count: 1,
+                  links: [{ reviewId: "111", body: "Resolved current-pass comment.", file: "src/current.ts", line: 9, url: "https://example.com/resolved", autoInjectReview: true }],
+                }],
+              },
+            })],
           },
         };
       }
@@ -2767,51 +2556,29 @@ describe("SessionInspector summary reviews", () => {
     );
     await openReviewsSection();
 
-    expect(
-      await screen.findByText("Current-pass comment."),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Current-pass comment.")).toBeInTheDocument();
     expect(screen.queryByText("Earlier-pass comment.")).not.toBeInTheDocument();
     expect(screen.getByText("Resolved comments · 1")).toBeInTheDocument();
 
-    await userEvent.click(
-      screen.getAllByRole("button", { name: "Comment actions" })[0]!,
-    );
-    await userEvent.click(
-      screen.getByRole("button", { name: "Send to worker agent" }),
-    );
-    expect(postMock).toHaveBeenCalledWith(
-      "/api/v1/sessions/{sessionId}/send",
-      expect.objectContaining({
-        params: { path: { sessionId: "sess-1" } },
-      }),
-    );
-    await userEvent.click(
-      screen.getAllByRole("button", { name: "Comment actions" })[0]!,
-    );
+    await userEvent.click(screen.getAllByRole("button", { name: "Comment actions" })[0]!);
+    await userEvent.click(screen.getByRole("button", { name: "Send to worker agent" }));
+    expect(postMock).toHaveBeenCalledWith("/api/v1/sessions/{sessionId}/send", expect.objectContaining({
+      params: { path: { sessionId: "sess-1" } },
+    }));
+    await userEvent.click(screen.getAllByRole("button", { name: "Comment actions" })[0]!);
     await userEvent.click(screen.getByRole("button", { name: "View in file" }));
-    expect(onOpenReviewFile).toHaveBeenCalledWith({
-      path: "src/current.ts",
-      line: 11,
-    });
-    await userEvent.click(
-      screen.getByRole("button", { name: "Resolve comment" }),
-    );
-    await waitFor(() =>
-      expect(postMock).toHaveBeenCalledWith(
-        "/api/v1/sessions/{sessionId}/reviews/comments/resolve",
-        expect.objectContaining({ params: { path: { sessionId: "sess-1" } } }),
-      ),
-    );
+    expect(onOpenReviewFile).toHaveBeenCalledWith({ path: "src/current.ts", line: 11 });
+    await userEvent.click(screen.getByRole("button", { name: "Resolve comment" }));
+    await waitFor(() => expect(postMock).toHaveBeenCalledWith(
+      "/api/v1/sessions/{sessionId}/reviews/comments/resolve",
+      expect.objectContaining({ params: { path: { sessionId: "sess-1" } } }),
+    ));
 
-    await userEvent.click(
-      screen.getByRole("button", { name: /Load more.*1 earlier/i }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: /Load more.*1 earlier/i }));
     expect(screen.getByText("Earlier-pass comment.")).toBeInTheDocument();
     expect(screen.getAllByText("Current-pass comment.")).toHaveLength(1);
 
-    await userEvent.click(
-      screen.getByRole("button", { name: /maya.*Commented/i }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: /maya.*Commented/i }));
     expect(screen.getByText("Legacy external comment.")).toBeInTheDocument();
     expect(screen.getAllByText("Current-pass comment.")).toHaveLength(1);
     expect(screen.getAllByText("Earlier-pass comment.")).toHaveLength(1);
@@ -2830,21 +2597,17 @@ describe("SessionInspector summary reviews", () => {
                   decision: "changes_requested",
                   hasUnresolvedHumanComments: true,
                   reviews: [],
-                  unresolvedBy: [
-                    {
-                      reviewerId: "maya",
-                      count: 1,
-                      links: [
-                        {
-                          body: "Guard this optional value.",
-                          file: "src/panel.tsx",
-                          line: 42,
-                          url: "https://example.com/comment-42",
-                          autoInjectReview: false,
-                        },
-                      ],
-                    },
-                  ],
+                  unresolvedBy: [{
+                    reviewerId: "maya",
+                    count: 1,
+                    links: [{
+                      body: "Guard this optional value.",
+                      file: "src/panel.tsx",
+                      line: 42,
+                      url: "https://example.com/comment-42",
+                      autoInjectReview: false,
+                    }],
+                  }],
                 },
               }),
             ],
@@ -2861,18 +2624,11 @@ describe("SessionInspector summary reviews", () => {
       />,
     );
     await openReviewsSection();
-    await userEvent.click(
-      await screen.findByRole("button", { name: /maya.*Commented/i }),
-    );
-    await userEvent.click(
-      screen.getByRole("button", { name: "Comment actions" }),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: /maya.*Commented/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Comment actions" }));
     await userEvent.click(screen.getByRole("button", { name: "View in file" }));
 
-    expect(onOpenReviewFile).toHaveBeenCalledWith({
-      path: "src/panel.tsx",
-      line: 42,
-    });
+    expect(onOpenReviewFile).toHaveBeenCalledWith({ path: "src/panel.tsx", line: 42 });
   });
 
   it.each([
@@ -2936,9 +2692,7 @@ describe("SessionInspector summary reviews", () => {
         expect(screen.queryByText("Changes requested")).not.toBeInTheDocument();
         expect(screen.queryByText("Earlier commit")).not.toBeInTheDocument();
       }
-      expect(
-        screen.queryByRole("link", { name: "View on PR" }),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "View on PR" })).not.toBeInTheDocument();
       // A run in flight gets its own live strip naming the harness, not just a
       // word on the button.
       if (status === "running") {
@@ -3015,9 +2769,9 @@ describe("SessionInspector summary reviews", () => {
     expect(
       (await screen.findAllByText("Reviewable change 3")).length,
     ).toBeGreaterThan(0);
-    expect(
-      screen.getAllByText(/2 unresolved comments/).length,
-    ).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/2 unresolved comments/).length).toBeGreaterThanOrEqual(
+      1,
+    );
     expect(
       screen.queryByTestId("github-inline-comments"),
     ).not.toBeInTheDocument();
@@ -3125,15 +2879,9 @@ describe("SessionInspector summary reviews", () => {
 
     const summary = await screen.findByTestId("github-review-summary");
     const externalReview = summary.closest("article") as HTMLElement;
-    expect(
-      screen.queryByRole("button", { name: /ada/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("Self review should stay hidden."),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("Self comment should stay hidden."),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /ada/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("Self review should stay hidden.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Self comment should stay hidden.")).not.toBeInTheDocument();
     expect(summary).toHaveClass("select-text");
     expect(within(summary).getByText("ready").tagName).toBe("STRONG");
     expect(within(summary).getByText("Ship it").tagName).toBe("LI");
@@ -3145,9 +2893,7 @@ describe("SessionInspector summary reviews", () => {
       within(externalReview).queryByRole("link", { name: "View on PR" }),
     ).not.toBeInTheDocument();
     expect(
-      within(externalReview).queryByRole("button", {
-        name: "Request to re-review PR",
-      }),
+      within(externalReview).queryByRole("button", { name: "Request to re-review PR" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText("External reviews")).toBeInTheDocument();
   });
@@ -3186,27 +2932,19 @@ describe("SessionInspector summary reviews", () => {
 
     renderWithQuery(<SessionInspector session={session([pr(3, "open")])} />);
     await openReviewsSection();
-    expect(
-      screen.getByText("Please request another look after the fixes."),
-    ).toBeInTheDocument();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Review actions" }),
-    );
-    await userEvent.click(
-      screen.getByRole("button", { name: "Request to re-review PR" }),
-    );
-    await waitFor(() =>
-      expect(postMock).toHaveBeenCalledWith(
-        "/api/v1/sessions/{sessionId}/reviews/rerequest",
-        {
-          params: { path: { sessionId: "sess-1" } },
-          body: {
-            pullRequestUrl: "https://api.github.com/repos/acme/repo/pulls/3",
-            reviewerId: "maya",
-          },
+    expect(screen.getByText("Please request another look after the fixes.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Review actions" }));
+    await userEvent.click(screen.getByRole("button", { name: "Request to re-review PR" }));
+    await waitFor(() => expect(postMock).toHaveBeenCalledWith(
+      "/api/v1/sessions/{sessionId}/reviews/rerequest",
+      {
+        params: { path: { sessionId: "sess-1" } },
+        body: {
+          pullRequestUrl: "https://api.github.com/repos/acme/repo/pulls/3",
+          reviewerId: "maya",
         },
-      ),
-    );
+      },
+    ));
     expect(
       screen.getByRole("button", { name: "Asked for re-review" }),
     ).toBeDisabled();
@@ -3383,36 +3121,26 @@ describe("SessionInspector summary reviews", () => {
   });
 
   it("preserves hidden reviewer config fields when saving a session reviewer model", async () => {
-    getMock.mockImplementation(
-      async (
-        path: string,
-        options?: { params?: { path?: { agent?: string } } },
-      ) => {
-        if (
-          path === "/api/v1/agents/{agent}/models" &&
-          options?.params?.path?.agent === "codex"
-        ) {
-          return {
-            data: {
-              agentId: "codex",
-              selectionMode: "catalog",
-              models: [
-                { id: "gpt-5", label: "GPT-5", isDefault: true },
-                { id: "gpt-5-mini", label: "GPT-5 Mini" },
-              ],
-              allowCustom: false,
-              source: "official-catalog",
-              fetchedAt: "2026-08-30T00:00:00Z",
-              stale: false,
-            },
-            error: undefined,
-          };
-        }
-        return commonGetsResponder([], "reviewer-pane", [
-          reviewState(3, "needs_review", "sha-1"),
-        ])(path);
-      },
-    );
+    getMock.mockImplementation(async (path: string, options?: { params?: { path?: { agent?: string } } }) => {
+      if (path === "/api/v1/agents/{agent}/models" && options?.params?.path?.agent === "codex") {
+        return {
+          data: {
+            agentId: "codex",
+            selectionMode: "catalog",
+            models: [
+              { id: "gpt-5", label: "GPT-5", isDefault: true },
+              { id: "gpt-5-mini", label: "GPT-5 Mini" },
+            ],
+            allowCustom: false,
+            source: "official-catalog",
+            fetchedAt: "2026-08-30T00:00:00Z",
+            stale: false,
+          },
+          error: undefined,
+        };
+      }
+      return commonGetsResponder([], "reviewer-pane", [reviewState(3, "needs_review", "sha-1")])(path);
+    });
     mockPostsWithResponse({
       data: { reviewerHandleId: "", reviews: [] },
       error: undefined,
@@ -3429,20 +3157,12 @@ describe("SessionInspector summary reviews", () => {
     );
     await openReviewsSection();
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: /Select reviewer agent/ }),
-    );
-    await userEvent.click(
-      await screen.findByRole("menuitem", { name: /codex/i }),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: /Select reviewer agent/ }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /codex/i }));
     await waitFor(() =>
-      expect(
-        screen.getByRole("menuitem", { name: "GPT-5 Mini" }),
-      ).toBeInTheDocument(),
+      expect(screen.getByRole("menuitem", { name: "GPT-5 Mini" })).toBeInTheDocument(),
     );
-    expect(
-      postCallsFor("/api/v1/sessions/{sessionId}/reviews/switch"),
-    ).toHaveLength(0);
+    expect(postCallsFor("/api/v1/sessions/{sessionId}/reviews/switch")).toHaveLength(0);
     await userEvent.click(screen.getByRole("menuitem", { name: "GPT-5 Mini" }));
 
     await waitFor(() =>
@@ -3450,49 +3170,33 @@ describe("SessionInspector summary reviews", () => {
         "/api/v1/sessions/{sessionId}/reviews/switch",
         {
           params: { path: { sessionId: "sess-1" } },
-          body: {
-            harness: undefined,
-            agentConfig: {
-              model: "gpt-5-mini",
-              permissions: "bypass-permissions",
-            },
-          },
+          body: { harness: undefined, agentConfig: { model: "gpt-5-mini", permissions: "bypass-permissions" } },
         },
       ),
     );
   });
 
   it("preserves hidden reviewer config when the explicit override matches the default harness", async () => {
-    getMock.mockImplementation(
-      async (
-        path: string,
-        options?: { params?: { path?: { agent?: string } } },
-      ) => {
-        if (
-          path === "/api/v1/agents/{agent}/models" &&
-          options?.params?.path?.agent === "codex"
-        ) {
-          return {
-            data: {
-              agentId: "codex",
-              selectionMode: "catalog",
-              models: [
-                { id: "gpt-5", label: "GPT-5", isDefault: true },
-                { id: "gpt-5-mini", label: "GPT-5 Mini" },
-              ],
-              allowCustom: false,
-              source: "official-catalog",
-              fetchedAt: "2026-08-30T00:00:00Z",
-              stale: false,
-            },
-            error: undefined,
-          };
-        }
-        return commonGetsResponder([], "reviewer-pane", [
-          reviewState(3, "needs_review", "sha-1"),
-        ])(path);
-      },
-    );
+    getMock.mockImplementation(async (path: string, options?: { params?: { path?: { agent?: string } } }) => {
+      if (path === "/api/v1/agents/{agent}/models" && options?.params?.path?.agent === "codex") {
+        return {
+          data: {
+            agentId: "codex",
+            selectionMode: "catalog",
+            models: [
+              { id: "gpt-5", label: "GPT-5", isDefault: true },
+              { id: "gpt-5-mini", label: "GPT-5 Mini" },
+            ],
+            allowCustom: false,
+            source: "official-catalog",
+            fetchedAt: "2026-08-30T00:00:00Z",
+            stale: false,
+          },
+          error: undefined,
+        };
+      }
+      return commonGetsResponder([], "reviewer-pane", [reviewState(3, "needs_review", "sha-1")])(path);
+    });
     mockPostsWithResponse({
       data: { reviewerHandleId: "", reviews: [] },
       error: undefined,
@@ -3510,20 +3214,12 @@ describe("SessionInspector summary reviews", () => {
     );
     await openReviewsSection();
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: /Select reviewer agent/ }),
-    );
-    await userEvent.click(
-      await screen.findByRole("menuitem", { name: /codex/i }),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: /Select reviewer agent/ }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /codex/i }));
     await waitFor(() =>
-      expect(
-        screen.getByRole("menuitem", { name: "GPT-5 Mini" }),
-      ).toBeInTheDocument(),
+      expect(screen.getByRole("menuitem", { name: "GPT-5 Mini" })).toBeInTheDocument(),
     );
-    expect(
-      postCallsFor("/api/v1/sessions/{sessionId}/reviews/switch"),
-    ).toHaveLength(0);
+    expect(postCallsFor("/api/v1/sessions/{sessionId}/reviews/switch")).toHaveLength(0);
 
     await userEvent.click(screen.getByRole("menuitem", { name: "GPT-5 Mini" }));
     await waitFor(() =>
@@ -3531,44 +3227,31 @@ describe("SessionInspector summary reviews", () => {
         "/api/v1/sessions/{sessionId}/reviews/switch",
         {
           params: { path: { sessionId: "sess-1" } },
-          body: {
-            harness: undefined,
-            agentConfig: {
-              model: "gpt-5-mini",
-              permissions: "bypass-permissions",
-            },
-          },
+          body: { harness: undefined, agentConfig: { model: "gpt-5-mini", permissions: "bypass-permissions" } },
         },
       ),
     );
   });
 
   it("does not expose arbitrary custom reviewer models from another reviewer row", async () => {
-    getMock.mockImplementation(
-      async (
-        path: string,
-        options?: { params?: { path?: { agent?: string } } },
-      ) => {
-        if (path === "/api/v1/agents/{agent}/models") {
-          const agent = options?.params?.path?.agent ?? "";
-          return {
-            data: {
-              agentId: agent,
-              selectionMode: agent === "opencode" ? "text" : "catalog",
-              models: [],
-              allowCustom: agent === "opencode",
-              source: "manual",
-              fetchedAt: "2026-08-30T00:00:00Z",
-              stale: false,
-            },
-            error: undefined,
-          };
-        }
-        return commonGetsResponder([], "reviewer-pane", [
-          reviewState(3, "needs_review", "sha-1"),
-        ])(path);
-      },
-    );
+    getMock.mockImplementation(async (path: string, options?: { params?: { path?: { agent?: string } } }) => {
+      if (path === "/api/v1/agents/{agent}/models") {
+        const agent = options?.params?.path?.agent ?? "";
+        return {
+          data: {
+            agentId: agent,
+            selectionMode: agent === "opencode" ? "text" : "catalog",
+            models: [],
+            allowCustom: agent === "opencode",
+            source: "manual",
+            fetchedAt: "2026-08-30T00:00:00Z",
+            stale: false,
+          },
+          error: undefined,
+        };
+      }
+      return commonGetsResponder([], "reviewer-pane", [reviewState(3, "needs_review", "sha-1")])(path);
+    });
     mockPostsWithResponse({
       data: { reviewerHandleId: "", reviews: [] },
       error: undefined,
@@ -3578,12 +3261,8 @@ describe("SessionInspector summary reviews", () => {
     renderWithQuery(<SessionInspector session={session([pr(3, "open")])} />);
     await openReviewsSection();
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: /Select reviewer agent/ }),
-    );
-    await userEvent.click(
-      await screen.findByRole("menuitem", { name: /^opencode$/i }),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: /Select reviewer agent/ }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /^opencode$/i }));
 
     await waitFor(() =>
       expect(postMock).toHaveBeenCalledWith(
@@ -3594,48 +3273,25 @@ describe("SessionInspector summary reviews", () => {
         },
       ),
     );
-    expect(
-      screen.queryByRole("menuitem", { name: /^custom opencode model$/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("textbox", { name: /custom opencode/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      postCallsFor("/api/v1/sessions/{sessionId}/reviews/switch"),
-    ).toHaveLength(1);
+    expect(screen.queryByRole("menuitem", { name: /^custom opencode model$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: /custom opencode/i })).not.toBeInTheDocument();
+    expect(postCallsFor("/api/v1/sessions/{sessionId}/reviews/switch")).toHaveLength(1);
   });
 
   it("shows suggested reviewer models after reopening the selected reviewer picker", async () => {
-    getMock.mockImplementation(
-      async (
-        path: string,
-        options?: { params?: { path?: { agent?: string } } },
-      ) => {
-        if (path === "/api/v1/agents/{agent}/models") {
-          const agent = options?.params?.path?.agent ?? "";
-          if (agent === "opencode") {
-            return {
-              data: {
-                agentId: agent,
-                selectionMode: "text",
-                models: [
-                  { id: "suggested-a", label: "Suggested A" },
-                  { id: "suggested-b", label: "Suggested B" },
-                ],
-                allowCustom: true,
-                source: "manual",
-                fetchedAt: "2026-08-30T00:00:00Z",
-                stale: false,
-              },
-              error: undefined,
-            };
-          }
+    getMock.mockImplementation(async (path: string, options?: { params?: { path?: { agent?: string } } }) => {
+      if (path === "/api/v1/agents/{agent}/models") {
+        const agent = options?.params?.path?.agent ?? "";
+        if (agent === "opencode") {
           return {
             data: {
               agentId: agent,
-              selectionMode: "catalog",
-              models: [],
-              allowCustom: false,
+              selectionMode: "text",
+              models: [
+                { id: "suggested-a", label: "Suggested A" },
+                { id: "suggested-b", label: "Suggested B" },
+              ],
+              allowCustom: true,
               source: "manual",
               fetchedAt: "2026-08-30T00:00:00Z",
               stale: false,
@@ -3643,11 +3299,21 @@ describe("SessionInspector summary reviews", () => {
             error: undefined,
           };
         }
-        return commonGetsResponder([], "reviewer-pane", [
-          reviewState(3, "needs_review", "sha-1"),
-        ])(path);
-      },
-    );
+        return {
+          data: {
+            agentId: agent,
+            selectionMode: "catalog",
+            models: [],
+            allowCustom: false,
+            source: "manual",
+            fetchedAt: "2026-08-30T00:00:00Z",
+            stale: false,
+          },
+          error: undefined,
+        };
+      }
+      return commonGetsResponder([], "reviewer-pane", [reviewState(3, "needs_review", "sha-1")])(path);
+    });
     mockPostsWithResponse({
       data: { reviewerHandleId: "", reviews: [] },
       error: undefined,
@@ -3657,12 +3323,8 @@ describe("SessionInspector summary reviews", () => {
     renderWithQuery(<SessionInspector session={session([pr(3, "open")])} />);
     await openReviewsSection();
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: /Select reviewer agent/ }),
-    );
-    await userEvent.click(
-      await screen.findByRole("menuitem", { name: /^opencode$/i }),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: /Select reviewer agent/ }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /^opencode$/i }));
     await waitFor(() =>
       expect(postMock).toHaveBeenCalledWith(
         "/api/v1/sessions/{sessionId}/reviews/switch",
@@ -3672,49 +3334,32 @@ describe("SessionInspector summary reviews", () => {
         },
       ),
     );
-    await userEvent.click(
-      await screen.findByRole("button", { name: /Select reviewer agent/ }),
-    );
-    await userEvent.click(
-      await screen.findByRole("menuitem", { name: /^opencode$/i }),
-    );
-    expect(
-      await screen.findByRole("menuitem", { name: "Suggested A" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("menuitem", { name: /^custom opencode model$/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("textbox", { name: /custom opencode/i }),
-    ).not.toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: /Select reviewer agent/ }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /^opencode$/i }));
+    expect(await screen.findByRole("menuitem", { name: "Suggested A" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /^custom opencode model$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: /custom opencode/i })).not.toBeInTheDocument();
   });
 
   it("allows selecting a text-selection reviewer harness without exposing custom reviewer entry", async () => {
-    getMock.mockImplementation(
-      async (
-        path: string,
-        options?: { params?: { path?: { agent?: string } } },
-      ) => {
-        if (path === "/api/v1/agents/{agent}/models") {
-          const agent = options?.params?.path?.agent ?? "";
-          return {
-            data: {
-              agentId: agent,
-              selectionMode: agent === "opencode" ? "text" : "catalog",
-              models: [],
-              allowCustom: agent === "opencode",
-              source: "manual",
-              fetchedAt: "2026-08-30T00:00:00Z",
-              stale: false,
-            },
-            error: undefined,
-          };
-        }
-        return commonGetsResponder([], "reviewer-pane", [
-          reviewState(3, "needs_review", "sha-1"),
-        ])(path);
-      },
-    );
+    getMock.mockImplementation(async (path: string, options?: { params?: { path?: { agent?: string } } }) => {
+      if (path === "/api/v1/agents/{agent}/models") {
+        const agent = options?.params?.path?.agent ?? "";
+        return {
+          data: {
+            agentId: agent,
+            selectionMode: agent === "opencode" ? "text" : "catalog",
+            models: [],
+            allowCustom: agent === "opencode",
+            source: "manual",
+            fetchedAt: "2026-08-30T00:00:00Z",
+            stale: false,
+          },
+          error: undefined,
+        };
+      }
+      return commonGetsResponder([], "reviewer-pane", [reviewState(3, "needs_review", "sha-1")])(path);
+    });
     mockPostsWithResponse({
       data: { reviewerHandleId: "", reviews: [] },
       error: undefined,
@@ -3724,12 +3369,8 @@ describe("SessionInspector summary reviews", () => {
     renderWithQuery(<SessionInspector session={session([pr(3, "open")])} />);
     await openReviewsSection();
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: /Select reviewer agent/ }),
-    );
-    await userEvent.click(
-      await screen.findByRole("menuitem", { name: /^opencode$/i }),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: /Select reviewer agent/ }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /^opencode$/i }));
     await waitFor(() =>
       expect(postMock).toHaveBeenCalledWith(
         "/api/v1/sessions/{sessionId}/reviews/switch",
@@ -3739,45 +3380,31 @@ describe("SessionInspector summary reviews", () => {
         },
       ),
     );
-    expect(
-      screen.queryByRole("menuitem", { name: /^custom opencode model$/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("textbox", { name: /custom opencode/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /^custom opencode model$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: /custom opencode/i })).not.toBeInTheDocument();
   });
 
   it("keeps the current default reviewer open for model selection", async () => {
-    getMock.mockImplementation(
-      async (
-        path: string,
-        options?: { params?: { path?: { agent?: string } } },
-      ) => {
-        if (
-          path === "/api/v1/agents/{agent}/models" &&
-          options?.params?.path?.agent === "codex"
-        ) {
-          return {
-            data: {
-              agentId: "codex",
-              selectionMode: "catalog",
-              models: [
-                { id: "gpt-5", label: "GPT-5", isDefault: true },
-                { id: "gpt-5-mini", label: "GPT-5 Mini" },
-              ],
-              allowCustom: false,
-              source: "official-catalog",
-              fetchedAt: "2026-08-29T00:00:00Z",
-              stale: false,
-            },
-            error: undefined,
-          };
-        }
-        return commonGetsResponder([], "reviewer-pane", [
-          reviewState(3, "needs_review", "sha-1"),
-        ])(path);
-      },
-    );
+    getMock.mockImplementation(async (path: string, options?: { params?: { path?: { agent?: string } } }) => {
+      if (path === "/api/v1/agents/{agent}/models" && options?.params?.path?.agent === "codex") {
+        return {
+          data: {
+            agentId: "codex",
+            selectionMode: "catalog",
+            models: [
+              { id: "gpt-5", label: "GPT-5", isDefault: true },
+              { id: "gpt-5-mini", label: "GPT-5 Mini" },
+            ],
+            allowCustom: false,
+            source: "official-catalog",
+            fetchedAt: "2026-08-29T00:00:00Z",
+            stale: false,
+          },
+          error: undefined,
+        };
+      }
+      return commonGetsResponder([], "reviewer-pane", [reviewState(3, "needs_review", "sha-1")])(path);
+    });
     postMock.mockResolvedValue({
       data: { reviewerHandleId: "", reviews: [] },
       error: undefined,
@@ -3787,21 +3414,13 @@ describe("SessionInspector summary reviews", () => {
     renderWithQuery(<SessionInspector session={session([pr(3, "open")])} />);
     await openReviewsSection();
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: /Select reviewer agent/ }),
-    );
-    await userEvent.click(
-      await screen.findByRole("menuitem", { name: /codex/i }),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: /Select reviewer agent/ }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /codex/i }));
 
     await waitFor(() =>
-      expect(
-        screen.getByRole("menuitem", { name: "GPT-5 Mini" }),
-      ).toBeInTheDocument(),
+      expect(screen.getByRole("menuitem", { name: "GPT-5 Mini" })).toBeInTheDocument(),
     );
-    expect(
-      postCallsFor("/api/v1/sessions/{sessionId}/reviews/switch"),
-    ).toHaveLength(0);
+    expect(postCallsFor("/api/v1/sessions/{sessionId}/reviews/switch")).toHaveLength(0);
     await userEvent.click(screen.getByRole("menuitem", { name: "GPT-5 Mini" }));
     await waitFor(() =>
       expect(postMock).toHaveBeenLastCalledWith(
@@ -3812,15 +3431,11 @@ describe("SessionInspector summary reviews", () => {
         },
       ),
     );
-    expect(
-      postCallsFor("/api/v1/sessions/{sessionId}/reviews/switch"),
-    ).toHaveLength(1);
+    expect(postCallsFor("/api/v1/sessions/{sessionId}/reviews/switch")).toHaveLength(1);
   });
 
   it("clears hidden session reviewer config when returning an explicit default-matching reviewer to project default", async () => {
-    mockCommonGets([], "reviewer-pane", [
-      reviewState(3, "needs_review", "sha-1"),
-    ]);
+    mockCommonGets([], "reviewer-pane", [reviewState(3, "needs_review", "sha-1")]);
     postMock.mockResolvedValue({
       data: { reviewerHandleId: "", reviews: [] },
       response: { status: 200 },
@@ -4263,12 +3878,12 @@ describe("SessionInspector summary reviews", () => {
     renderWithQuery(<SessionInspector session={session([])} />);
 
     await screen.findByRole("tab", { name: /Summary/ });
-    expect(
-      screen.queryByRole("tab", { name: /Reviews/ }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getAllByRole("tab").map((tab) => tab.textContent?.trim()),
-    ).toEqual(["Summary", "Browser", "Files"]);
+    expect(screen.queryByRole("tab", { name: /Reviews/ })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent?.trim())).toEqual([
+      "Summary",
+      "Browser",
+      "Files",
+    ]);
     expect(
       screen.getByRole("switch", { name: "Automatically fix review comments" }),
     ).toBeInTheDocument();
@@ -4289,9 +3904,7 @@ describe("SessionInspector summary reviews", () => {
       "aria-selected",
       "true",
     );
-    expect(
-      screen.queryByRole("tab", { name: "Reviews" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Reviews" })).not.toBeInTheDocument();
     expect(screen.getByText("Session controls")).toBeInTheDocument();
     await waitFor(() => expect(onViewChange).toHaveBeenCalledWith("summary"));
   });
