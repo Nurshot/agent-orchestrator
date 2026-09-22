@@ -43,32 +43,20 @@ type DelegateTaskOutcome struct {
 	WorkerID       domain.SessionID
 }
 
-type taskPreparationCommander interface {
-	PrepareTaskWorkspace(context.Context, domain.ProjectRecord) (domain.TaskPreparationToken, error)
-	CancelTaskPreparation(context.Context, domain.TaskPreparationToken) error
-}
-
-// PrepareTask starts the reversible worktree-only half of task creation. The
-// returned token is optional for embedders without speculative preparation.
+// PrepareTask starts the reversible worktree-only half of task creation.
 func (s *Service) PrepareTask(ctx context.Context, projectID domain.ProjectID) (string, error) {
 	project, err := s.requireProject(ctx, projectID)
 	if err != nil {
 		return "", err
 	}
-	if preparer, ok := s.manager.(taskPreparationCommander); ok {
-		token, err := preparer.PrepareTaskWorkspace(ctx, project)
-		return string(token), err
-	}
-	return "", nil
+	token, err := s.manager.PrepareTaskWorkspace(ctx, project)
+	return string(token), err
 }
 
 // CancelTaskPreparation releases an unclaimed speculative worktree. Unknown or
 // already-claimed tokens are intentionally idempotent.
 func (s *Service) CancelTaskPreparation(ctx context.Context, token string) error {
-	if preparer, ok := s.manager.(taskPreparationCommander); ok {
-		return preparer.CancelTaskPreparation(ctx, domain.TaskPreparationToken(token))
-	}
-	return nil
+	return s.manager.CancelTaskPreparation(ctx, domain.TaskPreparationToken(token))
 }
 
 // DelegateTask spawns the worker directly, matching `ao spawn`, with a

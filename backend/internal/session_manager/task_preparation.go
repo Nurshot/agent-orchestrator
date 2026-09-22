@@ -19,9 +19,7 @@ const defaultTaskPreparationTTL = 5 * time.Minute
 type taskPreparation struct {
 	record  domain.SessionRecord
 	project domain.ProjectRecord
-	branch  string
 	done    chan struct{}
-	cleaned chan struct{}
 	cancel  context.CancelFunc
 	timer   *time.Timer
 
@@ -60,9 +58,7 @@ func (m *Manager) PrepareTaskWorkspace(ctx context.Context, project domain.Proje
 	prep := &taskPreparation{
 		record:  rec,
 		project: project,
-		branch:  branch,
 		done:    make(chan struct{}),
-		cleaned: make(chan struct{}),
 		cancel:  cancel,
 	}
 	token := domain.TaskPreparationToken(rec.ID)
@@ -80,7 +76,7 @@ func (m *Manager) createTaskPreparation(ctx context.Context, prep *taskPreparati
 	ws, workspaceProject, err := m.createSessionWorkspace(ctx, prep.project, ports.SpawnConfig{
 		ProjectID: domain.ProjectID(prep.project.ID),
 		Kind:      domain.KindWorker,
-	}, prep.record.ID, prep.branch, baseRefs)
+	}, prep.record.ID, prep.record.Metadata.Branch, baseRefs)
 	if err == nil {
 		var updated bool
 		updated, err = m.store.SetSessionProvisionedWorkspace(
@@ -135,9 +131,6 @@ func (m *Manager) promoteTaskPreparation(ctx context.Context, prep *taskPreparat
 }
 
 func (m *Manager) awaitTaskPreparation(ctx context.Context, prep *taskPreparation) (ports.WorkspaceInfo, *ports.WorkspaceProjectInfo, error) {
-	if prep == nil {
-		return ports.WorkspaceInfo{}, nil, errors.New("no task preparation")
-	}
 	select {
 	case <-prep.done:
 	case <-ctx.Done():
@@ -176,7 +169,6 @@ func (m *Manager) CancelTaskPreparation(ctx context.Context, token domain.TaskPr
 		if m.taskPreparations[token] == prep {
 			delete(m.taskPreparations, token)
 		}
-		close(prep.cleaned)
 	} else if m.taskPreparations[token] == prep {
 		m.scheduleTaskPreparationCleanup(token, prep)
 	}
@@ -230,9 +222,6 @@ func (m *Manager) cleanupTaskPreparation(ctx context.Context, prep *taskPreparat
 }
 
 func (m *Manager) discardClaimedTaskPreparation(ctx context.Context, prep *taskPreparation) {
-	if prep == nil {
-		return
-	}
 	prep.cancel()
 	defer m.cleanupSystemPromptDir(prep.record.ID)
 	if err := m.cleanupTaskPreparation(ctx, prep); err != nil {

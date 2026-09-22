@@ -1016,7 +1016,7 @@ func (m *Manager) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Sess
 
 	branch := cfg.Branch
 	if prep != nil {
-		branch = prep.branch
+		branch = prep.record.Metadata.Branch
 	} else if branch == "" {
 		branch = DefaultSpawnBranch(id, cfg.Kind, sessionPrefix(project), projectKind, m.dataDir)
 	}
@@ -1026,7 +1026,7 @@ func (m *Manager) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Sess
 	// work, run in the background while the user already has the session open.
 	// The attachments are named now (spawnAttachmentRefs is derived, not read
 	// from disk) so the opening prompt is complete before the files land.
-	if asyncChatSpawnEligible(cfg, mode) && m.chat != nil {
+	if cfg.Async && mode == domain.SessionModeChat && cfg.Kind == domain.KindWorker && m.chat != nil {
 		return m.beginAsyncChatSpawn(ctx, asyncChatSpawn{
 			cfg:               cfg,
 			project:           project,
@@ -1350,10 +1350,6 @@ type defaultBranchRefreshTarget struct {
 }
 
 func (m *Manager) refreshDefaultBranchesBestEffort(ctx context.Context, project domain.ProjectRecord) map[string]string {
-	return m.fetchDefaultBranchesBestEffort(ctx, project)
-}
-
-func (m *Manager) fetchDefaultBranchesBestEffort(ctx context.Context, project domain.ProjectRecord) map[string]string {
 	if project.Kind.WithDefault() == domain.ProjectKindScratch {
 		return nil
 	}

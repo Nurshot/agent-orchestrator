@@ -2474,6 +2474,12 @@ func (f *fakeCommander) Spawn(_ context.Context, cfg ports.SpawnConfig) (domain.
 	}
 	return domain.SessionRecord{ID: "mer-9", ProjectID: cfg.ProjectID, Kind: cfg.Kind, Harness: cfg.Harness}, len(cfg.Prompt), 0, nil
 }
+func (*fakeCommander) PrepareTaskWorkspace(context.Context, domain.ProjectRecord) (domain.TaskPreparationToken, error) {
+	return "", nil
+}
+func (*fakeCommander) CancelTaskPreparation(context.Context, domain.TaskPreparationToken) error {
+	return nil
+}
 func (*fakeCommander) SwitchAgent(context.Context, domain.SessionID, sessionmanager.SwitchAgentConfig) (domain.AgentSwitch, error) {
 	return domain.AgentSwitch{}, nil
 }

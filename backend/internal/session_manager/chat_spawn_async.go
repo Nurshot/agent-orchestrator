@@ -41,13 +41,6 @@ type asyncChatSpawn struct {
 	preparation       *taskPreparation
 }
 
-// asyncChatSpawnEligible reports whether a resolved spawn can answer early.
-func asyncChatSpawnEligible(cfg ports.SpawnConfig, mode domain.SessionMode) bool {
-	return cfg.Async &&
-		mode == domain.SessionModeChat &&
-		cfg.Kind == domain.KindWorker
-}
-
 // beginAsyncChatSpawn publishes the session, records the opening prompt in the
 // durable queue, and hands the rest to the background.
 func (m *Manager) beginAsyncChatSpawn(ctx context.Context, in asyncChatSpawn) (domain.SessionRecord, int, int, error) {
@@ -166,7 +159,10 @@ func (m *Manager) completeAsyncChatSpawn(ctx context.Context, in asyncChatSpawn)
 	// that is perfectly fine. It also means an interrupted start leaves a row
 	// that knows which worktree to clean up.
 	stageStarted = time.Now()
-	m.publishProvisionedWorkspace(ctx, id, ws)
+	if _, err := m.store.SetSessionProvisionedWorkspace(
+		ctx, id, ws.Branch, ws.Path, ws.RepoPath, m.clock()); err != nil {
+		m.logger.Warn("spawn: publish provisioned workspace", "sessionID", id, "error", err)
+	}
 	m.logAsyncChatSpawnStage(id, "workspace_publish", stageStarted)
 
 	record, err := m.getRecord(ctx, id)
@@ -270,16 +266,6 @@ func (m *Manager) runInBackground(work func()) {
 		return
 	}
 	go work()
-}
-
-// publishProvisionedWorkspace records the worktree on a still-provisioning row.
-// Best effort: the controller commit writes the same facts again, so a failure
-// here costs visibility during the start, never correctness after it.
-func (m *Manager) publishProvisionedWorkspace(ctx context.Context, id domain.SessionID, ws ports.WorkspaceInfo) {
-	if _, err := m.store.SetSessionProvisionedWorkspace(
-		ctx, id, ws.Branch, ws.Path, ws.RepoPath, m.clock()); err != nil {
-		m.logger.Warn("spawn: publish provisioned workspace", "sessionID", id, "error", err)
-	}
 }
 
 func (m *Manager) clearProvisionedWorkspace(ctx context.Context, id domain.SessionID, workspacePath string) {

@@ -76,6 +76,8 @@ type commander interface {
 	Cleanup(ctx context.Context, project domain.ProjectID) (sessionmanager.CleanupResult, error)
 	RollbackSpawn(ctx context.Context, id domain.SessionID) (deleted, killed bool, err error)
 	StageAttachments(ctx context.Context, id domain.SessionID, attachments []ports.SpawnAttachment) ([]string, error)
+	PrepareTaskWorkspace(context.Context, domain.ProjectRecord) (domain.TaskPreparationToken, error)
+	CancelTaskPreparation(context.Context, domain.TaskPreparationToken) error
 }
 
 // interfaceTransitionCommander is an optional command capability. Keeping it

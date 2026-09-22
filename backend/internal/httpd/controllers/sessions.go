@@ -103,6 +103,8 @@ type SessionService interface {
 	SetAutoReview(ctx context.Context, id domain.SessionID, enabled bool) (domain.Session, error)
 	Send(ctx context.Context, id domain.SessionID, message string, attachment *ports.SpawnAttachment) error
 	DelegateTask(ctx context.Context, in sessionsvc.DelegateTaskInput) (sessionsvc.DelegateTaskOutcome, error)
+	PrepareTask(ctx context.Context, projectID domain.ProjectID) (string, error)
+	CancelTaskPreparation(ctx context.Context, token string) error
 	ListPRSummaries(ctx context.Context, id domain.SessionID) ([]sessionsvc.PRSummary, error)
 	ClaimPR(ctx context.Context, id domain.SessionID, ref string, opts sessionsvc.ClaimPROptions) (sessionsvc.ClaimPRResult, error)
 	StageAttachments(ctx context.Context, id domain.SessionID, attachments []ports.SpawnAttachment) ([]string, error)
@@ -1563,14 +1565,11 @@ func (c *SessionsController) delegateTask(w http.ResponseWriter, r *http.Request
 }
 
 func (c *SessionsController) prepareTask(w http.ResponseWriter, r *http.Request) {
-	preparer, ok := c.Svc.(interface {
-		PrepareTask(context.Context, domain.ProjectID) (string, error)
-	})
-	if !ok {
+	if c.Svc == nil {
 		apispec.NotImplemented(w, r, "POST", "/api/v1/projects/{id}/tasks/prepare")
 		return
 	}
-	token, err := preparer.PrepareTask(r.Context(), projectID(r))
+	token, err := c.Svc.PrepareTask(r.Context(), projectID(r))
 	if err != nil {
 		envelope.WriteError(w, r, err)
 		return
@@ -1579,14 +1578,11 @@ func (c *SessionsController) prepareTask(w http.ResponseWriter, r *http.Request)
 }
 
 func (c *SessionsController) cancelTaskPreparation(w http.ResponseWriter, r *http.Request) {
-	preparer, ok := c.Svc.(interface {
-		CancelTaskPreparation(context.Context, string) error
-	})
-	if !ok {
+	if c.Svc == nil {
 		apispec.NotImplemented(w, r, "DELETE", "/api/v1/task-preparations/{token}")
 		return
 	}
-	if err := preparer.CancelTaskPreparation(r.Context(), chi.URLParam(r, "token")); err != nil {
+	if err := c.Svc.CancelTaskPreparation(r.Context(), chi.URLParam(r, "token")); err != nil {
 		envelope.WriteError(w, r, err)
 		return
 	}

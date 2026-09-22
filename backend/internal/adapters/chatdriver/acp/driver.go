@@ -256,8 +256,9 @@ func (d *Driver) Start(ctx context.Context, cfg ports.ChatStartConfig) (ports.Ch
 		conv.legacyWire.modelState(), resp.Modes,
 	)
 	settingsStarted := time.Now()
-	if err := conv.applyTurnSettings(ctx, ports.ChatTurnSettings{Model: cfg.Model, Effort: cfg.Effort, Approval: cfg.Permissions}); err != nil {
-		d.logStartStage(cfg.SessionID, "initial_settings", settingsStarted, err)
+	err = conv.applyTurnSettings(ctx, ports.ChatTurnSettings{Model: cfg.Model, Effort: cfg.Effort, Approval: cfg.Permissions})
+	d.logStartStage(cfg.SessionID, "initial_settings", settingsStarted, err)
+	if err != nil {
 		// Initial model and permission mode may have been applied via launch-time
 		// flags (e.g. kimchiacp passes --model, --auto, --yolo). An agent that
 		// does not implement the runtime ACP setters returns -32601; tolerate it
@@ -266,8 +267,6 @@ func (d *Driver) Start(ctx context.Context, cfg ports.ChatStartConfig) (ports.Ch
 			conv.discard()
 			return nil, fmt.Errorf("configure ACP session: %w", err)
 		}
-	} else {
-		d.logStartStage(cfg.SessionID, "initial_settings", settingsStarted, nil)
 	}
 	d.logStartStage(cfg.SessionID, "total", totalStarted, nil)
 	return conv, nil

@@ -470,9 +470,8 @@ export function TaskComposer({
 			// DELETE is intentionally idempotent after a successful claim. It also
 			// reclaims a preparation that resolved after this submission captured its
 			// token, instead of leaving that unused worktree until TTL expiry.
-			for (const token of new Set([submittedPreparation, preparationAfterSubmit])) {
-				cancelTaskPreparation(token);
-			}
+			cancelTaskPreparation(submittedPreparation);
+			cancelTaskPreparation(preparationAfterSubmit);
 			onCreated(sessionId);
 		} catch (err) {
 			const canBypassApprovals =
