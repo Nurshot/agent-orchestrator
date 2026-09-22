@@ -293,7 +293,9 @@ export function TaskComposer({
 			}).find(isReadyAgent)?.id ?? ""
 		);
 	}, [agentCatalog, isStandalone]);
-	const defaultWorkerAgent = projectWorkerAgent || globalDefaultAgent || standaloneDefaultAgent;
+	const defaultWorkerAgent = isStandalone
+		? standaloneDefaultAgent
+		: projectWorkerAgent || globalDefaultAgent;
 	const selectedAgent = agent || defaultWorkerAgent;
 	useEnsureAgentReadiness();
 	useEnsureAgentReadiness({
