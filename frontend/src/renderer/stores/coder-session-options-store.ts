@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { CloudCpCreateSessionCoder, CloudCpSessionRepo } from "../lib/cloud-cp/types";
+import type { CloudCpProjectCoderConfig, CloudCpSessionRepo } from "../lib/cloud-cp/types";
 
 export type CoderSize = "small" | "medium" | "large";
 
@@ -35,23 +35,23 @@ export const useCoderSessionOptionsStore = create<CoderSessionOptionsState>((set
 	reset: () => set({ ...initialState, extraRepos: [] }),
 }));
 
-// buildCoderRequestOptions turns the picker state into the createSession `coder`
+// buildCoderRequestOptions turns the picker state into the createProject `coder`
 // payload, or undefined when the choice is "Default with no extra repos" — in
-// which case the request omits `coder` entirely and behaves exactly as before.
-// Size and startup are only sent alongside a chosen (non-default) template,
-// mirroring the control plane's validation.
+// which case the request omits `coder` entirely and the project behaves exactly
+// as before. Size and startup are only sent alongside a chosen (non-default)
+// template, mirroring the control plane's validation.
 export function buildCoderRequestOptions(state: {
 	templateId: string;
 	size: CoderSize;
 	startupScript: string;
 	extraRepos: CloudCpSessionRepo[];
-}): CloudCpCreateSessionCoder | undefined {
+}): CloudCpProjectCoderConfig | undefined {
 	const templateId = state.templateId.trim();
 	const extraRepos = state.extraRepos
 		.map((repo) => ({ url: repo.url.trim(), branch: repo.branch?.trim() || undefined }))
 		.filter((repo) => repo.url.length > 0);
 	if (!templateId && extraRepos.length === 0) return undefined;
-	const coder: CloudCpCreateSessionCoder = {};
+	const coder: CloudCpProjectCoderConfig = {};
 	if (templateId) {
 		coder.templateId = templateId;
 		coder.size = state.size;

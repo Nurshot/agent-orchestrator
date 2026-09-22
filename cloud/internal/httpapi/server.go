@@ -50,6 +50,7 @@ type Store interface {
 	AcceptOrgInvitation(context.Context, domain.Principal, string, string) (domain.Membership, error)
 	DeclineOrgInvitation(context.Context, domain.Principal, string, string) error
 	CreateProject(context.Context, domain.Principal, string, string, domain.CreateProject) (domain.Project, error)
+	GetProject(context.Context, domain.Principal, string, string) (domain.Project, error)
 	ListProjects(context.Context, domain.Principal, string, *domain.Cursor, int) ([]domain.Project, bool, error)
 	UpdateProject(context.Context, domain.Principal, string, string, domain.UpdateProject) (domain.Project, error)
 	ArchiveProject(context.Context, domain.Principal, string, string) error

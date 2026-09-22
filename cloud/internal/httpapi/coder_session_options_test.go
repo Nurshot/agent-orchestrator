@@ -2,22 +2,22 @@ package httpapi
 
 import "testing"
 
-func TestParseCoderSessionOptions(t *testing.T) {
+func TestParseCoderConfigInput(t *testing.T) {
 	t.Parallel()
 	const goodTemplate = "2a2e262c-b31c-4202-946d-a19ad45d1fd2"
 
-	t.Run("empty options are inert", func(t *testing.T) {
-		opts, repos, err := parseCoderSessionOptions(&createSessionCoderOptions{})
+	t.Run("empty config is inert", func(t *testing.T) {
+		cfg, err := parseCoderConfigInput(&coderConfigInput{})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if opts.TemplateID != "" || opts.Size != "" || opts.StartupScript != "" || repos != nil {
-			t.Fatalf("empty options not empty: %+v repos=%+v", opts, repos)
+		if cfg.TemplateID != "" || cfg.Size != "" || cfg.StartupScript != "" || len(cfg.ExtraRepos) != 0 {
+			t.Fatalf("empty config not empty: %+v", cfg)
 		}
 	})
 
 	t.Run("template + size + startup + repo", func(t *testing.T) {
-		opts, repos, err := parseCoderSessionOptions(&createSessionCoderOptions{
+		cfg, err := parseCoderConfigInput(&coderConfigInput{
 			TemplateID:    goodTemplate,
 			Size:          "Large",
 			StartupScript: "make dev",
@@ -26,34 +26,34 @@ func TestParseCoderSessionOptions(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if opts.TemplateID != goodTemplate || opts.Size != "large" || opts.StartupScript != "make dev" {
-			t.Fatalf("options = %+v", opts)
+		if cfg.TemplateID != goodTemplate || cfg.Size != "large" || cfg.StartupScript != "make dev" {
+			t.Fatalf("config = %+v", cfg)
 		}
-		if len(repos) != 1 || repos[0].URL != "https://github.com/acme/lib" || repos[0].Branch != "main" {
-			t.Fatalf("repos = %+v", repos)
+		if len(cfg.ExtraRepos) != 1 || cfg.ExtraRepos[0].URL != "https://github.com/acme/lib" || cfg.ExtraRepos[0].Branch != "main" {
+			t.Fatalf("repos = %+v", cfg.ExtraRepos)
 		}
 	})
 
 	t.Run("bad template UUID is rejected", func(t *testing.T) {
-		if _, _, err := parseCoderSessionOptions(&createSessionCoderOptions{TemplateID: "not-a-uuid"}); err == nil {
+		if _, err := parseCoderConfigInput(&coderConfigInput{TemplateID: "not-a-uuid"}); err == nil {
 			t.Fatal("expected error for bad template UUID")
 		}
 	})
 
 	t.Run("bad size is rejected", func(t *testing.T) {
-		if _, _, err := parseCoderSessionOptions(&createSessionCoderOptions{TemplateID: goodTemplate, Size: "huge"}); err == nil {
+		if _, err := parseCoderConfigInput(&coderConfigInput{TemplateID: goodTemplate, Size: "huge"}); err == nil {
 			t.Fatal("expected error for bad size")
 		}
 	})
 
 	t.Run("size without a template is rejected", func(t *testing.T) {
-		if _, _, err := parseCoderSessionOptions(&createSessionCoderOptions{Size: "large"}); err == nil {
+		if _, err := parseCoderConfigInput(&coderConfigInput{Size: "large"}); err == nil {
 			t.Fatal("expected error: size requires a chosen template")
 		}
 	})
 
 	t.Run("non-github extra repo is rejected", func(t *testing.T) {
-		if _, _, err := parseCoderSessionOptions(&createSessionCoderOptions{
+		if _, err := parseCoderConfigInput(&coderConfigInput{
 			ExtraRepos: []createSessionRepo{{URL: "https://gitlab.com/a/b"}},
 		}); err == nil {
 			t.Fatal("expected error for non-github extra repo")

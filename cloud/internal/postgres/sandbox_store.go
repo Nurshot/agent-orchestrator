@@ -826,7 +826,6 @@ func (s *Store) WorkerLaunchSpec(
 ) (domain.WorkerLaunch, error) {
 	launch := domain.WorkerLaunch{OrgID: orgID}
 	err := s.withOrg(ctx, orgID, func(tx pgx.Tx) error {
-		var extraReposRaw []byte
 		err := tx.QueryRow(
 			ctx,
 			`SELECT session.id, session.project_id, project.display_name, project.config,
@@ -834,8 +833,7 @@ func (s *Store) WorkerLaunchSpec(
 				session.display_name, session.branch, session.prompt,
 				session.agent_session_id, session.mode, session.denied_commands,
 				COALESCE(session.parent_session_id::text, ''),
-				project.repository_url, project.default_branch,
-				session.extra_repos
+				project.repository_url, project.default_branch
 			FROM ao_sessions session
 			JOIN ao_projects project ON project.id = session.project_id
 			WHERE session.id = $1 AND session.org_id = $2`,
@@ -857,18 +855,12 @@ func (s *Store) WorkerLaunchSpec(
 			&launch.ParentSessionID,
 			&launch.RepositoryURL,
 			&launch.DefaultBranch,
-			&extraReposRaw,
 		)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
 		}
 		if err != nil {
 			return fmt.Errorf("load worker launch spec: %w", err)
-		}
-		if len(extraReposRaw) > 0 {
-			if err := json.Unmarshal(extraReposRaw, &launch.ExtraRepos); err != nil {
-				return fmt.Errorf("decode session extra repos: %w", err)
-			}
 		}
 		return nil
 	})

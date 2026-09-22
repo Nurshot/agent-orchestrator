@@ -138,7 +138,4 @@ type WorkerLaunch struct {
 	DeniedCommands  []string
 	RepositoryURL   string
 	DefaultBranch   string
-	// ExtraRepos are additional repositories to clone alongside the primary repo
-	// (multi-repo dev kit). Empty for the common single-repo session.
-	ExtraRepos []RepoRef
 }

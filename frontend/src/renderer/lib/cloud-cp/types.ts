@@ -127,6 +127,23 @@ export interface CloudCpCreateProjectRequest {
 	/** 1-255 characters. */
 	defaultBranch: string;
 	config?: Record<string, unknown>;
+	/**
+	 * Optional coder dev-kit config chosen at project setup (template picker +
+	 * size/startup + extra repos). Stored on the project; every coder session of
+	 * the project inherits it. Absent = default template, single repo.
+	 */
+	coder?: CloudCpProjectCoderConfig;
+}
+
+export interface CloudCpProjectCoderConfig {
+	/** Coder template UUID from GET /orgs/{orgId}/sandbox/coder/templates. Omit for the default template. */
+	templateId?: string;
+	/** t-shirt size the template maps to a VM SKU. Only with a non-default template. */
+	size?: "small" | "medium" | "large";
+	/** Optional shell snippet the template runs after checkout. Only with a non-default template. */
+	startupScript?: string;
+	/** Additional repositories every session of the project clones alongside the primary repo. */
+	extraRepos?: CloudCpSessionRepo[];
 }
 
 /** PATCH /orgs/{orgId}/projects/{projectId} */
@@ -180,22 +197,6 @@ export interface CloudCpCreateSessionRequest {
 	 * from `/me`.
 	 */
 	provider?: string;
-	/**
-	 * Per-session Coder choices (template picker + its curated form). Ignored
-	 * unless the resolved provider is coder; omitted uses the default template.
-	 */
-	coder?: CloudCpCreateSessionCoder;
-}
-
-export interface CloudCpCreateSessionCoder {
-	/** Coder template UUID from GET /orgs/{orgId}/sandbox/coder/templates. Omit for the default template. */
-	templateId?: string;
-	/** t-shirt size the template maps to a VM SKU. Only with a non-default template. */
-	size?: "small" | "medium" | "large";
-	/** Optional shell snippet the template runs after checkout. Only with a non-default template. */
-	startupScript?: string;
-	/** Additional repositories the worker clones alongside the primary repo. */
-	extraRepos?: CloudCpSessionRepo[];
 }
 
 export interface CloudCpSessionRepo {

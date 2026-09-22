@@ -284,6 +284,34 @@ func (s *Store) ListProjects(
 	return projects, hasMore, nil
 }
 
+// GetProject returns one project by id (tenant-scoped). Used at session creation
+// to read the project's coder dev-kit config so each session inherits the
+// template/size/startup/extra-repos chosen at project setup.
+func (s *Store) GetProject(
+	ctx context.Context,
+	principal domain.Principal,
+	orgID string,
+	projectID string,
+) (domain.Project, error) {
+	var project domain.Project
+	err := s.withTenant(ctx, principal, orgID, func(tx pgx.Tx) error {
+		scanErr := scanProject(tx.QueryRow(
+			ctx,
+			`SELECT id, org_id, display_name, repository_url, default_branch,
+				github_repository_id, config, created_at, updated_at
+			FROM ao_projects
+			WHERE org_id = $1 AND id = $2 AND archived_at IS NULL`,
+			orgID,
+			projectID,
+		), &project)
+		if errors.Is(scanErr, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		return scanErr
+	})
+	return project, err
+}
+
 func (s *Store) CreateSession(
 	ctx context.Context,
 	principal domain.Principal,
@@ -651,25 +679,15 @@ func createSessionTx(
 		return domain.Session{}, ErrSandboxQuotaExceeded
 	}
 
-	extraReposJSON := []byte("[]")
-	if len(input.ExtraRepos) > 0 {
-		encoded, marshalErr := json.Marshal(input.ExtraRepos)
-		if marshalErr != nil {
-			return domain.Session{}, marshalErr
-		}
-		extraReposJSON = encoded
-	}
 	err = scanSession(tx.QueryRow(
 		ctx,
 		`WITH generated AS (SELECT gen_random_uuid() AS id)
 		INSERT INTO ao_sessions (
 			id, org_id, project_id, kind, harness, display_name, branch,
-			prompt, mode, denied_commands, parent_session_id, created_by_user_id,
-			extra_repos
+			prompt, mode, denied_commands, parent_session_id, created_by_user_id
 		)
 		SELECT id, $1, $2, $3, $4, $5, 'ao/' || left(id::text, 8),
-			$6, $7, $8, NULLIF($9, '')::uuid, NULLIF($10, '')::uuid,
-			$11::jsonb
+			$6, $7, $8, NULLIF($9, '')::uuid, NULLIF($10, '')::uuid
 		FROM generated
 		RETURNING id, org_id, project_id, kind, harness, display_name, branch,
 			mode, denied_commands, activity_state, is_terminated,
@@ -684,7 +702,6 @@ func createSessionTx(
 		input.DeniedCommands,
 		parentSessionID,
 		actorUserID,
-		string(extraReposJSON),
 	), &session)
 	if err != nil {
 		return domain.Session{}, normalizeConstraintError(err)

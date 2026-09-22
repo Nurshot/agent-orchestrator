@@ -26,6 +26,9 @@ import { useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from
 import type { components } from "../../api/schema";
 import type { ImportFolderScan } from "../../preload";
 import { useCloudCp } from "../hooks/useCloudCp";
+import { useCloudSandboxProviders } from "../hooks/useCloudSandboxProviders";
+import { CoderTemplatePicker } from "./CoderTemplatePicker";
+import { buildCoderRequestOptions, useCoderSessionOptionsStore } from "../stores/coder-session-options-store";
 import { useCloudGate } from "../hooks/useCloudGate";
 import { useCloudOrg } from "../hooks/useCloudOrg";
 import { usePreparedClone } from "../hooks/usePreparedClone";
@@ -1334,6 +1337,15 @@ function CloudProjectCard({
 	const { client, baseUrl } = useCloudCp();
 	const { org } = useCloudOrg();
 	const queryClient = useQueryClient();
+	// The coder dev-kit picker is offered only when the deployment/org runs coder;
+	// its choices are stored on the project and inherited by every session.
+	const sandboxProviders = useCloudSandboxProviders();
+	const coderAvailable = sandboxProviders.available.includes("coder");
+	const resetCoderOptions = useCoderSessionOptionsStore((s) => s.reset);
+	useEffect(() => {
+		resetCoderOptions();
+		return () => resetCoderOptions();
+	}, [resetCoderOptions]);
 
 	const [projectName, setProjectName] = useState("");
 	const [nameSubmitted, setNameSubmitted] = useState(false);
@@ -1480,6 +1492,7 @@ function CloudProjectCard({
 				setIsCreating(false);
 				return;
 			}
+			const coder = buildCoderRequestOptions(useCoderSessionOptionsStore.getState());
 			await client.createProject(org.id, {
 				displayName: projectName.trim(),
 				repositoryUrl: repositoryUrl.trim(),
@@ -1488,6 +1501,7 @@ function CloudProjectCard({
 					worker: { agent: selection.workerAgent },
 					orchestrator: { agent: selection.orchestratorAgent },
 				},
+				...(coder ? { coder } : {}),
 			});
 			await queryClient.invalidateQueries({ queryKey: cloudProjectsQueryKey });
 			onCreated();
@@ -1795,6 +1809,14 @@ function CloudProjectCard({
 						</>
 					)}
 				</div>
+
+				{/* Coder dev kit: template + additional repos + size, stored on the
+					project and inherited by every session. Only when coder is offered. */}
+				{coderAvailable && (hasGithubConnection || useManualPat) ? (
+					<div className="space-y-2">
+						<CoderTemplatePicker orgId={org?.id} />
+					</div>
+				) : null}
 
 				{/* Agents — inline */}
 				{(hasGithubConnection || useManualPat) && org !== undefined ? (

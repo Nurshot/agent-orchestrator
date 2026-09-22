@@ -32,6 +32,26 @@ type createProjectRequest struct {
 	RepositoryURL string         `json:"repositoryUrl"`
 	DefaultBranch string         `json:"defaultBranch"`
 	Config        map[string]any `json:"config,omitempty"`
+	// Coder carries the optional coder dev-kit config chosen at project setup
+	// (template picker + size/startup + extra repos). Stored on the project and
+	// inherited by every coder session of the project. Absent = default template,
+	// single repo (unchanged behavior).
+	Coder *coderConfigInput `json:"coder,omitempty"`
+}
+
+type coderConfigInput struct {
+	// TemplateID is a Coder template UUID from GET /orgs/{orgId}/sandbox/coder/templates.
+	// Empty selects the deployment default template.
+	TemplateID string `json:"templateId,omitempty"`
+	// Size is a t-shirt size ("small"/"medium"/"large"); only meaningful with a
+	// non-default template that declares a `size` parameter.
+	Size string `json:"size,omitempty"`
+	// StartupScript is an optional shell snippet the template runs after checkout;
+	// only meaningful with a template that declares a `startup_script` parameter.
+	StartupScript string `json:"startupScript,omitempty"`
+	// ExtraRepos are additional repositories every session of the project clones
+	// alongside the primary repo.
+	ExtraRepos []createSessionRepo `json:"extraRepos,omitempty"`
 }
 
 type updateProjectRequest struct {
@@ -64,28 +84,6 @@ type createSessionRequest struct {
 	// is optional: an empty value uses the control plane default. When set it
 	// must be one of the providers the deployment offers (see /me).
 	Provider string `json:"provider,omitempty"`
-	// Coder carries optional per-session Coder choices (template picker + its
-	// curated form: size, startup script, extra repos). Ignored unless the
-	// resolved provider is coder; absent/empty means the default template with
-	// its default parameters (unchanged behavior).
-	Coder *createSessionCoderOptions `json:"coder,omitempty"`
-}
-
-type createSessionCoderOptions struct {
-	// TemplateID is a Coder template UUID from GET /orgs/{orgId}/sandbox/coder/templates.
-	// Empty = the deployment default template ("Default" in the picker).
-	TemplateID string `json:"templateId,omitempty"`
-	// Size is a t-shirt size ("small"/"medium"/"large") the template maps to a VM
-	// SKU. Only meaningful with a non-default template that declares a `size`
-	// parameter.
-	Size string `json:"size,omitempty"`
-	// StartupScript is an optional shell snippet the template runs after checkout
-	// (dev-env bring-up). Only meaningful with a template that declares a
-	// `startup_script` parameter.
-	StartupScript string `json:"startupScript,omitempty"`
-	// ExtraRepos are additional repositories the worker clones alongside the
-	// project's primary repo (multi-repo dev kit).
-	ExtraRepos []createSessionRepo `json:"extraRepos,omitempty"`
 }
 
 type createSessionRepo struct {
@@ -211,6 +209,21 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, r, http.StatusUnprocessableEntity, "validation_error", "Project configuration is invalid.")
 		return
+	}
+	// Store the coder dev-kit config (template + size/startup + extra repos)
+	// under the project's config, so every coder session of the project inherits
+	// it. Absent = default template, single repo (unchanged behavior).
+	if request.Coder != nil {
+		coderConfig, verr := parseCoderConfigInput(request.Coder)
+		if verr != nil {
+			writeError(w, r, http.StatusUnprocessableEntity, "validation_error", verr.Error())
+			return
+		}
+		config, err = domain.MergeProjectCoderConfig(config, coderConfig)
+		if err != nil {
+			writeError(w, r, http.StatusUnprocessableEntity, "validation_error", "Project coder configuration is invalid.")
+			return
+		}
 	}
 	principal := principalFrom(r)
 	userStore, ok := s.store.(userProviderConnectionStore)
@@ -481,23 +494,29 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
-	// Per-session Coder options (template picker + its curated form) apply only
-	// when the resolved provider is coder; other providers ignore them. An empty
-	// template keeps today's default-template behavior.
+	// Coder sessions inherit the project's dev-kit config (template + size +
+	// startup), chosen once at project setup and stored on the project. Non-coder
+	// providers, and projects without a coder config, keep the default-template
+	// behavior. (Extra repos also live on the project config; the worker reads
+	// them from the project at launch — see launchContextFrom.)
 	effectiveProvider := request.Provider
 	if effectiveProvider == "" {
 		effectiveProvider = s.sandboxProvider
 	}
 	var coderOpts *sandbox.CoderSessionOptions
-	var extraRepos []domain.RepoRef
-	if effectiveProvider == sandbox.ProviderCoder && request.Coder != nil {
-		opts, repos, verr := parseCoderSessionOptions(request.Coder)
-		if verr != nil {
-			writeError(w, r, http.StatusUnprocessableEntity, "invalid_request", verr.Error())
+	if effectiveProvider == sandbox.ProviderCoder {
+		project, projectErr := s.store.GetProject(r.Context(), principalFrom(r), orgID, request.ProjectID)
+		if projectErr != nil {
+			s.writeStoreError(w, r, projectErr)
 			return
 		}
-		coderOpts = opts
-		extraRepos = repos
+		if cfg, ok := domain.DecodeProjectCoderConfig(project.Config); ok {
+			coderOpts = &sandbox.CoderSessionOptions{
+				TemplateID:    cfg.TemplateID,
+				Size:          cfg.Size,
+				StartupScript: cfg.StartupScript,
+			}
+		}
 	}
 	// The plan is resolved once, here, and stamped onto the sandbox row. The
 	// reconciler reads it back from the row rather than from configuration, so
@@ -531,7 +550,6 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 			BootstrapContext:    plan.BootstrapContext,
 			Release:             s.release,
 			ParentSessionID:     parentSessionID,
-			ExtraRepos:          extraRepos,
 		},
 	)
 	if err != nil {
@@ -741,36 +759,33 @@ const (
 
 var coderSizes = map[string]bool{"small": true, "medium": true, "large": true}
 
-// parseCoderSessionOptions validates the client's Coder picker choices and
-// splits them into (a) the provisioning options (template/size/startup, stamped
-// into the sandbox plan) and (b) the extra repositories (persisted on the
-// session for the worker to clone alongside the primary repo). It is only
-// called when the resolved provider is coder.
-func parseCoderSessionOptions(in *createSessionCoderOptions) (*sandbox.CoderSessionOptions, []domain.RepoRef, error) {
-	opts := &sandbox.CoderSessionOptions{}
+// parseCoderConfigInput validates the coder dev-kit config chosen at project
+// setup (template + size/startup + extra repos) into a domain.ProjectCoderConfig
+// stored on the project. Size and startup require a chosen (non-default)
+// template, since the default template does not declare those rich parameters.
+func parseCoderConfigInput(in *coderConfigInput) (domain.ProjectCoderConfig, error) {
+	cfg := domain.ProjectCoderConfig{}
 	if id := strings.TrimSpace(in.TemplateID); id != "" {
 		if _, err := uuid.Parse(id); err != nil {
-			return nil, nil, fmt.Errorf("coder template ID must be a UUID")
+			return domain.ProjectCoderConfig{}, fmt.Errorf("coder template ID must be a UUID")
 		}
-		opts.TemplateID = id
+		cfg.TemplateID = id
 	}
 	if size := strings.ToLower(strings.TrimSpace(in.Size)); size != "" {
 		if !coderSizes[size] {
-			return nil, nil, fmt.Errorf("coder size must be one of small, medium, large")
+			return domain.ProjectCoderConfig{}, fmt.Errorf("coder size must be one of small, medium, large")
 		}
-		opts.Size = size
+		cfg.Size = size
 	}
 	if len(in.StartupScript) > maxCoderStartupScript {
-		return nil, nil, fmt.Errorf("coder startup script must be at most 64 KiB")
+		return domain.ProjectCoderConfig{}, fmt.Errorf("coder startup script must be at most 64 KiB")
 	}
-	opts.StartupScript = in.StartupScript
-	// Size/startup only take effect on a chosen (non-default) template, because
-	// the default template does not declare those parameters.
-	if opts.TemplateID == "" && (opts.Size != "" || strings.TrimSpace(opts.StartupScript) != "") {
-		return nil, nil, fmt.Errorf("coder size and startup script require choosing a template")
+	cfg.StartupScript = in.StartupScript
+	if cfg.TemplateID == "" && (cfg.Size != "" || strings.TrimSpace(cfg.StartupScript) != "") {
+		return domain.ProjectCoderConfig{}, fmt.Errorf("coder size and startup script require choosing a template")
 	}
 	if len(in.ExtraRepos) > maxCoderExtraRepos {
-		return nil, nil, fmt.Errorf("at most %d extra repositories are allowed", maxCoderExtraRepos)
+		return domain.ProjectCoderConfig{}, fmt.Errorf("at most %d extra repositories are allowed", maxCoderExtraRepos)
 	}
 	repos := make([]domain.RepoRef, 0, len(in.ExtraRepos))
 	for _, repo := range in.ExtraRepos {
@@ -780,17 +795,17 @@ func parseCoderSessionOptions(in *createSessionCoderOptions) (*sandbox.CoderSess
 		}
 		owner, name, ok := parseGitHubRepo(raw)
 		if !ok {
-			return nil, nil, fmt.Errorf("extra repository %q must be an https github.com URL", raw)
+			return domain.ProjectCoderConfig{}, fmt.Errorf("extra repository %q must be an https github.com URL", raw)
 		}
 		repos = append(repos, domain.RepoRef{
 			URL:    fmt.Sprintf("https://github.com/%s/%s", owner, name),
 			Branch: strings.TrimSpace(repo.Branch),
 		})
 	}
-	if len(repos) == 0 {
-		repos = nil
+	if len(repos) > 0 {
+		cfg.ExtraRepos = repos
 	}
-	return opts, repos, nil
+	return cfg, nil
 }
 
 func parseGitHubRepo(repoURL string) (owner, repo string, ok bool) {
