@@ -70,7 +70,7 @@ func TestParseCredentialPassword(t *testing.T) {
 		"protocol=https\nhost=github.com\nusername=x\npassword=secret\n": "secret",
 		"password=only\n": "only",
 		"username=x\n":    "",
-		"":               "",
+		"":                "",
 	}
 	for in, want := range cases {
 		if got := parseCredentialPassword(in); got != want {
