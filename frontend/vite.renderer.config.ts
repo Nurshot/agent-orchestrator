@@ -143,11 +143,7 @@ const productUiReactBoundary: Plugin = {
 	},
 };
 
-export default defineConfig(({ mode }) => ({
-	// Keep the browser-only preview flag inside Vite instead of relying on the
-	// POSIX-only `VITE_NO_ELECTRON=1 vite ...` npm-script syntax. Electron builds
-	// and tests use other modes, so the flag remains exclusive to `dev:web`.
-	define: mode === "web" ? { "import.meta.env.VITE_NO_ELECTRON": '"1"' } : {},
+export default defineConfig({
 	// "@/" → the renderer root (src/renderer), the shadcn/ui import convention.
 	resolve: {
 		alias: {
@@ -208,4 +204,4 @@ export default defineConfig(({ mode }) => ({
 		globals: true,
 		setupFiles: "./src/renderer/test/setup.ts",
 	},
-}));
+});
