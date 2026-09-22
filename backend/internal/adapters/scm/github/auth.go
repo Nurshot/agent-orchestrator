@@ -176,3 +176,113 @@ func ghAuthToken(ctx context.Context) (string, error) {
 	}
 	return string(out), nil
 }
+
+// defaultCredentialHost is the host queried when CredentialHelperTokenSource.Host
+// is empty.
+const defaultCredentialHost = "github.com"
+
+// CredentialHelperTokenSource reads a stored HTTPS token for a GitHub host via
+// `git credential fill`, covering operators who authenticated git over HTTPS
+// (macOS Keychain, git-credential-manager, cache helper) but never ran gh or set
+// an env token. It runs non-interactively: GIT_TERMINAL_PROMPT=0 makes git error
+// instead of blocking on a username/password prompt when nothing is stored, so an
+// unconfigured machine yields ErrNoToken. The credential's password field is the
+// token. A successful read is memoized for TokenTTL; the Client invalidates the
+// cache on auth failures so a rotated credential is picked up on the next call.
+type CredentialHelperTokenSource struct {
+	// Host is the GitHub host to query. Empty means github.com.
+	Host string
+	// Fill is the shell-out hook. Production leaves it nil and falls back to
+	// gitCredentialFill; tests inject a fake so git is never required.
+	Fill func(ctx context.Context, host string) (string, error)
+	// TokenTTL is how long a successful read is memoized. Zero means
+	// defaultGHTokenCacheTTL.
+	TokenTTL time.Duration
+	// Clock allows tests to drive expiration. Zero means time.Now.
+	Clock func() time.Time
+
+	mu        sync.Mutex
+	token     string
+	expiresAt time.Time
+}
+
+// Token returns the cached token if still fresh, otherwise re-runs the helper.
+func (s *CredentialHelperTokenSource) Token(ctx context.Context) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.now()
+	if s.token != "" && now.Before(s.expiresAt) {
+		return s.token, nil
+	}
+	run := s.Fill
+	if run == nil {
+		run = gitCredentialFill
+	}
+	out, err := run(ctx, s.host())
+	if err != nil {
+		return "", err
+	}
+	token := strings.TrimSpace(out)
+	if token == "" {
+		return "", ErrNoToken
+	}
+	s.token = token
+	s.expiresAt = now.Add(s.ttl())
+	return token, nil
+}
+
+// InvalidateToken drops the memoized token so the next Token call re-runs the
+// helper. The Client calls this on 401/403-auth responses.
+func (s *CredentialHelperTokenSource) InvalidateToken() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.token = ""
+	s.expiresAt = time.Time{}
+}
+
+func (s *CredentialHelperTokenSource) now() time.Time {
+	if s.Clock != nil {
+		return s.Clock()
+	}
+	return time.Now()
+}
+
+func (s *CredentialHelperTokenSource) ttl() time.Duration {
+	if s.TokenTTL > 0 {
+		return s.TokenTTL
+	}
+	return defaultGHTokenCacheTTL
+}
+
+func (s *CredentialHelperTokenSource) host() string {
+	if h := strings.TrimSpace(s.Host); h != "" {
+		return h
+	}
+	return defaultCredentialHost
+}
+
+// gitCredentialFill runs `git credential fill` for an HTTPS host and returns the
+// stored token (the password field), or an error when nothing is stored.
+func gitCredentialFill(ctx context.Context, host string) (string, error) {
+	cmd := aoprocess.CommandContext(ctx, "git", "credential", "fill")
+	cmd.Stdin = strings.NewReader("protocol=https\nhost=" + host + "\n\n")
+	// GIT_TERMINAL_PROMPT=0 turns a missing credential into an error instead of
+	// an interactive prompt that would hang the daemon.
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return parseCredentialPassword(string(out)), nil
+}
+
+// parseCredentialPassword extracts the password field from `git credential`
+// key=value output. Returns "" when absent.
+func parseCredentialPassword(out string) string {
+	for _, line := range strings.Split(out, "\n") {
+		if v, ok := strings.CutPrefix(strings.TrimSpace(line), "password="); ok {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
+}

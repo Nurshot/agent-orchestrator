@@ -411,20 +411,34 @@ func (s *Service) emitSpawned(ctx context.Context, rec domain.SessionRecord, dur
 	})
 }
 
-// githubActor returns the operator's GitHub login when the authenticated
-// account resolves to a human, and ("", false) for every failure mode (resolver
-// unset, no token, GET /user failure, offline, org or bot account, empty login)
-// so the event stays anonymous. Host is left empty because GitHub identity is
-// not host-scoped.
+// githubActor returns the operator's GitHub login for telemetry, resolving in
+// two tiers. First the authenticated, API-verified identity (a real GET /user
+// behind an env/credential-helper/gh token); when that yields a human login it
+// wins. Otherwise a best-effort, non-authenticated probe of local machine
+// signals (SSH auth greeting, git noreply commit email) covers operators who
+// never configured a token. It returns ("", false) for every failure mode
+// (resolver unset, no token and no local signal, GET /user failure, offline, org
+// or bot account, empty login) so the event stays anonymous. Host is left empty
+// because GitHub identity is not host-scoped.
 func (s *Service) githubActor(ctx context.Context) (string, bool) {
 	if s.githubIdentity == nil {
 		return "", false
 	}
 	identity, err := s.githubIdentity.AuthenticatedIdentityForProvider(ctx, "github", "")
-	if err != nil || !identity.Human || identity.Login == "" {
-		return "", false
+	if err == nil && identity.Human && identity.Login != "" {
+		return identity.Login, true
 	}
-	return identity.Login, true
+	// Best-effort fallback for operators with no usable token. The login is not
+	// API-verified (see ports.ScopedBestEffortIdentityResolver); acceptable for
+	// telemetry, never used for access or attribution.
+	if be, ok := s.githubIdentity.(ports.ScopedBestEffortIdentityResolver); ok {
+		if login, beErr := be.BestEffortLoginForProvider(ctx, "github", ""); beErr == nil {
+			if login = strings.TrimSpace(login); login != "" {
+				return login, true
+			}
+		}
+	}
+	return "", false
 }
 
 func (s *Service) emitFirstSessionSpawned(ctx context.Context, rec domain.SessionRecord, project domain.ProjectRecord) {

@@ -170,18 +170,33 @@ contract.
 
 ## Sharing your GitHub handle
 
-AO resolves the GitHub account signed in to its GitHub integration and includes
-that username on session-start events. It is sent both as the event property
+AO resolves the GitHub account associated with your machine and includes that
+username on session-start events. It is sent both as the event property
 `github_actor` and as a PostHog person property on AO's shared installation
 person, which lets us group product activity by GitHub username and reach out to
 active users for feedback.
 
-AO only sends the handle when the signed-in account is a personal (human)
-account; it never sends an organization or a bot token, and if no GitHub token is
-available it sends nothing. The handle is part of product telemetry and has no
-separate switch: turning telemetry off (see below) stops it, because the
-session-start event that carries it is then never sent. Anything already stored
-in PostHog from earlier events is not deleted retroactively.
+AO resolves the handle in two tiers, stopping at the first that yields a
+username:
+
+1. Authenticated, API-verified. Using a token from `AO_GITHUB_TOKEN` /
+   `GITHUB_TOKEN`, a stored HTTPS git credential (`git credential fill`), or
+   `gh auth token`, AO calls the GitHub API for the signed-in account. This tier
+   only sends the handle when the account is a personal (human) account; it never
+   sends an organization or a bot account.
+2. Best-effort, local signals. When no token is available, AO reads the username
+   from GitHub's SSH authentication greeting (a non-interactive `ssh -T
+   git@github.com`, which mutates nothing and prompts for nothing) and, failing
+   that, from a GitHub noreply address configured as your git commit email. These
+   are read locally and are not API-verified, so the account type is not checked.
+
+All probes are silent, run non-interactively with short timeouts, and are cached
+so a session start is not delayed by repeated lookups. When none of them yield a
+username, AO sends nothing and the event stays anonymous. The handle is part of
+product telemetry and has no separate switch: turning telemetry off (see below)
+stops it, because the session-start event that carries it is then never sent.
+Anything already stored in PostHog from earlier events is not deleted
+retroactively.
 
 ## Turn desktop and daemon telemetry off
 
