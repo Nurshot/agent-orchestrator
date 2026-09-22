@@ -776,6 +776,73 @@ describe("startAutoUpdates", () => {
     }
   });
 
+  it("surfaces the API-discovered nightly build when the check cannot reach the asset CDN", async () => {
+    const platformManifest =
+      process.platform === "darwin"
+        ? "nightly-mac.yml"
+        : process.platform === "linux"
+          ? "nightly-linux.yml"
+          : "nightly.yml";
+    const resourcesPath = mkdtempSync(
+      nodePath.join(os.tmpdir(), "ao-nightly-feed-"),
+    );
+    writeFileSync(
+      nodePath.join(resourcesPath, "app-update.yml"),
+      "provider: github\nowner: Untrivial-ai\nrepo: agent-orchestrator\n",
+    );
+    const originalResourcesPath = Object.getOwnPropertyDescriptor(
+      process,
+      "resourcesPath",
+    );
+    Object.defineProperty(process, "resourcesPath", {
+      configurable: true,
+      value: resourcesPath,
+    });
+    // Discovery answers from api.github.com (the host these users can reach).
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          {
+            tag_name: "v1.0.1-nightly.202608231517",
+            draft: false,
+            prerelease: true,
+            assets: [{ name: platformManifest }],
+          },
+        ]),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      const { module, autoUpdater, statusMessages } = await importAutoUpdater({
+        enabled: true,
+        channel: "nightly",
+        nightlyAck: true,
+        feature: null,
+      });
+      // The manifest fetch the electron-updater check depends on never reaches
+      // the release asset CDN, exactly the failure blocked users hit.
+      autoUpdater.checkForUpdates.mockRejectedValue(new Error("request timed out"));
+
+      await module.startAutoUpdates(stateDir);
+
+      expect(autoUpdater.checkForUpdates).toHaveBeenCalled();
+      // The user still learns an update exists, from what discovery already found.
+      expect(statusMessages().at(-1)?.payload).toMatchObject({
+        state: "available",
+        version: "v1.0.1-nightly.202608231517",
+      });
+    } finally {
+      if (originalResourcesPath) {
+        Object.defineProperty(process, "resourcesPath", originalResourcesPath);
+      } else {
+        Reflect.deleteProperty(process, "resourcesPath");
+      }
+      rmSync(resourcesPath, { recursive: true, force: true });
+    }
+  });
+
   it("revalidates release history without a second body and refreshes when a release changes", async () => {
     const platformManifest =
       process.platform === "darwin"
