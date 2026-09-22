@@ -2,7 +2,7 @@
 
 ## Goal
 
-Close the current PR review gaps in the local AO application so Claude model and effort selection, credential validation, live authentication recovery, and session restore remain correct across first-party Anthropic, gateways, Bedrock, Vertex, and Foundry.
+Close the current PR review gaps in the local AO application so Claude model and effort selection, credential validation, live authentication recovery, and session restore remain correct for first-party Anthropic and compatible gateways. Bedrock, Vertex, and Foundry are detected only to prevent credentials from being sent to the wrong provider; AO does not claim to validate or discover models for them.
 
 ## Scope and constraints
 
@@ -27,15 +27,12 @@ The desktop composer will not disable submission solely from a cached unauthoriz
 - Anthropic OAuth/setup-token requests retain the Claude Code headers: bearer authorization, the required `anthropic-beta` values, `x-app: cli`, and a Claude Code user agent.
 - Anthropic first-party rate limiting may count as authenticated. A custom `ANTHROPIC_BASE_URL` gateway returning 429 remains unknown without authenticated evidence.
 - Generic 403 responses remain unknown. A provider may classify 403 as invalid only when its documented response body positively identifies credential rejection.
-- Bedrock discovery delegates credential-chain resolution and `ListFoundationModels` to the AWS CLI. Catalog data does not establish launch readiness because list and invoke permissions are independent.
-- Vertex discovery delegates service-account and credential-chain resolution to gcloud, then uses its access token with the documented Model Garden publisher listing shape, `GET /v1beta1/publishers/anthropic/models`.
+- Bedrock, Vertex, and Foundry remain `unknown`: no provider CLI or provider API is invoked, and no provider model catalog is claimed. Their runtime remains authoritative.
 - Anthropic model discovery requests the maximum supported page size and follows `has_more`/`last_id` until complete, with repeated-cursor protection.
 
 Each contract will be pinned by an `httptest` regression that asserts the request URL, headers, pagination behavior, and verdict classification.
 
 ## Project-scoped credential discovery
-
-Command execution for AWS and gcloud credential-chain fallbacks will accept the discovery request's merged launch environment and working directory. The command seam will return stdout and stderr separately. Successful token parsing reads stdout only; stderr is retained solely for error diagnostics.
 
 `claude auth status` will run with the same project working directory and merged environment as launch. Its reported provider may refine discovery only in that same context and cannot override explicit project provider configuration with daemon-global state.
 
@@ -64,7 +61,7 @@ Focused regressions will cover:
 3. Both auth caches invalidated and a readiness refresh scheduled.
 4. Composer submission after an externally repaired login.
 5. Discovery errors preserving last-known-good provider IDs and efforts.
-6. Vertex URL shape, bearer headers, 403 semantics, Bedrock catalog-only semantics, AWS/gcloud stdout parsing, project environment propagation, gateway 429 handling, and Anthropic pagination.
+6. Unsupported cloud-provider detection, gateway 429 handling, and Anthropic pagination.
 7. Claude TUI pre-spawn model/effort rejection and restore argument preservation.
 8. Mobile `configured` state mapping to auth-unknown.
 

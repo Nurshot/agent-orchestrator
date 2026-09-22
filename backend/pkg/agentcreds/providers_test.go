@@ -28,22 +28,13 @@ func TestProbesTargetModelEndpoints(t *testing.T) {
 			cred:     Credential{Kind: KindAPIKey, Secret: "k", Provider: ProviderGateway},
 			wantPath: "/v1/models",
 		},
-		{
-			name: "vertex",
-			cred: Credential{
-				Kind: KindGoogleAccessToken, Secret: "k", Provider: ProviderVertex,
-				Region: "us-east5", Project: "proj",
-			},
-			wantPath: "/v1beta1/publishers/anthropic/models",
-		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var path string
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				path = r.URL.Path
-				_, _ = w.Write([]byte(`{"data":[{"id":"claude-x"}],"modelSummaries":[{"modelId":"anthropic.claude-x"}],` +
-					`"publisherModels":[{"name":"publishers/anthropic/models/claude-x"}]}`))
+				_, _ = w.Write([]byte(`{"data":[{"id":"claude-x"}]}`))
 			}))
 			defer server.Close()
 
@@ -103,41 +94,6 @@ func TestAnthropicModelDiscoveryRejectsRepeatedCursor(t *testing.T) {
 	}
 }
 
-// For Vertex, authenticating is not the same as having Claude.
-// A 200 with no Anthropic models means the account will fail on its first turn.
-func TestCloudProvidersRequireClaudeEntitlement(t *testing.T) {
-	tests := []struct {
-		name string
-		cred Credential
-		body string
-	}{
-		{
-			name: "vertex without anthropic publishers",
-			cred: Credential{
-				Kind: KindGoogleAccessToken, Secret: "k", Provider: ProviderVertex,
-				Region: "us-east5", Project: "p",
-			},
-			body: `{"publisherModels":[]}`,
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				_, _ = w.Write([]byte(tc.body))
-			}))
-			defer server.Close()
-
-			cred := tc.cred
-			cred.BaseURL = server.URL
-			result := New(server.Client()).Validate(context.Background(), cred)
-			if result.State != StateUnknown {
-				t.Fatalf("state = %q (%s), want unknown — a 200 without Claude access is not a pass",
-					result.State, result.Detail)
-			}
-		})
-	}
-}
-
 // A gateway need not implement model listing, so an empty list there is not a
 // verdict either way, and a 404 is Unknown rather than a rejection.
 func TestGatewayToleratesAMissingModelEndpoint(t *testing.T) {
@@ -187,11 +143,6 @@ func TestGatewayCatalogPreservesArbitraryNonEmptyModelIDs(t *testing.T) {
 			name:       "first party",
 			credential: Credential{Kind: KindAPIKey, Secret: "k", Provider: ProviderFirstParty},
 			wantState:  StateValid,
-		},
-		{
-			name:       "foundry",
-			credential: Credential{Kind: KindAPIKey, Secret: "k", Provider: ProviderFoundry},
-			wantState:  StateUnknown,
 		},
 	}
 
@@ -244,48 +195,21 @@ func TestGatewayRequestPreservesBasePathAndUsesOnlyAPIKeyHeader(t *testing.T) {
 	}
 }
 
-// Model IDs do not translate between providers, so the validating call must
-// also be what supplies the catalog.
+// The validating call also supplies the first-party catalog.
 func TestValidationReturnsThatProvidersModelIDs(t *testing.T) {
-	tests := []struct {
-		name string
-		cred Credential
-		body string
-		want string
-	}{
-		{
-			name: "first party format",
-			cred: Credential{Kind: KindAPIKey, Secret: "k", Provider: ProviderFirstParty},
-			body: `{"data":[{"id":"claude-opus-4-5-20251101"},{"id":"gpt-4o"}]}`,
-			want: "claude-opus-4-5-20251101",
-		},
-		{
-			name: "vertex format",
-			cred: Credential{
-				Kind: KindGoogleAccessToken, Secret: "k", Provider: ProviderVertex,
-				Region: "us-east5", Project: "p",
-			},
-			body: `{"publisherModels":[{"name":"publishers/anthropic/models/claude-opus-4-5@20251101"}]}`,
-			want: "claude-opus-4-5@20251101",
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				_, _ = w.Write([]byte(tc.body))
-			}))
-			defer server.Close()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"id":"claude-opus-4-5-20251101"},{"id":"gpt-4o"}]}`))
+	}))
+	defer server.Close()
 
-			cred := tc.cred
-			cred.BaseURL = server.URL
-			result := New(server.Client()).Validate(context.Background(), cred)
-			if result.State != StateValid {
-				t.Fatalf("state = %q (%s), want %q", result.State, result.Detail, StateValid)
-			}
-			if len(result.Models) != 1 || result.Models[0].ID != tc.want {
-				t.Fatalf("models = %v, want exactly [%s]", result.Models, tc.want)
-			}
-		})
+	result := New(server.Client()).Validate(context.Background(), Credential{
+		Kind: KindAPIKey, Secret: "k", Provider: ProviderFirstParty, BaseURL: server.URL,
+	})
+	if result.State != StateValid {
+		t.Fatalf("state = %q (%s), want %q", result.State, result.Detail, StateValid)
+	}
+	if len(result.Models) != 1 || result.Models[0].ID != "claude-opus-4-5-20251101" {
+		t.Fatalf("models = %v, want the Claude model only", result.Models)
 	}
 }
 
@@ -293,7 +217,7 @@ func TestValidationReturnsThatProvidersModelIDs(t *testing.T) {
 // error, and must surface as Unknown rather than as a bogus rejection.
 func TestMismatchedKindAndProviderIsUnknown(t *testing.T) {
 	result := New(nil).Validate(context.Background(), Credential{
-		Kind: KindGoogleAccessToken, Secret: "token", Provider: ProviderFirstParty,
+		Kind: Kind("unsupported"), Secret: "token", Provider: ProviderFirstParty,
 	})
 	if result.State != StateUnknown {
 		t.Fatalf("state = %q, want unknown", result.State)

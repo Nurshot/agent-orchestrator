@@ -201,15 +201,12 @@ func TestCredentialFingerprintIsShortAndNotTheSecret(t *testing.T) {
 func TestCredentialFingerprintScopesCacheIdentityToProviderConfiguration(t *testing.T) {
 	base := Credential{
 		Kind: KindAPIKey, Secret: "shared-secret", Provider: ProviderGateway,
-		BaseURL: "https://gateway.example", Region: "us-east-1",
-		Project: "project-a",
+		BaseURL: "https://gateway.example",
 	}
 	changes := map[string]func(*Credential){
 		"kind":     func(cred *Credential) { cred.Kind = KindOAuthToken },
 		"provider": func(cred *Credential) { cred.Provider = ProviderFirstParty },
 		"base URL": func(cred *Credential) { cred.BaseURL = "https://other.example" },
-		"region":   func(cred *Credential) { cred.Region = "eu-west-1" },
-		"project":  func(cred *Credential) { cred.Project = "project-b" },
 	}
 
 	for name, change := range changes {
@@ -244,22 +241,5 @@ func TestUnparsableBodyDoesNotRetractAnAcceptance(t *testing.T) {
 				t.Fatalf("models = %v, want none", result.Models)
 			}
 		})
-	}
-}
-
-// But where the catalog IS the verdict, an unreadable body means entitlement
-// cannot be confirmed, and the safe answer is unknown.
-func TestUnparsableBodyIsUnknownWhereEntitlementMatters(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("not json at all"))
-	}))
-	defer server.Close()
-
-	result := New(server.Client()).Validate(context.Background(), Credential{
-		Kind: KindAuthToken, Secret: "k", Provider: ProviderBedrock,
-		Region: "us-east-1", BaseURL: server.URL,
-	})
-	if result.State != StateUnknown {
-		t.Fatalf("state = %q, want unknown", result.State)
 	}
 }

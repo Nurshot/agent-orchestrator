@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
@@ -754,32 +753,15 @@ func TestProviderModelsCachesInconclusiveResultBriefly(t *testing.T) {
 	}
 }
 
-func TestProviderModelsUsesCLIReportedProvider(t *testing.T) {
+func TestProviderModelsDoesNotProbeCLIReportedUnsupportedProvider(t *testing.T) {
 	clearClaudeCredentialEnv(t)
-	// Keep the preliminary first-party resolution away from the real keychain.
-	t.Setenv("ANTHROPIC_API_KEY", "unused-first-party-fixture")
 	InvalidateAuthCache()
 	t.Cleanup(InvalidateAuthCache)
 
-	server := withStubValidator(t, func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasSuffix(r.URL.Path, "/v1beta1/publishers/anthropic/models") {
-			t.Fatalf("path = %q, want Vertex model catalog", r.URL.Path)
-		}
-		_, _ = w.Write([]byte(`{"publisherModels":[{"name":"publishers/anthropic/models/claude-vertex"}]}`))
-	})
 	env := map[string]string{
-		"ANTHROPIC_API_KEY":         "stale-first-party-key",
 		"GOOGLE_OAUTH_ACCESS_TOKEN": "vertex-token",
 		"GOOGLE_CLOUD_PROJECT":      "project",
-		"ANTHROPIC_VERTEX_BASE_URL": server.URL,
 	}
-	firstParty := agentcreds.Credential{
-		Kind: agentcreds.KindAPIKey, Secret: env["ANTHROPIC_API_KEY"], Provider: agentcreds.ProviderFirstParty,
-	}
-	claudeAuthCache.put(agentcreds.Result{
-		State: agentcreds.StateValid, Provider: agentcreds.ProviderFirstParty,
-		Fingerprint: firstParty.Fingerprint(), Models: []agentcreds.Model{{ID: "claude-wrong-provider"}},
-	})
 
 	previous := claudeModelAuthReport
 	claudeModelAuthReport = func(_ context.Context, binary, workingDir string, gotEnv map[string]string) (claudeAuthReport, bool) {
@@ -794,25 +776,19 @@ func TestProviderModelsUsesCLIReportedProvider(t *testing.T) {
 	t.Cleanup(func() { claudeModelAuthReport = previous })
 
 	models, err := ProviderModels(context.Background(), "/opt/claude", "/workspace", env)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(models) != 1 || models[0].ID != "claude-vertex" {
-		t.Fatalf("models = %+v, want the CLI-reported Vertex catalog", models)
+	if err == nil || len(models) != 0 {
+		t.Fatalf("models/error = %+v/%v, want unsupported Vertex discovery", models, err)
 	}
 }
 
-func TestProviderModelsUsesConfiguredFoundryDeployments(t *testing.T) {
+func TestProviderModelsDoesNotClaimConfiguredFoundryDeployments(t *testing.T) {
 	InvalidateAuthCache()
 	models, err := ProviderModels(context.Background(), "", "/workspace", map[string]string{
 		"CLAUDE_CODE_USE_FOUNDRY":        "1",
 		"ANTHROPIC_FOUNDRY_API_KEY":      "key",
 		"ANTHROPIC_DEFAULT_SONNET_MODEL": "sonnet-deployment",
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(models) != 1 || models[0].ID != "sonnet-deployment" {
-		t.Fatalf("models = %+v", models)
+	if err == nil || len(models) != 0 {
+		t.Fatalf("models/error = %+v/%v, want unsupported Foundry discovery", models, err)
 	}
 }

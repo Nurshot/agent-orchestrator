@@ -3,47 +3,12 @@ package agentcreds
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 )
-
-func TestClaudeSettingsCommandContext(t *testing.T) {
-	for _, provider := range []Provider{ProviderBedrock, ProviderVertex} {
-		t.Run(string(provider), func(t *testing.T) {
-			project := t.TempDir()
-			writeClaudeSettingsFixture(t, filepath.Join(project, ".claude", "settings.json"), `{"env":{"ANTHROPIC_MODEL":"configured-model","SECRET":"must-not-load"}}`)
-			explicit := map[string]string{"AWS_PROFILE": "project-sso", "CLOUDSDK_CONFIG": "/project/gcloud", "LAUNCH_ONLY": "kept"}
-			opts := (ResolveOptions{Env: envFrom(nil), ConfigDir: t.TempDir(), WorkingDir: project, CommandEnv: explicit}).WithClaudeSettings(context.Background())
-			called := false
-			validator := New(nil)
-			validator.execCmd = func(_ context.Context, invocation commandInvocation, name string, _ ...string) (commandOutput, error) {
-				called = true
-				wantName := "aws"
-				if provider == ProviderVertex {
-					wantName = "gcloud"
-				}
-				if name != wantName || invocation.WorkingDir != project || invocation.Env["ANTHROPIC_MODEL"] != "configured-model" || invocation.Env["AWS_PROFILE"] != "project-sso" || invocation.Env["CLOUDSDK_CONFIG"] != "/project/gcloud" || invocation.Env["LAUNCH_ONLY"] != "kept" {
-					t.Error("provider command did not receive the merged launch context")
-				}
-				if _, ok := invocation.Env["SECRET"]; ok {
-					t.Error("unapproved settings key passed to command")
-				}
-				return commandOutput{Stderr: []byte("fixture diagnostic")}, errors.New("fixture command unavailable")
-			}
-			result := validator.ValidateLocal(context.Background(), string(provider), opts)
-			if !called || result.State != StateUnknown || result.Err == nil || !strings.Contains(result.Err.Error(), "fixture diagnostic") {
-				t.Fatal("chain failure lost its safe unknown verdict or stderr diagnostic")
-			}
-			if _, mutated := explicit["ANTHROPIC_MODEL"]; mutated {
-				t.Fatal("caller environment was mutated")
-			}
-		})
-	}
-}
 
 func writeClaudeSettingsFixture(t *testing.T, path, body string) {
 	t.Helper()

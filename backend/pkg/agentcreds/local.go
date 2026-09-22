@@ -2,7 +2,6 @@ package agentcreds
 
 import (
 	"context"
-	"errors"
 	"time"
 )
 
@@ -38,29 +37,17 @@ func (v *Validator) ValidateResolvedLocal(
 	found bool,
 	opts ResolveOptions,
 ) Result {
-	if provider == ProviderFoundry {
+	if provider != ProviderFirstParty && provider != ProviderGateway {
 		return Result{
-			State: StateUnknown, Provider: provider, Models: configuredFoundryModels(opts), CheckedAt: time.Now(),
-			Detail: "Azure AI Foundry deployments were read from Claude configuration; invocation permission was not verified",
+			State: StateUnknown, Provider: provider, CheckedAt: time.Now(),
+			Detail: "credential and model validation is not supported for this Claude provider",
 		}
 	}
 
 	if !found {
-		// Nothing readable. For Bedrock and Vertex that is the expected case
-		// rather than an error: the credential almost certainly exists, in a
-		// chain only the provider's own CLI can resolve.
-		switch provider {
-		case ProviderBedrock:
-			return v.validateBedrockViaCLI(ctx, opts.env("AWS_REGION"), opts.commandInvocation())
-		case ProviderVertex:
-			project := firstNonEmpty(opts.env("ANTHROPIC_VERTEX_PROJECT_ID"), opts.env("GOOGLE_CLOUD_PROJECT"))
-			region := firstNonEmpty(opts.env("CLOUD_ML_REGION"), opts.env("GOOGLE_CLOUD_REGION"), "us-east5")
-			return v.validateVertexViaCLI(ctx, project, region, opts.env("ANTHROPIC_VERTEX_BASE_URL"), opts.commandInvocation())
-		default:
-			return Result{
-				State: StateUnknown, Provider: provider, CheckedAt: time.Now(),
-				Detail: "no credential could be resolved for this provider",
-			}
+		return Result{
+			State: StateUnknown, Provider: provider, CheckedAt: time.Now(),
+			Detail: "no credential could be resolved for this provider",
 		}
 	}
 	result := v.Validate(ctx, cred)
@@ -77,14 +64,5 @@ func (v *Validator) ValidateResolvedLocal(
 		}
 	}
 
-	// A Vertex probe that could not be built is worth one gcloud attempt before
-	// giving up, since gcloud can resolve credentials AO cannot read directly.
-	if result.State == StateUnknown && result.Err != nil && !errors.Is(result.Err, ErrInvalidCredential) {
-		if provider == ProviderVertex {
-			if cliResult := v.validateVertexViaCLI(ctx, cred.Project, cred.Region, cred.BaseURL, opts.commandInvocation()); cliResult.State != StateUnknown {
-				return cliResult
-			}
-		}
-	}
 	return result
 }

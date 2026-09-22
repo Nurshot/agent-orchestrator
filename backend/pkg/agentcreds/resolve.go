@@ -47,8 +47,8 @@ type ResolveOptions struct {
 	Runner commandRunner
 	// GOOS overrides platform detection, for tests.
 	GOOS string
-	// WorkingDir and CommandEnv reproduce the project launch context for AWS and
-	// gcloud credential-chain commands.
+	// WorkingDir and CommandEnv reproduce the project launch context when
+	// resolving Claude settings and explicit provider selection.
 	WorkingDir string
 	CommandEnv map[string]string
 }
@@ -75,10 +75,6 @@ func (o ResolveOptions) WithClaudeSettings(ctx context.Context) ResolveOptions {
 		return base.env(key)
 	}
 	return o
-}
-
-func (o ResolveOptions) commandInvocation() commandInvocation {
-	return commandInvocation{WorkingDir: o.WorkingDir, Env: o.CommandEnv}
 }
 
 func (o ResolveOptions) env(name string) string {
@@ -151,10 +147,6 @@ func ResolveLocal(ctx context.Context, provider Provider, opts ResolveOptions) (
 		cred.Provider = ProviderGateway
 		cred.BaseURL = opts.env("ANTHROPIC_BASE_URL")
 		return cred, true
-	case ProviderBedrock:
-		return Credential{}, false
-	case ProviderVertex:
-		return resolveVertex(opts)
 	default:
 		return Credential{}, false
 	}
@@ -280,38 +272,4 @@ func claudeConfigDir(opts ResolveOptions) (string, error) {
 		dir = filepath.Join(strings.TrimSpace(opts.WorkingDir), dir)
 	}
 	return filepath.Abs(dir)
-}
-
-func configuredFoundryModels(opts ResolveOptions) []Model {
-	seen := map[string]struct{}{}
-	models := make([]Model, 0, 3)
-	for _, name := range []string{
-		"ANTHROPIC_DEFAULT_OPUS_MODEL",
-		"ANTHROPIC_DEFAULT_SONNET_MODEL",
-		"ANTHROPIC_DEFAULT_HAIKU_MODEL",
-	} {
-		id := opts.env(name)
-		if id == "" {
-			continue
-		}
-		if _, exists := seen[id]; exists {
-			continue
-		}
-		seen[id] = struct{}{}
-		models = append(models, Model{ID: id})
-	}
-	return models
-}
-
-func resolveVertex(opts ResolveOptions) (Credential, bool) {
-	region := firstNonEmpty(opts.env("CLOUD_ML_REGION"), opts.env("GOOGLE_CLOUD_REGION"), "us-east5")
-	project := firstNonEmpty(opts.env("ANTHROPIC_VERTEX_PROJECT_ID"), opts.env("GOOGLE_CLOUD_PROJECT"))
-	baseURL := opts.env("ANTHROPIC_VERTEX_BASE_URL")
-	if token := opts.env("GOOGLE_OAUTH_ACCESS_TOKEN"); token != "" {
-		return Credential{
-			Kind: KindGoogleAccessToken, Secret: token, Source: "GOOGLE_OAUTH_ACCESS_TOKEN",
-			Provider: ProviderVertex, Region: region, Project: project, BaseURL: baseURL,
-		}, true
-	}
-	return Credential{}, false
 }

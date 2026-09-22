@@ -26,10 +26,9 @@
 // under the wrong header is rejected for the wrong reason, and the rejection
 // is indistinguishable from a revoked credential.
 //
-// Every probe hits a model-listing endpoint, never a generic identity
-// endpoint. For the cloud providers a valid credential is not the same as
-// Claude access: working AWS credentials with no Bedrock entitlement
-// authenticate perfectly and then fail at the first inference call.
+// Every supported probe hits a model-listing endpoint, never a generic
+// identity endpoint. Providers without a documented, non-billable validation
+// contract are recognized but remain unknown until the runtime contacts them.
 package agentcreds
 
 import (
@@ -74,8 +73,6 @@ const (
 	KindOAuthToken Kind = "oauth_token" //nolint:gosec // Credential kind label, not a credential value.
 	// KindAuthToken is ANTHROPIC_AUTH_TOKEN, sent as a bearer token.
 	KindAuthToken Kind = "auth_token"
-	// KindGoogleAccessToken is a short-lived Google OAuth access token.
-	KindGoogleAccessToken Kind = "google_access_token"
 )
 
 // Credential is a secret plus the metadata needed to send it correctly.
@@ -89,10 +86,6 @@ type Credential struct {
 	Source string
 	// Provider is the API surface that should be asked to honor it.
 	Provider Provider
-	// Region is required by Bedrock and Vertex; ignored elsewhere.
-	Region string
-	// Project is required by Vertex; ignored elsewhere.
-	Project string
 	// BaseURL overrides the provider's default endpoint. It is how a gateway
 	// is validated, and how tests point a probe at a local server.
 	BaseURL string
@@ -111,8 +104,6 @@ func (c Credential) Fingerprint() string {
 		string(c.Kind),
 		string(c.Provider),
 		strings.TrimSpace(c.BaseURL),
-		strings.TrimSpace(c.Region),
-		strings.TrimSpace(c.Project),
 	}, "\x00")
 	sum := sha256.Sum256([]byte(identity))
 	return hex.EncodeToString(sum[:])[:12]
@@ -170,8 +161,7 @@ const maxBodyBytes = 256 << 10
 // Validator performs credential probes. The zero value is not usable; call
 // New.
 type Validator struct {
-	client  *http.Client
-	execCmd providerCommandRunner
+	client *http.Client
 }
 
 // New builds a Validator.
@@ -179,7 +169,7 @@ func New(client *http.Client) *Validator {
 	if client == nil {
 		client = &http.Client{Timeout: DefaultTimeout}
 	}
-	return &Validator{client: client, execCmd: execProviderCommand}
+	return &Validator{client: client}
 }
 
 // Validate probes the credential against its provider and classifies the
@@ -216,16 +206,9 @@ func (v *Validator) Validate(ctx context.Context, cred Credential) Result {
 type requestSpec struct {
 	request     *http.Request
 	parseModels func([]byte) ([]Model, error)
-	// requireModels means a 200 with no Claude models is not a pass. It
-	// applies to the cloud providers, where authenticating successfully says
-	// nothing about whether the account may call Claude.
-	requireModels bool
 	// rateLimitProvesAuthentication is true only for the first-party Anthropic
 	// endpoint, whose 429 response follows credential authentication.
 	rateLimitProvesAuthentication bool
-	// catalogOnly marks control-plane calls that can list models but cannot
-	// establish runtime invocation permission.
-	catalogOnly bool
 	// paginateAnthropic follows the models endpoint's has_more/last_id contract.
 	paginateAnthropic bool
 	label             string
@@ -282,14 +265,6 @@ func (v *Validator) probe(result Result, spec requestSpec) Result {
 	if spec.parseModels != nil {
 		models, parseErr := spec.parseModels(body)
 		if parseErr != nil {
-			if spec.requireModels {
-				// The catalog IS the verdict here, so failing to read it means
-				// entitlement cannot be confirmed.
-				result.State = StateUnknown
-				result.Err = parseErr
-				result.Detail = fmt.Sprintf("could not read the %s model list: %v", spec.label, parseErr)
-				return result
-			}
 			// Elsewhere the catalog is a bonus. The provider accepted the
 			// credential, which is the question that was asked; a body we
 			// cannot parse — an empty one, or a gateway's own envelope — does
@@ -307,19 +282,6 @@ func (v *Validator) probe(result Result, spec requestSpec) Result {
 				return result
 			}
 		}
-		if spec.requireModels && len(result.Models) == 0 {
-			// Authenticated, but not entitled to Claude. Greenlighting this
-			// account means it fails on its first turn instead of here.
-			result.State = StateUnknown
-			result.Detail = fmt.Sprintf(
-				"%s accepted the credential but reported no Claude models; the account may lack Claude access", spec.label)
-			return result
-		}
-	}
-	if spec.catalogOnly {
-		result.State = StateUnknown
-		result.Detail = fmt.Sprintf("%s listed models, but invocation permission was not verified", spec.label)
-		return result
 	}
 	result.State = StateValid
 	result.Detail = fmt.Sprintf("%s accepted the credential", spec.label)

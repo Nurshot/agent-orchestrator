@@ -2,7 +2,6 @@ package agentcreds
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -317,7 +316,7 @@ func TestResolveProvider(t *testing.T) {
 	}
 }
 
-func TestResolveBedrockAlwaysDelegatesCredentialsToAWSCLI(t *testing.T) {
+func TestUnsupportedProvidersDoNotResolveCredentialsInProcess(t *testing.T) {
 	for _, env := range []map[string]string{
 		{"AWS_BEARER_TOKEN_BEDROCK": "bt", "AWS_REGION": "us-east-1"},
 		{"AWS_ACCESS_KEY_ID": "AKIA", "AWS_SECRET_ACCESS_KEY": "secret", "AWS_REGION": "eu-west-1"},
@@ -327,14 +326,12 @@ func TestResolveBedrockAlwaysDelegatesCredentialsToAWSCLI(t *testing.T) {
 			t.Fatalf("Bedrock credential resolved in-process: %+v", credential)
 		}
 	}
-}
-
-func TestVertexAccessTokenCarriesEndpointOverride(t *testing.T) {
-	vertex, ok := ResolveLocal(context.Background(), ProviderVertex, ResolveOptions{Env: envFrom(map[string]string{
-		"GOOGLE_OAUTH_ACCESS_TOKEN": "token", "GOOGLE_CLOUD_PROJECT": "p", "ANTHROPIC_VERTEX_BASE_URL": "https://vertex.proxy",
-	})})
-	if !ok || vertex.BaseURL != "https://vertex.proxy" {
-		t.Fatalf("vertex credential = %+v", vertex)
+	for _, provider := range []Provider{ProviderVertex, ProviderFoundry} {
+		if credential, ok := ResolveLocal(context.Background(), provider, ResolveOptions{Env: envFrom(map[string]string{
+			"GOOGLE_OAUTH_ACCESS_TOKEN": "token", "ANTHROPIC_FOUNDRY_API_KEY": "key",
+		})}); ok {
+			t.Fatalf("%s credential resolved in-process: %+v", provider, credential)
+		}
 	}
 }
 
@@ -350,26 +347,6 @@ func TestResolveLocalReadsCredentialFileSynchronously(t *testing.T) {
 	})
 	if !ok || credential.Secret != "token" {
 		t.Fatalf("credential = %+v, ok = %v", credential, ok)
-	}
-}
-
-func TestResolveVertexDelegatesServiceAccountFilesToGcloud(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "sa.json")
-	key := map[string]string{
-		"type": "service_account", "client_email": "probe@example.iam.gserviceaccount.com",
-		"private_key": "-----BEGIN PRIVATE KEY-----\n-----END PRIVATE KEY-----\n",
-		"project_id":  "from-key-file",
-	}
-	data, _ := json.Marshal(key)
-	if err := os.WriteFile(path, data, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	cred, ok := ResolveLocal(context.Background(), ProviderVertex, ResolveOptions{
-		Env: envFrom(map[string]string{"GOOGLE_APPLICATION_CREDENTIALS": path}),
-	})
-	if ok {
-		t.Fatalf("service-account credential resolved in-process: %+v", cred)
 	}
 }
 

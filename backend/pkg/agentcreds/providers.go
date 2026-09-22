@@ -3,7 +3,6 @@ package agentcreds
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -53,10 +52,6 @@ func (v *Validator) requestFor(ctx context.Context, provider Provider, cred Cred
 	switch provider {
 	case ProviderFirstParty, ProviderGateway:
 		return v.anthropicRequest(ctx, provider, cred)
-	case ProviderFoundry, ProviderBedrock:
-		return requestSpec{}, errors.New("agentcreds: Azure AI Foundry does not expose a models endpoint")
-	case ProviderVertex:
-		return v.vertexRequest(ctx, cred)
 	default:
 		return requestSpec{}, fmt.Errorf("agentcreds: unsupported provider %q", provider)
 	}
@@ -89,7 +84,6 @@ func (v *Validator) anthropicRequest(ctx context.Context, provider Provider, cre
 		parseModels: parseModels,
 		// A gateway need not implement model listing, and the first-party API
 		// always does, so neither case treats an empty list as a rejection.
-		requireModels:                 false,
 		rateLimitProvesAuthentication: provider == ProviderFirstParty,
 		paginateAnthropic:             true,
 		label:                         label,
