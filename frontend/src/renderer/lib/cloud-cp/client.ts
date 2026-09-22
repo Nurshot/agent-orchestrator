@@ -19,6 +19,8 @@ import type {
 	CloudCpCreateOrganizationResponse,
 	CloudCpCreateProjectRequest,
 	CloudCpCreateSessionRequest,
+	CloudCpPrepareSessionRequest,
+	CloudCpCommitSessionPreparationRequest,
 	CloudCpErrorEnvelope,
 	CloudCpInvitationsResponse,
 	CloudCpListQuery,
@@ -119,6 +121,17 @@ export interface CloudCpClient {
 	createSession(
 		orgId: string,
 		body: CloudCpCreateSessionRequest,
+		options?: CloudCpMutationOptions,
+	): Promise<CloudCpSessionResponse>;
+	prepareSession(
+		orgId: string,
+		body: CloudCpPrepareSessionRequest,
+		options?: CloudCpMutationOptions,
+	): Promise<CloudCpSessionResponse>;
+	commitSessionPreparation(
+		orgId: string,
+		sessionId: string,
+		body: CloudCpCommitSessionPreparationRequest,
 		options?: CloudCpMutationOptions,
 	): Promise<CloudCpSessionResponse>;
 	getSession(orgId: string, sessionId: string, options?: CloudCpRequestOptions): Promise<CloudCpSessionResponse>;
@@ -384,6 +397,18 @@ export function createCloudCpClient(options: CloudCpClientOptions): CloudCpClien
 			}),
 		createSession: (orgId, body, o) =>
 			requestJson("POST", `/orgs/${seg(orgId)}/sessions`, {
+				body,
+				signal: o?.signal,
+				idempotencyKey: o?.idempotencyKey ?? newIdempotencyKey(),
+			}),
+		prepareSession: (orgId, body, o) =>
+			requestJson("POST", `/orgs/${seg(orgId)}/session-preparations`, {
+				body,
+				signal: o?.signal,
+				idempotencyKey: o?.idempotencyKey ?? newIdempotencyKey(),
+			}),
+		commitSessionPreparation: (orgId, sessionId, body, o) =>
+			requestJson("POST", `/orgs/${seg(orgId)}/sessions/${seg(sessionId)}/commit-preparation`, {
 				body,
 				signal: o?.signal,
 				idempotencyKey: o?.idempotencyKey ?? newIdempotencyKey(),

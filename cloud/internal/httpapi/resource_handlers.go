@@ -25,6 +25,18 @@ type projectOrchestratorStore interface {
 	ProjectActiveOrchestrator(ctx context.Context, orgID, projectID string) (orchestratorID, provider string, found bool, err error)
 }
 
+type sessionCredentialPreflight struct {
+	available bool
+	err       error
+}
+
+type sessionOrchestratorPreflight struct {
+	id       string
+	provider string
+	found    bool
+	err      error
+}
+
 type createProjectRequest struct {
 	DisplayName   string         `json:"displayName"`
 	RepositoryURL string         `json:"repositoryUrl"`
@@ -63,6 +75,20 @@ type createSessionRequest struct {
 	// must be one of the providers the deployment offers (see /me).
 	Provider string `json:"provider,omitempty"`
 }
+
+type prepareSessionRequest struct {
+	ProjectID                   string `json:"projectId"`
+	Harness                     string `json:"harness"`
+	SandboxProviderConnectionID string `json:"sandboxProviderConnectionId,omitempty"`
+	Provider                    string `json:"provider,omitempty"`
+}
+
+type commitSessionPreparationRequest struct {
+	DisplayName string `json:"displayName"`
+	Prompt      string `json:"prompt"`
+}
+
+const sessionPreparationTTL = 2 * time.Minute
 
 type sessionResponse struct {
 	ID               string   `json:"id"`
@@ -356,6 +382,43 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_request", "The request body is invalid.")
 		return
 	}
+	s.createSessionFromRequest(w, r, orgID, key, request, 0)
+}
+
+func (s *Server) prepareSession(w http.ResponseWriter, r *http.Request) {
+	orgID := chi.URLParam(r, "orgId")
+	if requireUUID(orgID, "orgId") != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_request", "orgId must be a UUID.")
+		return
+	}
+	key, err := idempotencyKey(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	var input prepareSessionRequest
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_request", "The request body is invalid.")
+		return
+	}
+	s.createSessionFromRequest(w, r, orgID, key, createSessionRequest{
+		ProjectID:                   input.ProjectID,
+		Kind:                        "worker",
+		Harness:                     input.Harness,
+		DisplayName:                 "New task",
+		Mode:                        "trusted",
+		SandboxProviderConnectionID: input.SandboxProviderConnectionID,
+		Provider:                    input.Provider,
+	}, sessionPreparationTTL)
+}
+
+func (s *Server) createSessionFromRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+	orgID, key string,
+	request createSessionRequest,
+	preparationExpiresAfter time.Duration,
+) {
 	request.ProjectID = strings.TrimSpace(request.ProjectID)
 	request.Harness = strings.TrimSpace(request.Harness)
 	request.DisplayName = strings.TrimSpace(request.DisplayName)
@@ -376,34 +439,43 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
-	if store, ok := s.store.(providerConnectionStore); ok {
-		connections, err := store.ListProviderConnections(
-			r.Context(), principalFrom(r), orgID,
+	credentialResult := make(chan sessionCredentialPreflight, 1)
+	go func() {
+		available, err := s.sessionCredentialAvailable(
+			r.Context(), principalFrom(r), orgID, request.Harness,
 		)
-		if err != nil {
-			s.writeStoreError(w, r, err)
-			return
-		}
-		available := agentConnectionAvailable(connections, request.Harness)
-		if !available {
-			if userStore, ok := s.store.(userProviderCredentialStore); ok {
-				available, err = userStore.UserAgentCredentialAvailable(
-					r.Context(), principalFrom(r).UserID, request.Harness,
+		credentialResult <- sessionCredentialPreflight{available: available, err: err}
+	}()
+	orchestratorResult := make(chan sessionOrchestratorPreflight, 1)
+	go func() {
+		result := sessionOrchestratorPreflight{}
+		if request.Kind == "worker" {
+			if store, ok := s.store.(projectOrchestratorStore); ok {
+				result.id, result.provider, result.found, result.err = store.ProjectActiveOrchestrator(
+					r.Context(), orgID, request.ProjectID,
 				)
-				if err != nil {
-					s.writeStoreError(w, r, err)
-					return
-				}
 			}
 		}
-		if !available {
-			writeError(
-				w, r, http.StatusUnprocessableEntity,
-				"agent_provider_required",
-				"Connect and validate the selected coding-agent provider before creating a session.",
-			)
-			return
-		}
+		orchestratorResult <- result
+	}()
+
+	credential := <-credentialResult
+	if credential.err != nil {
+		s.writeStoreError(w, r, credential.err)
+		return
+	}
+	if !credential.available {
+		writeError(
+			w, r, http.StatusUnprocessableEntity,
+			"agent_provider_required",
+			"Connect and validate the selected coding-agent provider before creating a session.",
+		)
+		return
+	}
+	orchestrator := <-orchestratorResult
+	if orchestrator.err != nil {
+		s.writeStoreError(w, r, orchestrator.err)
+		return
 	}
 	// A top-level worker created for a project that already has an active
 	// orchestrator is auto-linked to it: the orchestrator then sees, drives, and
@@ -414,20 +486,9 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	// provider, matching ao spawn'ed children. An orchestrator, or a worker
 	// created before any orchestrator exists, stays unlinked.
 	parentSessionID := ""
-	if request.Kind == "worker" {
-		if orchStore, ok := s.store.(projectOrchestratorStore); ok {
-			orchestratorID, orchestratorProvider, found, lookupErr := orchStore.ProjectActiveOrchestrator(
-				r.Context(), orgID, request.ProjectID,
-			)
-			if lookupErr != nil {
-				s.writeStoreError(w, r, lookupErr)
-				return
-			}
-			if found {
-				parentSessionID = orchestratorID
-				request.Provider = orchestratorProvider
-			}
-		}
+	if orchestrator.found {
+		parentSessionID = orchestrator.id
+		request.Provider = orchestrator.provider
 	}
 	// Validate the sandbox provider AFTER the auto-link override above: an
 	// auto-linked worker inherits its orchestrator's provider, so the
@@ -460,19 +521,20 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		key,
 		s.maxSandboxes,
 		domain.CreateSession{
-			ProjectID:           request.ProjectID,
-			Kind:                request.Kind,
-			Harness:             request.Harness,
-			DisplayName:         request.DisplayName,
-			Prompt:              request.Prompt,
-			Mode:                request.Mode,
-			DeniedCommands:      request.DeniedCommands,
-			Provider:            plan.Provider,
-			SandboxConnectionID: request.SandboxProviderConnectionID,
-			ResourceProfile:     plan.ResourceProfile,
-			BootstrapContext:    plan.BootstrapContext,
-			Release:             s.release,
-			ParentSessionID:     parentSessionID,
+			ProjectID:               request.ProjectID,
+			Kind:                    request.Kind,
+			Harness:                 request.Harness,
+			DisplayName:             request.DisplayName,
+			Prompt:                  request.Prompt,
+			Mode:                    request.Mode,
+			DeniedCommands:          request.DeniedCommands,
+			Provider:                plan.Provider,
+			SandboxConnectionID:     request.SandboxProviderConnectionID,
+			ResourceProfile:         plan.ResourceProfile,
+			BootstrapContext:        plan.BootstrapContext,
+			Release:                 s.release,
+			ParentSessionID:         parentSessionID,
+			PreparationExpiresAfter: preparationExpiresAfter,
 		},
 	)
 	if err != nil {
@@ -480,6 +542,66 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"session": toSessionResponse(session, nil)})
+}
+
+func (s *Server) sessionCredentialAvailable(
+	ctx context.Context,
+	principal domain.Principal,
+	orgID, harness string,
+) (bool, error) {
+	store, ok := s.store.(providerConnectionStore)
+	if !ok {
+		return true, nil
+	}
+	connections, err := store.ListProviderConnections(ctx, principal, orgID)
+	if err != nil {
+		return false, err
+	}
+	if agentConnectionAvailable(connections, harness) {
+		return true, nil
+	}
+	userStore, ok := s.store.(userProviderCredentialStore)
+	if !ok {
+		return false, nil
+	}
+	return userStore.UserAgentCredentialAvailable(ctx, principal.UserID, harness)
+}
+
+func (s *Server) commitSessionPreparation(w http.ResponseWriter, r *http.Request) {
+	orgID := chi.URLParam(r, "orgId")
+	sessionID := chi.URLParam(r, "sessionId")
+	if requireUUID(orgID, "orgId") != nil || requireUUID(sessionID, "sessionId") != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_request", "orgId and sessionId must be UUIDs.")
+		return
+	}
+	key, err := idempotencyKey(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	var request commitSessionPreparationRequest
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_request", "The request body is invalid.")
+		return
+	}
+	request.DisplayName = strings.TrimSpace(request.DisplayName)
+	if request.DisplayName == "" || len(request.DisplayName) > 80 ||
+		strings.TrimSpace(request.Prompt) == "" || len(request.Prompt) > 65536 {
+		writeError(w, r, http.StatusUnprocessableEntity, "validation_error", "Session name or prompt is invalid.")
+		return
+	}
+	session, err := s.store.CommitSessionPreparation(
+		r.Context(), principalFrom(r), orgID, sessionID, key,
+		domain.CommitSessionPreparation{
+			DisplayName: request.DisplayName,
+			Prompt:      request.Prompt,
+		},
+	)
+	if err != nil {
+		s.writeStoreError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"session": toSessionResponse(session, nil)})
 }
 
 func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {

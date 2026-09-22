@@ -113,9 +113,10 @@ results have joined successfully.
 
 ### D6. The initial prompt has one delivery source
 
-The create request stores the initial prompt in `session.prompt`. The worker
-passes it through the launch context when it builds the harness command. AO
-does not also create a normal queued turn for that prompt.
+Direct create requests store the initial prompt in `session.prompt`, and the
+worker passes it through the launch context. Click-triggered preparations have
+an empty launch prompt. Their commit request records the first prompt as one
+durable turn instead. A session uses exactly one of these delivery paths.
 
 Messages submitted after creation are durable turns. They are delivered in
 sequence after the agent terminal becomes ready. Retries use idempotency keys
@@ -142,12 +143,23 @@ the first browser verb. Early intent may prepare Chromium in parallel with
 checkout after the worker connects. Late intent starts Chromium on demand. No
 prompt classification is used.
 
-### D10. Progressive checkout is an experiment, not a promise
+### D10. The known default branch constrains initial transfer
 
-The default remains a complete, non-shallow checkout with tags omitted.
-`--filter=blob:none` may be tested on representative repositories. It becomes a
-default only if it improves first-use latency without harming common history,
-submodule, large-file, blame, diff, and rebase operations.
+The production clone is non-shallow and checks out the project's known default
+branch with `--single-branch --filter=blob:none --no-tags`. Commit and tree
+history for that branch remain available. Historical blob contents arrive on
+demand, while checkout materializes the current worktree before the harness can
+run. Origin validation, task-branch creation, credential renewal, and push stay
+unchanged.
+
+### D11. New Task starts a hidden cold preparation
+
+Opening a Cloud task composer creates a fresh promptless worker session. The
+session is hidden from normal lists, begins provider allocation immediately,
+and expires after two minutes unless Start Task commits it. Submit changes the
+display name, reveals the session, and queues the first prompt atomically.
+Closing the composer cancels the preparation. Changing harness or sandbox
+provider cancels it and starts a replacement.
 
 ### Baseline implementation audit
 
@@ -159,7 +171,7 @@ already exists from behavior that still needs integration or correction.
 | Compute allocation | Fresh sandbox per session | Keep cold-only allocation |
 | Worker image | Harness, Chromium, and browser helper are baked in | Keep installation outside session startup |
 | Browser process | browserd is loopback-only and Chromium starts lazily | Add only explicit early-intent scheduling |
-| Initial prompt | Stored on the session and returned in launch context | Preserve as the only initial delivery source |
+| Initial prompt | Stored on the session and returned in launch context | Use launch context for direct create or one durable turn for preparation commit |
 | Follow-up messages | Stored as durable turns with worker notification | Accept during startup, guarantee ordering and idempotency |
 | Reconciliation | Durable reconciliation runs on a two-second interval | Add immediate wake signals and retain interval fallback |
 | Checkout result | One channel closes after either success or failure | Return a typed result and block launch on failure |
@@ -228,24 +240,27 @@ keyframe. Browser readiness is independent of agent execution readiness.
 
 ### 4.1 Create and immediate interaction
 
-1. The user presses Cloud.
-2. The renderer creates a local startup attempt identifier and opens the
-   pending session surface within the same navigation transition.
-3. The create request starts. The composer remains editable.
-4. If the user submits before the create response, the renderer stores the
+1. The user presses New Task for a Cloud project.
+2. The renderer opens the editable composer and immediately posts a hidden
+   preparation with a stable idempotency key.
+3. The server atomically stores a promptless session, its two-minute expiry,
+   and sandbox intent. Fresh compute starts while the user types.
+4. If the user submits before the preparation response, the renderer stores the
    complete message in memory under the attempt identifier and displays
    `Saving session`.
-5. The server atomically stores the session, its initial prompt, and sandbox
-   intent, then responds with the durable session identifier.
-6. The renderer binds the pending route to the durable identifier.
-7. Locally held follow-up messages are posted in submission order with stable
+5. Start Task commits the prepared session and the first durable turn in one
+   database transaction.
+6. The renderer binds the pending route to the durable identifier and refreshes
+   the normal session list.
+7. Later messages are posted in submission order with stable
    idempotency keys.
 8. The session surface advances through observed startup states without being
    replaced by an empty terminal.
 
-If create definitively fails, locally held text remains visible and editable.
-If the client cannot determine whether create committed, retry reuses the same
-idempotency key before offering a new attempt.
+If preparation or commit definitively fails, locally held text remains visible
+and editable. Ambiguous retries reuse the same idempotency key. Closing an
+unsubmitted composer requests deletion, while the server expiry covers crashes
+and disconnected clients.
 
 ### 4.2 Reconciliation and compute
 
@@ -313,8 +328,10 @@ be mistaken for success.
 6. The supervisor writes each turn through the single input admission path.
 7. Completion or failure uses the existing turn result contract.
 
-The create prompt is not present in this turn sequence. That prevents the same
-prompt from arriving once through launch context and again through the queue.
+The direct-create prompt is not present in this turn sequence. A preparation
+commit stores its first prompt as the first durable turn instead. Each session
+uses exactly one path, preventing the prompt from arriving through both launch
+context and the queue.
 
 ### 4.5 Browser flow
 
@@ -335,6 +352,29 @@ For late intent:
 5. The first keyframe or command completion records browser readiness.
 
 ## 5. Required implementation changes
+
+### Click-triggered session preparation
+
+Add dedicated prepare and commit endpoints. Preparation creates the ordinary
+durable session and sandbox rows but marks the session hidden with an expiry.
+Commit clears that marker, updates the display name, and appends the first
+prompt as one durable turn. Normal list queries exclude preparations. The
+reconcile pass converts expired preparations to deletion intent before claiming
+due sandboxes.
+
+The renderer starts preparation when the Cloud composer mounts. It retains one
+attempt across pending-route binding, cancels on close or selection changes,
+and falls back to the direct create path only when no preparation exists.
+
+Required tests:
+
+- click starts one preparation before submit;
+- submit commits the prepared identifier exactly once;
+- close and selection changes request deletion;
+- expiry requests deletion without a connected client;
+- normal session lists hide preparations until commit;
+- credential and orchestrator preflights overlap;
+- prepare and commit retries reuse stable idempotency keys.
 
 ### 5.1 Reconciler wake path
 
@@ -962,3 +1002,18 @@ Completed in the final implementation and validation slice:
 
 Hosted validation remains open because this workspace has no supported
 provider credentials or deployment context. No remote latency claim is made.
+
+Completed in the click-triggered preparation follow-up:
+
+- opening a Cloud task composer starts one hidden cold session immediately;
+- Start Task commits that session and its first durable turn atomically;
+- close, harness change, provider change, and server expiry reclaim abandoned
+  preparations;
+- normal session, child, orchestrator, and shared-project lists hide uncommitted
+  preparations;
+- credential and orchestrator preflight lookups run concurrently;
+- known default branches use non-shallow, single-branch, blobless checkout with
+  stale-metadata recovery;
+- the final local lifecycle reached a running prepared harness in 3,392 ms and
+  passed commit, cancellation, expiry, replacement, restart, and all transport
+  modes.

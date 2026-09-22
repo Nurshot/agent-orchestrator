@@ -120,6 +120,14 @@ type CreateSession struct {
 	// orchestrator, a standalone worker, or a worker created for a project that
 	// has no active orchestrator.
 	ParentSessionID string
+	// PreparationExpiresAfter marks a hidden, promptless session that starts
+	// cold compute while the user fills in the task composer. Commit clears it.
+	PreparationExpiresAfter time.Duration `json:"preparationExpiresAfter,omitempty"`
+}
+
+type CommitSessionPreparation struct {
+	DisplayName string
+	Prompt      string
 }
 
 type ClientEvent struct {

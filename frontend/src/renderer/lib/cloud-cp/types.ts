@@ -182,6 +182,18 @@ export interface CloudCpCreateSessionRequest {
 	provider?: string;
 }
 
+export interface CloudCpPrepareSessionRequest {
+	projectId: string;
+	harness: string;
+	sandboxProviderConnectionId?: string;
+	provider?: string;
+}
+
+export interface CloudCpCommitSessionPreparationRequest {
+	displayName: string;
+	prompt: string;
+}
+
 export interface CloudCpSession {
 	id: string;
 	orgId: string;

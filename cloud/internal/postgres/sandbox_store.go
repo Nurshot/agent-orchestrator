@@ -49,6 +49,17 @@ func (s *Store) ClaimSandboxes(
 	}
 	sandboxes := make([]domain.Sandbox, 0, limit)
 	err := s.withService(ctx, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(
+			ctx,
+			`UPDATE ao_sandboxes
+			SET desired_state = 'deleted',
+				reconcile_after = now(),
+				updated_at = now()
+			WHERE preparation_expires_at <= now()
+			  AND desired_state <> 'deleted'`,
+		); err != nil {
+			return fmt.Errorf("expire prepared sandboxes: %w", err)
+		}
 		rows, err := tx.Query(
 			ctx,
 			`WITH candidates AS (

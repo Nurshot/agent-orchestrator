@@ -11,7 +11,38 @@ import {
 } from "../src/index.js";
 
 describe("CloudClient", () => {
-  it("loads the authenticated account and organization memberships", async () => {
+  it("prepares and commits a session through dedicated lifecycle routes", async () => {
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        jsonResponse({ session: { id: "session one" } }),
+    );
+    const client = createCloudClient({
+      baseUrl: "https://cloud.example.com",
+      getAccessToken: () => "access-token",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await client.prepareSession(
+      "tenant one",
+      { projectId: "project one", harness: "codex", provider: "nodeops" },
+      { idempotencyKey: "prepare-key" },
+    );
+    await client.commitSessionPreparation(
+      "tenant one",
+      "session one",
+      { displayName: "Fix startup", prompt: "Run the checks" },
+      { idempotencyKey: "commit-key" },
+    );
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "https://cloud.example.com/api/cloud/v1/orgs/tenant%20one/session-preparations",
+    );
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      "https://cloud.example.com/api/cloud/v1/orgs/tenant%20one/sessions/session%20one/commit-preparation",
+    );
+  });
+
+	it("loads the authenticated account and organization memberships", async () => {
     const account = {
       user: {
         id: "aa4c5117-d075-4a4e-a384-149e75f7dc45",

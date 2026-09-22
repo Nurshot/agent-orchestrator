@@ -212,7 +212,9 @@ func run(logger *slog.Logger) error {
 	go func() { results <- client.heartbeatLoop(runCtx, logger) }()
 	go func() { results <- transportSupervisor.Run(runCtx) }()
 	go func() {
-		results <- client.checkoutRenewalLoop(runCtx, logger, workspace, bootstrap.Launch.RepositoryURL)
+		results <- client.checkoutRenewalLoop(
+			runCtx, logger, workspace, bootstrap.Launch.RepositoryURL, bootstrap.Launch.DefaultBranch,
+		)
 	}()
 	go func() {
 		results <- runPullRequestBridge(runCtx, pullRequestSocketPath, client, workspace, logger)
@@ -382,7 +384,9 @@ func prepareWorkspace(
 			checkoutGrant = worker.CheckoutGrantResponse{CloneURL: bootstrap.Launch.RepositoryURL}
 			logger.Info("using anonymous public GitHub checkout")
 		}
-		if err := worker.PrepareCheckout(ctx, worker.ExecGitRunner{}, workspace, checkoutGrant); err != nil {
+		if err := worker.PrepareCheckout(
+			ctx, worker.ExecGitRunner{}, workspace, checkoutGrant, bootstrap.Launch.DefaultBranch,
+		); err != nil {
 			return fmt.Errorf("prepare repository checkout: %w", err)
 		}
 		if err := worker.ConfigureWorkerGit(
@@ -672,7 +676,7 @@ func (c *client) heartbeatLoop(ctx context.Context, logger *slog.Logger) error {
 }
 
 func (c *client) checkoutRenewalLoop(
-	ctx context.Context, logger *slog.Logger, workspace, repositoryURL string,
+	ctx context.Context, logger *slog.Logger, workspace, repositoryURL, defaultBranch string,
 ) error {
 	if worker.IsScratchRepositoryURL(repositoryURL) {
 		<-ctx.Done()
@@ -685,18 +689,18 @@ func (c *client) checkoutRenewalLoop(
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			c.renewCheckout(ctx, logger, workspace)
+			c.renewCheckout(ctx, logger, workspace, defaultBranch)
 		}
 	}
 }
 
-func (c *client) renewCheckout(ctx context.Context, logger *slog.Logger, workspace string) {
+func (c *client) renewCheckout(ctx context.Context, logger *slog.Logger, workspace, defaultBranch string) {
 	grant, err := c.checkoutGrant(ctx)
 	if err != nil {
 		logger.Warn("renew checkout grant failed", "error", err)
 		return
 	}
-	if err := worker.PrepareCheckout(ctx, worker.ExecGitRunner{}, workspace, grant); err != nil {
+	if err := worker.PrepareCheckout(ctx, worker.ExecGitRunner{}, workspace, grant, defaultBranch); err != nil {
 		logger.Warn("refresh repository checkout failed", "error", err)
 	}
 }

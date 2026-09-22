@@ -303,6 +303,117 @@ func (s *Store) CreateSession(
 	return session, err
 }
 
+func (s *Store) CommitSessionPreparation(
+	ctx context.Context,
+	principal domain.Principal,
+	orgID, sessionID, idempotencyKey string,
+	input domain.CommitSessionPreparation,
+) (domain.Session, error) {
+	var session domain.Session
+	err := s.withTenant(ctx, principal, orgID, func(tx pgx.Tx) error {
+		payload, err := json.Marshal(struct {
+			SessionID string                          `json:"sessionId"`
+			Input     domain.CommitSessionPreparation `json:"input"`
+		}{SessionID: sessionID, Input: input})
+		if err != nil {
+			return err
+		}
+		const commandKind = "session.preparation.commit"
+		var commandID string
+		err = tx.QueryRow(
+			ctx,
+			`INSERT INTO ao_commands (
+				org_id, idempotency_key, kind, payload
+			) VALUES ($1, $2, $3, $4)
+			ON CONFLICT (org_id, idempotency_key) DO NOTHING
+			RETURNING id`,
+			orgID, idempotencyKey, commandKind, payload,
+		).Scan(&commandID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return loadIdempotentSession(
+				ctx, tx, orgID, idempotencyKey, payload, commandKind, &session,
+			)
+		}
+		if err != nil {
+			return err
+		}
+
+		var preparation bool
+		err = tx.QueryRow(
+			ctx,
+			`SELECT session.is_preparation
+			FROM ao_sessions session
+			JOIN ao_sandboxes sandbox
+			  ON sandbox.org_id = session.org_id AND sandbox.session_id = session.id
+			WHERE session.org_id = $1 AND session.id = $2
+			  AND session.is_terminated = false
+			  AND session.is_preparation = true
+			  AND session.preparation_expires_at > clock_timestamp()
+			  AND sandbox.preparation_expires_at > clock_timestamp()
+			  AND sandbox.desired_state = 'running'
+			FOR UPDATE OF session, sandbox`,
+			orgID, sessionID,
+		).Scan(&preparation)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if !preparation {
+			return ErrInvalid
+		}
+
+		if _, err := tx.Exec(
+			ctx,
+			`UPDATE ao_sessions
+			SET display_name = $3,
+				is_preparation = false,
+				preparation_expires_at = NULL,
+				updated_at = now()
+			WHERE org_id = $1 AND id = $2`,
+			orgID, sessionID, input.DisplayName,
+		); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(
+			ctx,
+			`UPDATE ao_sandboxes
+			SET preparation_expires_at = NULL,
+				updated_at = now()
+			WHERE org_id = $1 AND session_id = $2`,
+			orgID, sessionID,
+		); err != nil {
+			return err
+		}
+		if _, err := appendUserMessage(ctx, tx, orgID, sessionID, input.Prompt, 0, "", nil); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(
+			ctx,
+			`UPDATE ao_commands
+			SET session_id = $1, status = 'succeeded',
+				result = jsonb_build_object('sessionId', $2::text),
+				updated_at = now()
+			WHERE id = $3`,
+			sessionID, sessionID, commandID,
+		); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(
+			ctx,
+			`INSERT INTO ao_audit_events (
+				org_id, actor_user_id, action, resource_type, resource_id
+			) VALUES ($1, $2, 'session.preparation.committed', 'session', $3)`,
+			orgID, principal.UserID, sessionID,
+		); err != nil {
+			return err
+		}
+		return getSession(ctx, tx, orgID, sessionID, &session)
+	})
+	return session, err
+}
+
 // ProjectActiveOrchestrator returns the id and sandbox provider of a project's
 // single active orchestrator, if one exists. A top-level worker is auto-linked
 // to it (parent_session_id) and inherits its provider so a project's whole
@@ -324,6 +435,7 @@ func (s *Store) ProjectActiveOrchestrator(
 			JOIN ao_sandboxes sb ON sb.session_id = se.id AND sb.org_id = se.org_id
 			WHERE se.org_id = $1 AND se.project_id = $2
 			  AND se.kind = 'orchestrator' AND se.is_terminated = false
+			  AND se.is_preparation = false
 			LIMIT 1`,
 			orgID, projectID,
 		).Scan(&orchestratorID, &provider)
@@ -582,6 +694,7 @@ func createSessionTx(
 	if input.DeniedCommands == nil {
 		input.DeniedCommands = []string{}
 	}
+	isPreparation := input.PreparationExpiresAfter > 0
 	var session domain.Session
 
 	// Serialize quota allocation before inserting any rows that reference the
@@ -656,10 +769,12 @@ func createSessionTx(
 		`WITH generated AS (SELECT gen_random_uuid() AS id)
 		INSERT INTO ao_sessions (
 			id, org_id, project_id, kind, harness, display_name, branch,
-			prompt, mode, denied_commands, parent_session_id, created_by_user_id
+			prompt, mode, denied_commands, parent_session_id, created_by_user_id,
+			is_preparation, preparation_expires_at
 		)
 		SELECT id, $1, $2, $3, $4, $5, 'ao/' || left(id::text, 8),
-			$6, $7, $8, NULLIF($9, '')::uuid, NULLIF($10, '')::uuid
+			$6, $7, $8, NULLIF($9, '')::uuid, NULLIF($10, '')::uuid,
+			$11, CASE WHEN $11 THEN now() + $12::interval ELSE NULL END
 		FROM generated
 		RETURNING id, org_id, project_id, kind, harness, display_name, branch,
 			mode, denied_commands, activity_state, is_terminated,
@@ -674,6 +789,8 @@ func createSessionTx(
 		input.DeniedCommands,
 		parentSessionID,
 		actorUserID,
+		isPreparation,
+		intervalString(input.PreparationExpiresAfter),
 	), &session)
 	if err != nil {
 		return domain.Session{}, normalizeConstraintError(err)
@@ -718,10 +835,14 @@ func createSessionTx(
 		ctx,
 		`INSERT INTO ao_sandboxes (
 			session_id, org_id, provider, provider_connection_id,
-			resource_profile, bootstrap_context
-		) VALUES ($1, $2, $3, NULLIF($4, '')::uuid, $5, $6)`,
+			resource_profile, bootstrap_context, preparation_expires_at
+		) VALUES (
+			$1, $2, $3, NULLIF($4, '')::uuid, $5, $6,
+			CASE WHEN $7 THEN now() + $8::interval ELSE NULL END
+		)`,
 		session.ID, orgID, provider, input.SandboxConnectionID,
-		resourceProfile, bootstrapContext,
+		resourceProfile, bootstrapContext, isPreparation,
+		intervalString(input.PreparationExpiresAfter),
 	); err != nil {
 		return domain.Session{}, normalizeConstraintError(err)
 	}
@@ -813,6 +934,7 @@ func (s *Store) ListSessions(
 			ctx,
 			sessionSelect+`
 			WHERE session.org_id = $1
+			  AND session.is_preparation = false
 			  AND EXISTS (
 				SELECT 1 FROM ao_projects project
 				WHERE project.org_id = session.org_id
@@ -873,6 +995,7 @@ func (s *Store) ListSessionChildren(
 			sessionSelect+`
 			WHERE session.org_id = $1
 			  AND session.parent_session_id = $2::uuid
+			  AND session.is_preparation = false
 			  AND ($3::timestamptz IS NULL OR (session.updated_at, session.id) < ($3, $4::uuid))
 			ORDER BY session.updated_at DESC, session.id DESC
 			LIMIT $5`,

@@ -269,6 +269,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cloud/v1/orgs/{orgId}/session-preparations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["prepareSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cloud/v1/orgs/{orgId}/sessions/{sessionId}": {
         parameters: {
             query?: never;
@@ -283,6 +301,25 @@ export interface paths {
         put?: never;
         post?: never;
         delete: operations["deleteSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cloud/v1/orgs/{orgId}/sessions/{sessionId}/commit-preparation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+                sessionId: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["commitSessionPreparation"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1550,6 +1587,19 @@ export interface components {
             deniedCommands: string[];
             /** Format: uuid */
             sandboxProviderConnectionId?: string;
+            provider?: string;
+        };
+        PrepareSessionInput: {
+            /** Format: uuid */
+            projectId: string;
+            harness: string;
+            /** Format: uuid */
+            sandboxProviderConnectionId?: string;
+            provider?: string;
+        };
+        CommitSessionPreparationInput: {
+            displayName: string;
+            prompt: string;
         };
         SessionPage: {
             items: components["schemas"]["Session"][];
@@ -2514,6 +2564,40 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
+    prepareSession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Reusing a key with the same command returns the original result.
+                 *     Reusing it with a different command returns an IDEMPOTENCY_CONFLICT.
+                 *      */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrepareSessionInput"];
+            };
+        };
+        responses: {
+            /** @description Hidden session preparation created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        session: components["schemas"]["Session"];
+                    };
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
     getSession: {
         parameters: {
             query?: never;
@@ -2559,6 +2643,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeleteSessionResponse"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    commitSessionPreparation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Reusing a key with the same command returns the original result.
+                 *     Reusing it with a different command returns an IDEMPOTENCY_CONFLICT.
+                 *      */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                orgId: components["parameters"]["OrgId"];
+                sessionId: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommitSessionPreparationInput"];
+            };
+        };
+        responses: {
+            /** @description Prepared session committed and first task queued. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        session: components["schemas"]["Session"];
+                    };
                 };
             };
             default: components["responses"]["Error"];

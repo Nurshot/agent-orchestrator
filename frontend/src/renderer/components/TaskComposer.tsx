@@ -5,7 +5,7 @@ import {
 	type TaskComposerModelCatalog,
 	type TaskComposerModelControl,
 } from "@aoagents/product-ui";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
 import { RequiredAgentField } from "./CreateProjectAgentSheet";
@@ -17,6 +17,10 @@ import {
 	createCloudPendingSession,
 	registerCloudPendingSession,
 } from "../lib/cloud-pending-session";
+import {
+	startCloudSessionPreparation,
+	type CloudSessionPreparation,
+} from "../lib/cloud-session-preparation";
 import {
 	cacheAgentReadiness,
 	ensureAgentReadiness,
@@ -38,6 +42,7 @@ import {
 import { STANDALONE_WORKSPACE_ID } from "../types/workspace";
 import { AgentModelCombobox, type ModelEffortSelection } from "./settings/AgentModelCombobox";
 import { SettingsOptionMenu } from "./settings/SettingsOptionMenu";
+import { DEFAULT_AGENT_PRIORITY } from "../lib/agent-select-options";
 
 type Project = components["schemas"]["Project"];
 type DelegateAgent = components["schemas"]["DelegateTaskRequest"]["agent"];
@@ -114,6 +119,7 @@ export function TaskComposer({
 	const [modelTouched, setModelTouched] = useState(false);
 	const [effortTouched, setEffortTouched] = useState(false);
 	const [isSubmitting, setIsSubmitting] = useState(false);
+	const cloudPreparationRef = useRef<CloudSessionPreparation | undefined>(undefined);
 	const [error, setError] = useState<string | undefined>();
 	const [fallbackAction, setFallbackAction] = useState<FallbackAction>();
 	const {
@@ -360,6 +366,56 @@ export function TaskComposer({
 		if (!effortTouched) setEffort(selectedAgent === defaultWorkerAgent ? defaultWorkerEffort : "");
 	}, [defaultWorkerAgent, defaultWorkerEffort, effortTouched, selectedAgent]);
 
+	useEffect(() => {
+		if (!isCloudProject || !projectId || !cloudOrg?.id) return;
+		const attempt = beginCloudStartupAttempt();
+		const harness = selectedAgent || DEFAULT_AGENT_PRIORITY[0];
+		const preparation = startCloudSessionPreparation({
+			attempt,
+			create: async (idempotencyKey) => {
+				void captureRendererEvent("ao.renderer.cloud_preparation_requested", { project_id: projectId });
+				try {
+					const { session } = await cloudClient.prepareSession(
+						cloudOrg.id,
+						{
+							projectId,
+							harness,
+							...(selectedProvider ? { provider: selectedProvider } : {}),
+						},
+						{ idempotencyKey },
+					);
+					void captureRendererEvent("ao.renderer.cloud_preparation_succeeded", { project_id: projectId });
+					return session.id;
+				} catch (error) {
+					void captureRendererEvent("ao.renderer.cloud_preparation_failed", { project_id: projectId });
+					throw error;
+				}
+			},
+			commit: async (sessionId, input, idempotencyKey) => {
+				await cloudClient.commitSessionPreparation(cloudOrg.id, sessionId, input, { idempotencyKey });
+				void queryClient.invalidateQueries({ queryKey: cloudSessionsQueryKey });
+			},
+			cancel: async (sessionId) => {
+				await cloudClient.deleteSession(cloudOrg.id, sessionId);
+			},
+		});
+		cloudPreparationRef.current = preparation;
+		return () => {
+			if (cloudPreparationRef.current === preparation) cloudPreparationRef.current = undefined;
+			preparation.cancel();
+		};
+	}, [
+		cloudClient.commitSessionPreparation,
+		cloudClient.deleteSession,
+		cloudClient.prepareSession,
+		cloudOrg?.id,
+		isCloudProject,
+		projectId,
+		queryClient,
+		selectedAgent,
+		selectedProvider,
+	]);
+
 	const isDirty = isPromptDirty || modelTouched || effortTouched || attachments.length > 0;
 	const handlePromptChange = useCallback((value: string) => {
 		const nextDirty = value.trim() !== "";
@@ -382,7 +438,10 @@ export function TaskComposer({
 		approvalMode?: "bypass-permissions",
 	) => {
 		if (!projectId || isSubmitting) return;
-		const cloudStartupAttempt = isCloudProject ? beginCloudStartupAttempt() : undefined;
+		const activePreparation = isCloudProject ? cloudPreparationRef.current : undefined;
+		const cloudStartupAttempt = isCloudProject
+			? (activePreparation?.attempt ?? beginCloudStartupAttempt())
+			: undefined;
 
 		const cleanModel = model.trim();
 		const cleanMode = mode.trim();
@@ -407,12 +466,18 @@ export function TaskComposer({
 				approvalMode,
 			};
 			if (isCloudProject && cloudStartupAttempt && cloudOrg?.id) {
+				activePreparation?.retainForCommit();
 				const pending = registerCloudPendingSession({
 					attempt: cloudStartupAttempt,
 					orgId: cloudOrg.id,
 					projectId,
 					initialPrompt: brief,
-					create: (idempotencyKey) => createCloudTask(baseInput, idempotencyKey),
+					create: (idempotencyKey) => activePreparation
+						? activePreparation.commit({
+							displayName: brief.trim().slice(0, 80) || selectedAgent || DEFAULT_AGENT_PRIORITY[0],
+							prompt: brief,
+						})
+						: createCloudTask(baseInput, idempotencyKey),
 					send: async (sessionId, message, idempotencyKey) => {
 						await cloudClient.sendSessionMessage(
 							cloudOrg.id,

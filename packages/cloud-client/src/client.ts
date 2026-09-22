@@ -8,6 +8,8 @@ import type {
   CreateGitHubScratchProjectResponse,
   CreateProjectInput,
   CreateSessionInput,
+  PrepareSessionInput,
+  CommitSessionPreparationInput,
   CurrentAccount,
   DeleteProjectResponse,
   DeleteSessionResponse,
@@ -331,6 +333,36 @@ export class CloudClient {
       idempotencyKey: options.idempotencyKey,
       signal: options.signal,
     });
+  }
+
+  prepareSession(
+    orgId: string,
+    input: PrepareSessionInput,
+    options: IdempotentRequestOptions,
+  ): Promise<{ session: Session }> {
+    return this.request(this.orgPath(orgId, "/session-preparations"), {
+      method: "POST",
+      body: input,
+      idempotencyKey: options.idempotencyKey,
+      signal: options.signal,
+    });
+  }
+
+  commitSessionPreparation(
+    orgId: string,
+    sessionId: string,
+    input: CommitSessionPreparationInput,
+    options: IdempotentRequestOptions,
+  ): Promise<{ session: Session }> {
+    return this.request(
+      this.orgPath(orgId, `/sessions/${encodeURIComponent(sessionId)}/commit-preparation`),
+      {
+        method: "POST",
+        body: input,
+        idempotencyKey: options.idempotencyKey,
+        signal: options.signal,
+      },
+    );
   }
 
   deleteSession(

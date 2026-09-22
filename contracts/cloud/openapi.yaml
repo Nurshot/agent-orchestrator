@@ -396,6 +396,33 @@ paths:
                     $ref: "#/components/schemas/Session"
         default:
           $ref: "#/components/responses/Error"
+  /api/cloud/v1/orgs/{orgId}/session-preparations:
+    parameters:
+      - $ref: "#/components/parameters/OrgId"
+    post:
+      operationId: prepareSession
+      tags: [Sessions]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PrepareSessionInput"
+      responses:
+        "201":
+          description: Hidden session preparation created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session]
+                properties:
+                  session:
+                    $ref: "#/components/schemas/Session"
+        default:
+          $ref: "#/components/responses/Error"
   /api/cloud/v1/orgs/{orgId}/sessions/{sessionId}:
     parameters:
       - $ref: "#/components/parameters/OrgId"
@@ -426,6 +453,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DeleteSessionResponse"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/cloud/v1/orgs/{orgId}/sessions/{sessionId}/commit-preparation:
+    parameters:
+      - $ref: "#/components/parameters/OrgId"
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      operationId: commitSessionPreparation
+      tags: [Sessions]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommitSessionPreparationInput"
+      responses:
+        "200":
+          description: Prepared session committed and first task queued.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session]
+                properties:
+                  session:
+                    $ref: "#/components/schemas/Session"
         default:
           $ref: "#/components/responses/Error"
   /api/cloud/v1/orgs/{orgId}/sessions/{sessionId}/children:
@@ -2913,6 +2968,38 @@ components:
         sandboxProviderConnectionId:
           type: string
           format: uuid
+        provider:
+          type: string
+    PrepareSessionInput:
+      type: object
+      additionalProperties: false
+      required: [projectId, harness]
+      properties:
+        projectId:
+          type: string
+          format: uuid
+        harness:
+          type: string
+          minLength: 1
+          maxLength: 120
+        sandboxProviderConnectionId:
+          type: string
+          format: uuid
+        provider:
+          type: string
+    CommitSessionPreparationInput:
+      type: object
+      additionalProperties: false
+      required: [displayName, prompt]
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 80
+        prompt:
+          type: string
+          minLength: 1
+          maxLength: 65536
     SessionPage:
       type: object
       additionalProperties: false

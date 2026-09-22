@@ -14,6 +14,12 @@ monotonic client sequence, and the client flushes them in order after the
 control plane accepts the session. The pending surface remains until a visible,
 input-enabled terminal crosses the first-frame boundary.
 
+Opening the Cloud task composer now starts a hidden, promptless cold session.
+Provider allocation, worker connection, and repository preparation advance
+while the user types. Start Task atomically reveals that same session and
+stores the first prompt as one durable turn. Closing the composer requests
+deletion, and a two-minute server expiry reclaims abandoned preparations.
+
 No warm capacity was used. Every measured session received a fresh worker.
 Browser startup remained lazy: the test first proved that Chromium was absent,
 then issued an explicit browser command and measured readiness. A prompt that
@@ -35,6 +41,7 @@ for this Cloud implementation.
 ## Implemented behavior
 
 - Immediate pending-session navigation and a focused composer.
+- Click-triggered hidden preparation with commit, cancellation, and expiry.
 - Stable create and message idempotency keys for safe retries.
 - Ordered early-message delivery with `clientSequence` values.
 - Durable startup events for checkout, restore, workspace, agent launch, ready,
@@ -45,6 +52,8 @@ for this Cloud implementation.
 - Worker replacement, pause and resume, control-plane restart, full-stack
   restart, persistent workspace storage, and cleanup.
 - Lazy browser startup with bounded restart behavior.
+- Non-shallow, single-branch, blobless checkout of the known default branch,
+  with recovery when project branch metadata is stale.
 - Explicit terminal replay completion, including frame buffering before
   listeners subscribe and a reset-only replay that cannot reveal an empty pane.
 - A database readiness check that rejects the temporary first-run PostgreSQL
@@ -79,6 +88,25 @@ window was mapped on an inactive compositor workspace, which paused animation
 frames even though the document reported itself visible. Focusing the exact
 window allowed the pending paint boundary to complete. The final measurement
 was taken only after the window was focused.
+
+## Click-triggered preparation follow-up
+
+The final local Docker lifecycle started a hidden preparation at the simulated
+New Task action. The fresh worker reached a running harness in 3,392 ms before
+the simulated Start Task action. Commit reused the same session identifier,
+made it visible once, and delivered the first prompt once. The same run also
+proved explicit cancellation, server expiry, provider deletion, and session
+termination.
+
+This was a cached-image local run against the small smoke repository. It
+validates the control flow and establishes a local lower bound. It does not
+establish a hosted-provider percentile.
+
+The final transport rerun also passed stream with relay, stream with durable
+delivery, and polling fallback. The first uncached relay sample reached agent
+readiness in 18,015 ms. A later cached polling sample reached it in 4,148 ms.
+The lifecycle run then exercised control-plane restart, full-stack restart,
+worker replacement, pause and resume, and persistent workspace recovery.
 
 ## Five-run local Docker distribution
 
@@ -133,9 +161,15 @@ branch, fetch, rebase, submodule handling, and large-file pointer handling.
 | Large | Partial | 46 ms | 11 ms | 184,818 | 69 |
 | Large | Protocol-tuned | 48 ms | 10 ms | 184,818 | 69 |
 
-Decision: keep full checkout as the production default. In this local synthetic
-matrix, partial checkout was slower, transferred more Git metadata, and added an
-on-demand fetch delay without improving the tested workflow.
+The synthetic matrix alone favored full checkout for these tiny repositories.
+A later representative checkout transferred a 289.55 MiB Git pack before user
+work began, so the production decision changed for known project branches. The
+worker now uses a non-shallow, single-branch, blobless clone. It retains commit
+and tree history for that branch, materializes the current worktree before
+launch, and fetches historical blob contents on demand. If project branch
+metadata is stale, the worker resolves the remote symbolic HEAD once and
+retries the same optimized clone. Hosted measurements must still quantify the
+transfer reduction on representative repositories.
 
 ## Failure matrix
 
@@ -155,7 +189,7 @@ The following owning boundaries passed:
 - Frontend unit suite: 327 files passed, 4,953 tests passed, 7 skipped.
 - Frontend browser suite: 88 passed, 4 performance workloads skipped.
 - Frontend typecheck, end-to-end typecheck, and packaged desktop build: passed.
-- Cloud client: 21 tests, typecheck, generated-schema drift check, and build
+- Cloud client: 22 tests, typecheck, generated-schema drift check, and build
   passed.
 - Product UI: 128 tests, typecheck, and build passed.
 - Cloud module: tests, race detector, vet, and build passed.
@@ -166,6 +200,10 @@ The following owning boundaries passed:
   check change.
 - Focused pending-session, startup projection, timing, telemetry, contract,
   lifecycle, failure, browser, and checkout checks passed.
+- The click-preparation focused frontend suite passed 39 tests. The broader
+  affected frontend suite passed 109 tests.
+- The final local variation matrix passed all transport modes and the complete
+  preparation lifecycle.
 
 The full backend `npm run lint` command is not green on this branch. Its
 unrelated failures include tmux tests that expect commands without the named

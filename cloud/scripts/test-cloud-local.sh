@@ -301,6 +301,15 @@ def wait_for_agent_terminal_ticket(org_id, session_id, token):
     raise RuntimeError("agent terminal did not become available")
 
 
+def visible_session_ids(org_id, project_id, token):
+    page = request(
+        "GET",
+        f"/api/cloud/v1/orgs/{org_id}/sessions?projectId={project_id}&limit=100",
+        token=token,
+    )
+    return [item["id"] for item in page["items"]]
+
+
 if mode == "create":
     suffix = str(time.time_ns())
     auth = request(
@@ -317,7 +326,7 @@ if mode == "create":
     )
     token = auth["token"]
     org_id = auth["organizations"][0]["id"]
-    request(
+    connection = request(
         "PUT",
         f"/api/cloud/v1/orgs/{org_id}/provider-connections/agents/claude-code",
         body={
@@ -325,8 +334,145 @@ if mode == "create":
             "secret": "ao-cloud-smoke-development-only",
         },
         token=token,
+    )["providerConnection"]
+    state_file.write_text(json.dumps({
+        "token": token,
+        "orgId": org_id,
+        "harness": connection["provider"],
+    }))
+elif mode == "prepare":
+    state = json.loads(state_file.read_text())
+    token = state["token"]
+    org_id = state["orgId"]
+    prompt = f"prepared-session-smoke-{time.time_ns()}"
+    commit_key = f"commit-preparation-{time.time_ns()}"
+    started = time.time()
+    session = request(
+        "POST",
+        f"/api/cloud/v1/orgs/{org_id}/session-preparations",
+        body={
+            "projectId": state["projectId"],
+            "harness": state["harness"],
+            "provider": "docker",
+        },
+        token=token,
+        idempotency_key=f"prepare-session-{time.time_ns()}",
+        expected=201,
+    )["session"]
+    if session["id"] in visible_session_ids(org_id, state["projectId"], token):
+        raise RuntimeError("uncommitted preparation appeared in the session list")
+    state.update({
+        "preparationId": session["id"],
+        "preparationPrompt": prompt,
+        "preparationCommitKey": commit_key,
+        "preparationStartedAt": started,
+    })
+    state_file.write_text(json.dumps(state))
+elif mode == "prepare-ready":
+    state = json.loads(state_file.read_text())
+    milestones = {}
+    wait_for_startup(
+        state["orgId"],
+        state["preparationId"],
+        state["token"],
+        time.monotonic(),
+        milestones,
     )
-    state_file.write_text(json.dumps({"token": token, "orgId": org_id}))
+    state["preparationReadyMs"] = round(
+        (time.time() - state["preparationStartedAt"]) * 1000
+    )
+    state_file.write_text(json.dumps(state))
+    print(json.dumps({"preparationReadyMs": state["preparationReadyMs"]}))
+elif mode == "commit-preparation":
+    state = json.loads(state_file.read_text())
+    token = state["token"]
+    org_id = state["orgId"]
+    session_id = state["preparationId"]
+    body = {
+        "displayName": "Prepared session smoke",
+        "prompt": state["preparationPrompt"],
+    }
+    first = request(
+        "POST",
+        f"/api/cloud/v1/orgs/{org_id}/sessions/{session_id}/commit-preparation",
+        body=body,
+        token=token,
+        idempotency_key=state["preparationCommitKey"],
+    )["session"]
+    repeated = request(
+        "POST",
+        f"/api/cloud/v1/orgs/{org_id}/sessions/{session_id}/commit-preparation",
+        body=body,
+        token=token,
+        idempotency_key=state["preparationCommitKey"],
+    )["session"]
+    if first["id"] != session_id or repeated["id"] != session_id:
+        raise RuntimeError("preparation commit changed the session identity")
+    listed = visible_session_ids(org_id, state["projectId"], token)
+    if listed.count(session_id) != 1:
+        raise RuntimeError(f"committed preparation list count was {listed.count(session_id)}")
+    matching_messages = [
+        event
+        for event in events(org_id, session_id, token)
+        if event.get("type") == "chat.user_message"
+        and event.get("payload", {}).get("text") == state["preparationPrompt"]
+    ]
+    if len(matching_messages) != 1:
+        raise RuntimeError(
+            f"preparation prompt was not durable exactly once: {matching_messages!r}"
+        )
+elif mode == "delete-preparation":
+    state = json.loads(state_file.read_text())
+    request(
+        "DELETE",
+        f"/api/cloud/v1/orgs/{state['orgId']}/sessions/{state['preparationId']}",
+        token=state["token"],
+        expected=202,
+    )
+elif mode == "cancel-preparation":
+    state = json.loads(state_file.read_text())
+    token = state["token"]
+    org_id = state["orgId"]
+    session = request(
+        "POST",
+        f"/api/cloud/v1/orgs/{org_id}/session-preparations",
+        body={
+            "projectId": state["projectId"],
+            "harness": state["harness"],
+            "provider": "docker",
+        },
+        token=token,
+        idempotency_key=f"cancel-preparation-{time.time_ns()}",
+        expected=201,
+    )["session"]
+    request(
+        "DELETE",
+        f"/api/cloud/v1/orgs/{org_id}/sessions/{session['id']}",
+        token=token,
+        expected=202,
+    )
+    if session["id"] in visible_session_ids(org_id, state["projectId"], token):
+        raise RuntimeError("cancelled preparation appeared in the session list")
+elif mode == "expire-preparation":
+    state = json.loads(state_file.read_text())
+    token = state["token"]
+    org_id = state["orgId"]
+    session = request(
+        "POST",
+        f"/api/cloud/v1/orgs/{org_id}/session-preparations",
+        body={
+            "projectId": state["projectId"],
+            "harness": state["harness"],
+            "provider": "docker",
+        },
+        token=token,
+        idempotency_key=f"expire-preparation-{time.time_ns()}",
+        expected=201,
+    )["session"]
+    if session["id"] in visible_session_ids(org_id, state["projectId"], token):
+        raise RuntimeError("expiring preparation appeared in the session list")
+    state["expiringPreparationId"] = session["id"]
+    state_file.write_text(json.dumps(state))
 elif mode == "start":
     state = json.loads(state_file.read_text())
     token = state["token"]
@@ -452,6 +598,18 @@ import pathlib
 import sys
 
 print(json.loads(pathlib.Path(sys.argv[1]).read_text())["sessionId"])
+PY
+}
+
+state_value() {
+	local key="$1"
+	python3 - "$state_file" "$key" <<'PY'
+import json
+import pathlib
+import sys
+
+state = json.loads(pathlib.Path(sys.argv[1]).read_text())
+print(state[sys.argv[2]])
 PY
 }
 
@@ -717,6 +875,58 @@ print("COLD_START_RESULT " + payload)
 PY
 }
 
+force_preparation_expiry() {
+	local org="$1" session="$2"
+	compose exec -e "PGOPTIONS=-c ao.org_id=${org}" -T postgres \
+		psql -U ao_cloud_owner -d ao_cloud -v ON_ERROR_STOP=1 -c \
+		"UPDATE ao_sessions
+		 SET preparation_expires_at = now() - interval '1 second'
+		 WHERE org_id = '${org}' AND id = '${session}';
+		 UPDATE ao_sandboxes
+		 SET preparation_expires_at = now() - interval '1 second', reconcile_after = now()
+		 WHERE org_id = '${org}' AND session_id = '${session}';" >/dev/null
+}
+
+wait_for_preparation_expired() {
+	local org="$1" session="$2" attempts=90 expired=""
+	while ((attempts > 0)); do
+		expired="$(
+			compose exec -e "PGOPTIONS=-c ao.org_id=${org}" -T postgres \
+				psql -U ao_cloud_owner -d ao_cloud -Atc \
+				"SELECT session.is_terminated
+				 FROM ao_sessions session
+				 JOIN ao_sandboxes sandbox
+				   ON sandbox.org_id = session.org_id AND sandbox.session_id = session.id
+				 WHERE session.org_id = '${org}' AND session.id = '${session}'
+				   AND sandbox.observed_state IN ('deleted', 'terminated', 'failed')"
+		)"
+		if [[ "$expired" == t ]]; then
+			return 0
+		fi
+		attempts=$((attempts - 1))
+		sleep 1
+	done
+	echo "Expired preparation ${session} was not deleted and terminated." >&2
+	return 1
+}
+
+wait_for_sql_true() {
+	local org="$1" query="$2" description="$3" attempts=90 result=""
+	while ((attempts > 0)); do
+		result="$(
+			compose exec -e "PGOPTIONS=-c ao.org_id=${org}" -T postgres \
+				psql -U ao_cloud_owner -d ao_cloud -Atc "$query"
+		)"
+		if [[ "$result" == t ]]; then
+			return 0
+		fi
+		attempts=$((attempts - 1))
+		sleep 1
+	done
+	echo "$description" >&2
+	return 1
+}
+
 compose --profile worker-image build worker-image
 docker build \
 	--build-arg "BASE_IMAGE=${AO_CLOUD_DOCKER_WORKER_IMAGE}" \
@@ -758,6 +968,38 @@ fi
 
 exercise_api create
 seed_smoke_project
+if [[ "$measure_startup" != true ]]; then
+	exercise_api prepare
+	prepared_session="$(state_value preparationId)"
+	prepared_worker="$(wait_for_worker "$prepared_session")"
+	exercise_api prepare-ready
+	if [[ "$(docker exec "$prepared_worker" git -C /workspace/repository config --get remote.origin.promisor)" != true ]]; then
+		echo "Prepared checkout is not configured as a partial clone." >&2
+		exit 1
+	fi
+	if [[ "$(docker exec "$prepared_worker" git -C /workspace/repository config --get remote.origin.partialclonefilter)" != blob:none ]]; then
+		echo "Prepared checkout does not use the blobless filter." >&2
+		exit 1
+	fi
+	exercise_api commit-preparation
+	wait_for_sql_true "$(org_id)" \
+		"SELECT EXISTS (
+			SELECT 1 FROM ao_worker_requests
+			WHERE session_id = '${prepared_session}'
+			  AND kind = 'terminal.input' AND status = 'succeeded'
+		) OR EXISTS (
+			SELECT 1 FROM ao_turns
+			WHERE session_id = '${prepared_session}' AND state = 'completed'
+		)" \
+		"Prepared prompt was not delivered to the running harness."
+	exercise_api delete-preparation
+	wait_for_worker_stopped "$prepared_worker"
+	exercise_api cancel-preparation
+	exercise_api expire-preparation
+	expiring_session="$(state_value expiringPreparationId)"
+	force_preparation_expiry "$(org_id)" "$expiring_session"
+	wait_for_preparation_expired "$(org_id)" "$expiring_session"
+fi
 exercise_api start
 session="$(session_id)"
 org="$(org_id)"

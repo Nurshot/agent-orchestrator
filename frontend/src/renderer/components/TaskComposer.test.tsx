@@ -11,6 +11,9 @@ const h = vi.hoisted(() => ({
 	ensureReadiness: vi.fn(),
 	ensureTargetedReadiness: vi.fn(),
 	createCloudSession: vi.fn(),
+	prepareCloudSession: vi.fn(),
+	commitCloudPreparation: vi.fn(),
+	deleteCloudSession: vi.fn(),
 	sendCloudMessage: vi.fn(),
 	beginCloudStartupAttempt: vi.fn(() => ({ attemptId: "attempt-1", startedAtMs: 100 })),
 	bindCloudStartupAttempt: vi.fn(),
@@ -20,7 +23,13 @@ const h = vi.hoisted(() => ({
 
 vi.mock("../hooks/useCloudCp", () => ({
 	useCloudCp: () => ({
-		client: { createSession: h.createCloudSession, sendSessionMessage: h.sendCloudMessage },
+		client: {
+			createSession: h.createCloudSession,
+			prepareSession: h.prepareCloudSession,
+			commitSessionPreparation: h.commitCloudPreparation,
+			deleteSession: h.deleteCloudSession,
+			sendSessionMessage: h.sendCloudMessage,
+		},
 	}),
 }));
 
@@ -124,6 +133,9 @@ afterEach(() => {
 	h.ensureReadiness.mockReset();
 	h.ensureTargetedReadiness.mockReset();
 	h.createCloudSession.mockReset();
+	h.prepareCloudSession.mockReset();
+	h.commitCloudPreparation.mockReset();
+	h.deleteCloudSession.mockReset();
 	h.sendCloudMessage.mockReset();
 	h.beginCloudStartupAttempt.mockClear();
 	h.bindCloudStartupAttempt.mockReset();
@@ -136,7 +148,8 @@ afterEach(() => {
 describe("TaskComposer", () => {
 	it("binds a Cloud startup attempt to the session created from the user action", async () => {
 		h.cloudProjects.push({ id: "cloud-project" });
-		h.createCloudSession.mockResolvedValue({ session: { id: "cloud-session-1" } });
+		h.prepareCloudSession.mockResolvedValue({ session: { id: "cloud-session-1" } });
+		h.commitCloudPreparation.mockResolvedValue({ session: { id: "cloud-session-1" } });
 		const onCreated = vi.fn();
 
 		render(
@@ -144,10 +157,18 @@ describe("TaskComposer", () => {
 				<TaskComposer projectId="cloud-project" onCreated={onCreated} />
 			</Wrap>,
 		);
+		await waitFor(() => expect(h.prepareCloudSession).toHaveBeenCalledOnce());
 		fireEvent.change(task(), { target: { value: "Measure startup" } });
 		fireEvent.click(screen.getByRole("button", { name: "Start task" }));
 
 		await waitFor(() => expect(onCreated).toHaveBeenCalledWith("cloud-session-1"));
+		expect(h.createCloudSession).not.toHaveBeenCalled();
+		expect(h.commitCloudPreparation).toHaveBeenCalledWith(
+			"org-1",
+			"cloud-session-1",
+			expect.objectContaining({ prompt: "Measure startup" }),
+			expect.objectContaining({ idempotencyKey: expect.any(String) }),
+		);
 		expect(h.beginCloudStartupAttempt).toHaveBeenCalledOnce();
 		expect(h.bindCloudStartupAttempt).toHaveBeenCalledWith("cloud-session-1", {
 			attemptId: "attempt-1",
@@ -158,9 +179,10 @@ describe("TaskComposer", () => {
 	it("opens the pending route before the Cloud create request settles", async () => {
 		h.cloudProjects.push({ id: "cloud-project" });
 		let resolveCreate!: (value: { session: { id: string } }) => void;
-		h.createCloudSession.mockReturnValue(new Promise((resolve) => {
+		h.prepareCloudSession.mockReturnValue(new Promise((resolve) => {
 			resolveCreate = resolve;
 		}));
+		h.commitCloudPreparation.mockResolvedValue({ session: { id: "cloud-session-1" } });
 		const onCreated = vi.fn();
 		const onPending = vi.fn();
 
@@ -174,14 +196,52 @@ describe("TaskComposer", () => {
 
 		expect(onPending).toHaveBeenCalledWith("pending-cloud-attempt-1");
 		expect(onCreated).not.toHaveBeenCalled();
-		expect(h.createCloudSession).toHaveBeenCalledWith(
+		expect(h.prepareCloudSession).toHaveBeenCalledWith(
 			"org-1",
 			expect.any(Object),
-			{ idempotencyKey: "attempt-1" },
+			{ idempotencyKey: expect.any(String) },
 		);
 
 		resolveCreate({ session: { id: "cloud-session-1" } });
 		await waitFor(() => expect(onCreated).toHaveBeenCalledWith("cloud-session-1"));
+	});
+
+	it("reclaims an unsubmitted Cloud preparation when the composer closes", async () => {
+		h.cloudProjects.push({ id: "cloud-project" });
+		h.prepareCloudSession.mockResolvedValue({ session: { id: "cloud-session-1" } });
+		h.deleteCloudSession.mockResolvedValue({ session: { id: "cloud-session-1" } });
+
+		const view = render(
+			<Wrap>
+				<TaskComposer projectId="cloud-project" onCreated={vi.fn()} />
+			</Wrap>,
+		);
+		await waitFor(() => expect(h.prepareCloudSession).toHaveBeenCalledOnce());
+		view.unmount();
+
+		await waitFor(() => expect(h.deleteCloudSession).toHaveBeenCalledWith("org-1", "cloud-session-1"));
+	});
+
+	it("replaces the Cloud preparation when the selected harness changes", async () => {
+		h.cloudProjects.push({ id: "cloud-project" });
+		h.prepareCloudSession
+			.mockResolvedValueOnce({ session: { id: "cloud-session-1" } })
+			.mockResolvedValueOnce({ session: { id: "cloud-session-2" } });
+		h.deleteCloudSession.mockResolvedValue({ session: { id: "cloud-session-1" } });
+
+		render(
+			<Wrap>
+				<TaskComposer projectId="cloud-project" onCreated={vi.fn()} />
+			</Wrap>,
+		);
+		await waitFor(() => expect(h.prepareCloudSession).toHaveBeenCalledOnce());
+		fireEvent.click(screen.getByLabelText("Agent"));
+
+		await waitFor(() => expect(h.prepareCloudSession).toHaveBeenCalledTimes(2));
+		expect(h.deleteCloudSession).toHaveBeenCalledWith("org-1", "cloud-session-1");
+		expect(h.prepareCloudSession.mock.calls[1]?.[1]).toEqual(
+			expect.objectContaining({ harness: "codex" }),
+		);
 	});
 
 	it("starts a standalone worker without loading or sending a project", async () => {

@@ -48,6 +48,8 @@ export type SessionActivityState = Schemas["SessionActivityState"];
 export type SessionStatus = Schemas["SessionStatus"];
 export type Turn = Schemas["Turn"];
 export type CreateSessionInput = Schemas["CreateSessionInput"];
+export type PrepareSessionInput = Schemas["PrepareSessionInput"];
+export type CommitSessionPreparationInput = Schemas["CommitSessionPreparationInput"];
 export type DeleteSessionResponse = Schemas["DeleteSessionResponse"];
 export type SessionPage = Schemas["SessionPage"];
 
