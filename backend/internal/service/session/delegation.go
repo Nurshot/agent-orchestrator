@@ -15,10 +15,10 @@ import (
 )
 
 const (
-	delegatedTaskTitleLimit             = 20
+	delegatedTaskTitleLimit             = maxDisplayNameLen
 	delegatedTaskUntitledName           = "Untitled task"
 	delegatedTaskTitleRefinementTimeout = time.Minute
-	delegatedTaskTitleSystemPrompt      = "Return only a concise task title of at most 20 characters. Do not use tools, change files, or explain the answer."
+	delegatedTaskTitleSystemPrompt      = "Return only a concise task title of at most 100 characters. Do not use tools, change files, or explain the answer."
 )
 
 type backgroundTaskCommander interface {

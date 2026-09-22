@@ -54,7 +54,7 @@ func TestDelegateTaskSpawnsWorkerAndRefinesTitleThroughBackgroundHarness(t *test
 			if out.WorkerID != "mer-9" || out.OrchestratorID != "" {
 				t.Fatalf("out = %#v, want worker mer-9 only", out)
 			}
-			if !cmd.spawned || cmd.spawnedCfg.ProjectID != "ao" || cmd.spawnedCfg.Kind != domain.KindWorker || cmd.spawnedCfg.Harness != tt.wantAgent || cmd.spawnedCfg.Prompt != brief || cmd.spawnedCfg.DisplayName != "Fix the renderer wit" {
+			if !cmd.spawned || cmd.spawnedCfg.ProjectID != "ao" || cmd.spawnedCfg.Kind != domain.KindWorker || cmd.spawnedCfg.Harness != tt.wantAgent || cmd.spawnedCfg.Prompt != brief || cmd.spawnedCfg.DisplayName != "Fix the renderer without changing the API." {
 				t.Fatalf("spawn cfg = %#v", cmd.spawnedCfg)
 			}
 			if cmd.spawnedCfg.AgentConfig.Model != strings.TrimSpace(tt.model) || cmd.spawnedCfg.AgentConfig.Effort != strings.TrimSpace(tt.effort) {
@@ -88,8 +88,9 @@ func TestDelegatedTaskTitles(t *testing.T) {
 	}{
 		{name: "empty provisional", in: " \n\t ", want: "Untitled task"},
 		{name: "short provisional", in: "  tell me a joke  ", want: "tell me a joke"},
-		{name: "provisional whitespace and limit", in: "Fix the renderer\nwithout changing the API", want: "Fix the renderer wit"},
-		{name: "provisional unicode limit", in: "一二三四五六七八九十一二三四五六七八九十一", want: "一二三四五六七八九十一二三四五六七八九十"},
+		{name: "provisional whitespace", in: "Fix the renderer\nwithout changing the API", want: "Fix the renderer without changing the API"},
+		{name: "provisional unicode limit", in: strings.Repeat("一", 101), want: strings.Repeat("一", 100)},
+		{name: "provisional byte truncation", in: strings.Repeat(" long", 21), want: strings.TrimSpace(strings.Repeat(" long", 21)[:100])},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := delegatedTaskDisplayName(tt.in); got != tt.want {
@@ -103,7 +104,7 @@ func TestDelegatedTaskTitles(t *testing.T) {
 		want string
 	}{
 		{in: "## `Fix renderer.`\nExtra prose", want: "Fix renderer"},
-		{in: strings.Repeat("界", 21), want: strings.Repeat("界", 20)},
+		{in: strings.Repeat("界", 101), want: strings.Repeat("界", 100)},
 		{in: " -- ... ", want: ""},
 	} {
 		if got := generatedTaskTitle(tt.in); got != tt.want {
