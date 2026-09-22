@@ -1,8 +1,8 @@
 const PAGE_SIZE = 100;
 
 const SEARCH_QUERY = `
-  query($query: String!, $cursor: String) {
-    search(query: $query, type: ISSUE, first: ${PAGE_SIZE}, after: $cursor) {
+  query($searchQuery: String!, $cursor: String) {
+    search(query: $searchQuery, type: ISSUE, first: ${PAGE_SIZE}, after: $cursor) {
       issueCount
       pageInfo { hasNextPage endCursor }
       nodes {
@@ -133,13 +133,13 @@ async function remainingConnection(github, id, name, initial) {
 }
 
 export async function fetchPullRequests(github, { owner, repo, start }) {
-	const query = `repo:${owner}/${repo} is:pr updated:>=${start.slice(0, 10)}`;
+	const searchQuery = `repo:${owner}/${repo} is:pr updated:>=${start.slice(0, 10)}`;
 	const pullRequests = [];
 	let cursor = null;
 	let hasNextPage = true;
 
 	while (hasNextPage) {
-		const response = await github.graphql(SEARCH_QUERY, { query, cursor });
+		const response = await github.graphql(SEARCH_QUERY, { searchQuery, cursor });
 		if (response.search.issueCount > 1000) {
 			throw new Error("The activity window contains more than GitHub Search's 1,000-PR limit");
 		}

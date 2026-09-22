@@ -135,6 +135,11 @@ test("paginates search results and oversized PR connections", async () => {
 	const calls = [];
 	const github = {
 		graphql: async (_query, variables) => {
+			// @octokit/graphql reserves these names and throws when they are
+			// passed as variables.
+			for (const reserved of ["query", "method", "url"]) {
+				assert.ok(!(reserved in variables), `"${reserved}" cannot be used as a GraphQL variable name`);
+			}
 			calls.push(variables);
 			return responses.shift();
 		},
