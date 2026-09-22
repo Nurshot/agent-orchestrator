@@ -697,9 +697,25 @@ describe("SessionInspector PR section", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the empty state when there are no PRs", () => {
-    renderWithQuery(<SessionInspector session={session([])} />);
+  it("shows the empty state when the session's output is a PR but none are open yet", () => {
+    renderWithQuery(<SessionInspector session={session([], { outputType: "pr" })} />);
     expect(screen.getByText("No pull request opened yet.")).toBeInTheDocument();
+  });
+
+  it("hides the section entirely when the session has no known output type", () => {
+    renderWithQuery(<SessionInspector session={session([], { outputType: undefined })} />);
+    expect(
+      screen.queryByText("No pull request opened yet."),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Pull request")).not.toBeInTheDocument();
+  });
+
+  it("hides the section entirely when the session's output type is explicitly none", () => {
+    renderWithQuery(<SessionInspector session={session([], { outputType: "none" })} />);
+    expect(
+      screen.queryByText("No pull request opened yet."),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Pull request")).not.toBeInTheDocument();
   });
 
   it("keeps durable session policies in Summary and operational review controls in Reviews", async () => {
@@ -3994,7 +4010,7 @@ describe("SessionInspector summary reviews", () => {
 
   it("hides Reviews when the session has no PR while keeping its durable preference in Summary", async () => {
     mockCommonGets();
-    renderWithQuery(<SessionInspector session={session([])} />);
+    renderWithQuery(<SessionInspector session={session([], { outputType: "pr" })} />);
 
     await screen.findByRole("tab", { name: /Summary/ });
     expect(screen.queryByRole("tab", { name: /Reviews/ })).not.toBeInTheDocument();

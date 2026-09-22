@@ -351,6 +351,11 @@ const SummaryView = memo(function SummaryView({
 	// below them in the same section, rather than replacing anything.
 	const artifacts = sessionArtifacts(session);
 	const hasArtifacts = artifacts.length > 0;
+	// A session with no known output (outputType absent or "none") and no real
+	// PRs/artifacts has nothing to show here — skip the section instead of
+	// rendering an empty "No pull request opened yet." card.
+	const hasKnownOutput = session.outputType !== undefined && session.outputType !== "none";
+	const showPRSection = hasPRs || hasArtifacts || hasKnownOutput;
 	const prSectionTitle = hasPRs
 		? prSummaries.length > 1
 			? t("inspector.pullRequests", { count: prSummaries.length })
@@ -379,32 +384,34 @@ const SummaryView = memo(function SummaryView({
 			activityTitle={t("inspector.activity")}
 			completion={<SessionControls session={session} />}
 			pullRequestCards={
-				<div className="flex flex-col gap-1.5">
-					{hasPRs &&
-						prSummaries.map((pr) => (
-							<PRSummaryCard
-								canOpenReviews={canOpenReviews}
-								key={pr.url || pr.htmlUrl || pr.number}
-								onOpenReviews={onOpenReviews}
-								pr={pr}
-								sessionId={session.id}
-							/>
-						))}
-					{hasArtifacts &&
-						artifacts.map((artifact) => (
-							<ArtifactSummaryCard
-								artifact={artifact}
-								key={artifact.path}
-								onOpenReviewFile={onOpenReviewFile}
-								session={session}
-							/>
-						))}
-					{!hasPRs && !hasArtifacts ? (
-						<p className={inspectorEmptyClass}>{t("inspector.noPROpened")}</p>
-					) : null}
-				</div>
+				showPRSection ? (
+					<div className="flex flex-col gap-1.5">
+						{hasPRs &&
+							prSummaries.map((pr) => (
+								<PRSummaryCard
+									canOpenReviews={canOpenReviews}
+									key={pr.url || pr.htmlUrl || pr.number}
+									onOpenReviews={onOpenReviews}
+									pr={pr}
+									sessionId={session.id}
+								/>
+							))}
+						{hasArtifacts &&
+							artifacts.map((artifact) => (
+								<ArtifactSummaryCard
+									artifact={artifact}
+									key={artifact.path}
+									onOpenReviewFile={onOpenReviewFile}
+									session={session}
+								/>
+							))}
+						{!hasPRs && !hasArtifacts ? (
+							<p className={inspectorEmptyClass}>{t("inspector.noPROpened")}</p>
+						) : null}
+					</div>
+				) : undefined
 			}
-			pullRequestTitle={prSectionTitle}
+			pullRequestTitle={showPRSection ? prSectionTitle : undefined}
 			workers={showWorkers ? <OrchestratorChildrenSection session={session} /> : undefined}
 			usage={
 				showUsageError ? (
