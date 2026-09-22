@@ -64,7 +64,9 @@ export function SessionFileExplorer({
 	const source = useUiStore((state) => state.inspectorSessions[sessionId]?.filesSource ?? WORKSPACE_SOURCE);
 	const setFilesChangedOnly = useUiStore((state) => state.setFilesChangedOnly);
 	const setFilesSource = useUiStore((state) => state.setFilesSource);
-	const annotation = useFileAnnotation(sessionId, { source: source.kind === "workspace" ? "Workspace" : `${source.label} (${source.url})` });
+	const annotation = useFileAnnotation(sessionId, {
+		source: source.kind === "pull_request" ? `${source.label} (${source.url})` : "Workspace",
+	});
 	const snapshot = source.kind === "pull_request" ? scmQuery.data?.find((pr) => pr.url === source.url)?.headSha ?? "" : "";
 	const querySource = useMemo<FilesSource>(
 		() => source.kind === "pull_request" ? { ...source, snapshot } : source,
@@ -118,7 +120,7 @@ export function SessionFileExplorer({
 	};
 	const treeSelectedPath = selectedPath;
 	const selectedPreviousPath = filesQuery.data?.files.find((file) => file.path === selectedPath)?.previousPath;
-	const sourceValue = source.kind === "workspace" ? "workspace" : source.url;
+	const sourceValue = source.kind === "pull_request" ? source.url : "workspace";
 	const selectSource = (value: string) => {
 		setSourceNotice("");
 		setSelectedPath(null);
@@ -233,7 +235,7 @@ export function SessionFileExplorer({
 				) : null}
 			</header>
 			<div className="shrink-0 border-b border-border px-3 py-1 text-2xs text-muted-foreground">
-				{source.kind === "workspace" ? t("files.explorer.workspaceSource") : source.label}
+				{source.kind === "pull_request" ? source.label : t("files.explorer.workspaceSource")}
 				{sourceNotice ? ` — ${sourceNotice}` : ""}
 			</div>
 			{showChanges ? (

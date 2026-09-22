@@ -41,7 +41,10 @@ export type WorkspaceDiffScope = components["schemas"]["WorkspaceDiffRequest"]["
 export type WorkspaceDiffsResponse = components["schemas"]["WorkspaceDiffsResponse"];
 export type WorkspaceFileRevision = components["schemas"]["WorkspaceFileRevisionResponse"];
 export type WorkspaceFileSearchResponse = components["schemas"]["WorkspaceFileSearchResponse"];
-export type FilesSource = { kind: "workspace" } | { kind: "pull_request"; number: number; url: string; label: string; snapshot?: string };
+export type FilesSource =
+	| { kind: "workspace" }
+	| { kind: "pull_request"; number: number; url: string; label: string; snapshot?: string }
+	| { kind: "artifact" };
 
 export const sessionWorkspaceFilesQueryKey = (sessionId: string) => ["session-workspace-files", sessionId] as const;
 const WORKSPACE_FILES_DEGRADED_REFETCH_MS = 30_000;
@@ -147,9 +150,9 @@ export function sessionWorkspaceFileQueryOptions(sessionId: string, path: string
 }
 
 export function sessionSourceFileQueryOptions(sessionId: string, source: FilesSource, path: string, errorMessage = "Unable to load file", scope: WorkspaceDiffScope = "combined", commitSha?: string, previousPath = ""): UseQueryOptions<WorkspaceFileDetail> {
-	return source.kind === "workspace"
-		? sessionWorkspaceFileQueryOptions(sessionId, path, errorMessage, scope, commitSha)
-		: { queryKey: ["session-source-file", sessionId, "pull_request", source.url, source.snapshot ?? "", path], queryFn: () => fetchSessionPRFile(sessionId, source.number, source.url, path, previousPath, errorMessage) };
+	if (source.kind === "workspace") return sessionWorkspaceFileQueryOptions(sessionId, path, errorMessage, scope, commitSha);
+	if (source.kind === "artifact") return sessionArtifactFileQueryOptions(sessionId, path, errorMessage);
+	return { queryKey: ["session-source-file", sessionId, "pull_request", source.url, source.snapshot ?? "", path], queryFn: () => fetchSessionPRFile(sessionId, source.number, source.url, path, previousPath, errorMessage) };
 }
 
 export const sessionWorkspaceDiffsQueryKey = (
@@ -268,12 +271,25 @@ export function sessionSourceFileRevisionQueryOptions({
 	workspaceVersion?: string;
 	commitSha?: string;
 }): UseQueryOptions<WorkspaceFileRevision> {
-	return source.kind === "workspace"
-		? sessionWorkspaceFileRevisionQueryOptions({ path, scope, sessionId, side, workspaceVersion, commitSha })
-		: {
+	if (source.kind === "workspace") return sessionWorkspaceFileRevisionQueryOptions({ path, scope, sessionId, side, workspaceVersion, commitSha });
+	if (source.kind === "pull_request") {
+		return {
 			queryKey: ["session-source-file-revision", sessionId, "pull_request", source.url, source.snapshot ?? "", side, path] as const,
 			queryFn: () => fetchPRFileRevision(sessionId, source.number, source.url, path, side),
 		};
+	}
+	// Artifacts have no split before/after comparison — they're not diffed
+	// against anything, just standalone output files. Callers gate this query
+	// with `enabled: detail.deleted || detail.contentTruncated`, neither of
+	// which an artifact ever sets, so the queryFn below never actually runs;
+	// it still needs to type-check and exist, since options are constructed
+	// unconditionally before `enabled` is evaluated.
+	return {
+		queryKey: ["session-source-file-revision", sessionId, "artifact", side, path] as const,
+		queryFn: (): Promise<WorkspaceFileRevision> => {
+			throw new Error("Artifact sources do not support file revisions");
+		},
+	};
 }
 
 export async function updateSessionWorkspaceFile({
@@ -320,9 +336,20 @@ export function sessionWorkspaceFilesQueryOptions(sessionId: string, errorMessag
 }
 
 export function sessionSourceFilesQueryOptions(sessionId: string, source: FilesSource, errorMessage = "Unable to load files"): UseQueryOptions<WorkspaceFilesResponse> {
-	return source.kind === "workspace"
-		? sessionWorkspaceFilesQueryOptions(sessionId, errorMessage)
-		: { queryKey: ["session-source-files", sessionId, "pull_request", source.url, source.snapshot ?? ""], queryFn: () => fetchSessionPRFiles(sessionId, source.number, source.url, errorMessage) };
+	if (source.kind === "workspace") return sessionWorkspaceFilesQueryOptions(sessionId, errorMessage);
+	if (source.kind === "pull_request") {
+		return { queryKey: ["session-source-files", sessionId, "pull_request", source.url, source.snapshot ?? ""], queryFn: () => fetchSessionPRFiles(sessionId, source.number, source.url, errorMessage) };
+	}
+	// No artifact directory tree listing yet — ArtifactFileView is handed one
+	// specific path directly, so nothing calls this with an artifact source.
+	// The queryFn still needs to exist and type-check even though it's never
+	// invoked (see sessionSourceFileRevisionQueryOptions for the same shape).
+	return {
+		queryKey: ["session-source-files", sessionId, "artifact"] as const,
+		queryFn: (): Promise<WorkspaceFilesResponse> => {
+			throw new Error("Artifact sources do not support directory listing");
+		},
+	};
 }
 
 export function workspaceFilesRefetchInterval(state: WorkspaceFileConnectionState): false | number {

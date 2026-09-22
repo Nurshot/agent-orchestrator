@@ -1,15 +1,20 @@
-import { useQuery } from "@tanstack/react-query";
-import { useTranslation } from "react-i18next";
-import { sessionArtifactFileQueryOptions } from "../hooks/useSessionWorkspaceFiles";
 import { useFileAnnotation } from "../hooks/useFileAnnotation";
-import { ReadOnlyFileView } from "./ReadOnlyFileView";
-import { PanelMessage, RetryButton } from "./WorkspaceDiffView";
+import { FileContentPane } from "./FileContentPane";
+
+const ARTIFACT_SOURCE = { kind: "artifact" as const };
 
 /**
- * Read-only content view for one file in a session's artifact directory.
- * Artifacts live outside the git workspace (no diff, no status), so this
- * fetches raw content straight from the preview-files route instead of
- * going through the workspace-diff machinery `SessionFileExplorer` uses.
+ * Content view for one file in a session's artifact directory, reusing the
+ * same `FileContentPane` the workspace/PR Files flow uses (source-agnostic:
+ * dispatches on `source.kind`). Artifacts fetch raw content straight from the
+ * preview-files route rather than the workspace-diff machinery, since they
+ * live outside the git workspace and have no diff/status.
+ *
+ * Read-only for now: `WorkspaceFileDetail.editable`/`fileFingerprint` are
+ * unset for the artifact source (see `fetchSessionArtifactFile`), which is
+ * exactly the signal `FileContentPane` already uses to hide its edit
+ * affordance for any source. Wiring up editing later is then a matter of
+ * adding a write endpoint and setting those two fields — no new UI.
  */
 export function ArtifactFileView({
 	artifactName,
@@ -20,26 +25,11 @@ export function ArtifactFileView({
 	path: string;
 	sessionId: string;
 }) {
-	const { t } = useTranslation();
 	const annotation = useFileAnnotation(sessionId, { source: artifactName });
-	const query = useQuery(sessionArtifactFileQueryOptions(sessionId, path, t("files.error.loadArtifact")));
 
 	return (
-		<div className="flex h-full min-h-0 flex-col">
-			<div className="shrink-0 truncate border-b border-(--color-border-settings-input) px-3 py-2 text-sm font-semibold" title={artifactName}>
-				{artifactName}
-			</div>
-			<div className="min-h-0 flex-1 overflow-auto">
-				{query.isPending ? (
-					<PanelMessage>{t("files.loading")}</PanelMessage>
-				) : query.isError ? (
-					<PanelMessage action={<RetryButton onClick={() => void query.refetch()} />}>
-						{t("files.error.loadArtifact")}
-					</PanelMessage>
-				) : (
-					<ReadOnlyFileView annotation={annotation} detail={query.data} sessionId={sessionId} />
-				)}
-			</div>
+		<div className="h-full min-h-0">
+			<FileContentPane annotation={annotation} initialMode="file" path={path} sessionId={sessionId} source={ARTIFACT_SOURCE} split={false} />
 		</div>
 	);
 }
