@@ -1117,7 +1117,6 @@ const ProjectItem = memo(function ProjectItem({
 	const requestNewTask = useUiStore((state) => state.requestNewTask);
 	const showGlobalToast = useUiStore((state) => state.showGlobalToast);
 	const projectIsDragging = isDragged;
-	const isStandaloneWorkspace = workspace.kind === STANDALONE_PROJECT_KIND;
 	// Keep completed PR sessions reachable while their runtime still exists.
 	// Only termination removes a worker from the sidebar; archived sessions stay
 	// reachable through SessionsBoard.
@@ -1226,11 +1225,6 @@ const ProjectItem = memo(function ProjectItem({
 	// one-click path back from the orchestrator button.
 	const onProjectClick = () => {
 		if (consumeDragClick(workspace.id)) return;
-		if (workspace.kind === STANDALONE_PROJECT_KIND) {
-			toggleDisclosure();
-			if (!expanded) selection.goHome();
-			return;
-		}
 		if (!expanded) {
 			toggleDisclosure();
 			selection.goProject(workspace.id);
@@ -1285,7 +1279,7 @@ const ProjectItem = memo(function ProjectItem({
 						projectIsDragging && "opacity-50",
 					)}
 					data-dragging={projectIsDragging ? "true" : undefined}
-					data-project-drop-target={isStandaloneWorkspace ? undefined : ""}
+					data-project-drop-target=""
 					data-project-id={workspace.id}
 					data-sidebar="menu-item"
 					data-slot="sidebar-menu-item"
@@ -1298,9 +1292,9 @@ const ProjectItem = memo(function ProjectItem({
 						className="relative"
 						data-project-drag-row=""
 						data-project-id={workspace.id}
-						draggable={!isStandaloneWorkspace}
-						onDragStart={isStandaloneWorkspace ? undefined : (event) => onProjectDragStart(event, workspace.id)}
-						onDragEnd={isStandaloneWorkspace ? undefined : onProjectDragEnd}
+						draggable
+						onDragStart={(event) => onProjectDragStart(event, workspace.id)}
+						onDragEnd={onProjectDragEnd}
 					>
 						<div className={cn("relative", projectIsDragging && "cursor-grabbing")}>
 							<div>
@@ -1316,7 +1310,7 @@ const ProjectItem = memo(function ProjectItem({
 										NAV_ROW_HIGHLIGHT_HOST_CLASS,
 										// gap-2 matches SectionDisclosure so project icons/labels share the
 										// Projects header's left edge (NAV_ROW defaults to gap-2.5).
-										!isStandaloneWorkspace && "cursor-grab active:cursor-grabbing",
+										"cursor-grab active:cursor-grabbing",
 										"gap-2 pr-sidebar-project-actions [&_svg]:size-icon-md",
 										"transition-none",
 										projectIsDragging && "!cursor-grabbing",
@@ -1402,7 +1396,7 @@ const ProjectItem = memo(function ProjectItem({
 								onClick={(event) => event.stopPropagation()}
 								onPointerDown={(event) => event.stopPropagation()}
 							>
-								{workspace.kind !== STANDALONE_PROJECT_KIND && <Tooltip>
+								<Tooltip>
 									<TooltipTrigger asChild>
 										<span className="inline-flex">
 											<button
@@ -1434,56 +1428,38 @@ const ProjectItem = memo(function ProjectItem({
 													? t("shell.orchestrator")
 													: t("shell.spawnOrchestratorLower")}
 									</TooltipContent>
-								</Tooltip>}
-								{workspace.kind === STANDALONE_PROJECT_KIND ? (
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<button
-												aria-label={t("shell.openNewAgent", { defaultValue: "Open a new agent" })}
-												className={HOVER_ACTION_CLASS}
-												onClick={() => requestNewTask(workspace.id)}
-												type="button"
-											>
-												<Plus aria-hidden="true" />
-											</button>
-										</TooltipTrigger>
-										<TooltipContent>
-											{t("shell.openNewAgent")}
-										</TooltipContent>
-									</Tooltip>
-								) : (
-									<DropdownMenu>
-										<DropdownMenuTrigger asChild>
-											<button
-												aria-label={t("shell.projectActions", {
-													name: workspace.name,
-												})}
-												className={HOVER_ACTION_CLASS}
-												type="button"
-											>
-												<MoreVertical aria-hidden="true" />
-											</button>
-										</DropdownMenuTrigger>
-										<DropdownMenuContent side="right" align="start" className="min-w-44">
-											<DropdownMenuItem disabled={isProjectRestarting} onSelect={() => requestNewTask(workspace.id)}>
-												<Plus aria-hidden="true" />
-												{t("shell.newTask")}
-											</DropdownMenuItem>
-											<DropdownMenuItem onSelect={() => selection.goSettings(workspace.id)}>
-												<Settings aria-hidden="true" />
-												{t("shell.projectSettings")}
-											</DropdownMenuItem>
-											<DropdownMenuItem
-												className="text-destructive focus:text-destructive [&_svg]:text-destructive focus:[&_svg]:text-destructive"
-												disabled={isRemoving}
-												onSelect={() => void removeProject()}
-											>
-												<Trash2 aria-hidden="true" />
-												{t("shell.removeProjectTitle")}
-											</DropdownMenuItem>
-										</DropdownMenuContent>
-									</DropdownMenu>
-								)}
+								</Tooltip>
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<button
+											aria-label={t("shell.projectActions", {
+												name: workspace.name,
+											})}
+											className={HOVER_ACTION_CLASS}
+											type="button"
+										>
+											<MoreVertical aria-hidden="true" />
+										</button>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent side="right" align="start" className="min-w-44">
+										<DropdownMenuItem disabled={isProjectRestarting} onSelect={() => requestNewTask(workspace.id)}>
+											<Plus aria-hidden="true" />
+											{t("shell.newTask")}
+										</DropdownMenuItem>
+										<DropdownMenuItem onSelect={() => selection.goSettings(workspace.id)}>
+											<Settings aria-hidden="true" />
+											{t("shell.projectSettings")}
+										</DropdownMenuItem>
+										<DropdownMenuItem
+											className="text-destructive focus:text-destructive [&_svg]:text-destructive focus:[&_svg]:text-destructive"
+											disabled={isRemoving}
+											onSelect={() => void removeProject()}
+										>
+											<Trash2 aria-hidden="true" />
+											{t("shell.removeProjectTitle")}
+										</DropdownMenuItem>
+									</DropdownMenuContent>
+								</DropdownMenu>
 							</div>
 						</div>
 						{/* end outer relative */}
@@ -1571,7 +1547,6 @@ const ProjectItem = memo(function ProjectItem({
 					<Plus aria-hidden="true" />
 					{t("shell.newTask")}
 				</ContextMenuItem>
-				{workspace.kind !== STANDALONE_PROJECT_KIND && <>
 				<ContextMenuItem onSelect={() => selection.goSettings(workspace.id)}>
 					<Settings aria-hidden="true" />
 					{t("shell.projectSettings")}
@@ -1584,7 +1559,6 @@ const ProjectItem = memo(function ProjectItem({
 					<Trash2 aria-hidden="true" />
 					{t("shell.removeProjectTitle")}
 				</ContextMenuItem>
-				</>}
 			</ContextMenuContent>
 		</ContextMenu>
 	);
