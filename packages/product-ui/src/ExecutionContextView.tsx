@@ -97,11 +97,9 @@ export function ExecutionContextView({
 						direction="down"
 					/>
 				</summary>
-				{path || repositories.length > 0 ? (
+				{path ? (
 					<div className="flex min-w-0 items-center gap-2 px-4 pb-2 text-2xs text-passive">
-						{repositories.length > 0 ? <span className="truncate">{repositories.join(", ")}</span> : null}
-						{repositories.length > 0 && path ? <span aria-hidden="true">·</span> : null}
-						{path ? <span className="truncate">{path}</span> : null}
+						<span className="truncate">{path}</span>
 					</div>
 				) : null}
 			</details>
