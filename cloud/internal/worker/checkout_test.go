@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -78,4 +79,66 @@ func TestCloneIntoNonEmptyWorkspaceStagesInsideWorkspace(t *testing.T) {
 			t.Fatalf("staging dir %q was left behind in the workspace", e.Name())
 		}
 	}
+}
+
+func TestConfigureWorkerGitRepairsUnbornHead(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	origin := filepath.Join(root, "origin.git")
+	source := filepath.Join(root, "source")
+	workspace := filepath.Join(root, "workspace")
+	dataDir := filepath.Join(root, "data")
+
+	runCheckoutGit(t, root, "init", "--bare", origin)
+	runCheckoutGit(t, root, "init", "--initial-branch", "main", source)
+	runCheckoutGit(t, source, "config", "user.name", "Checkout Test")
+	runCheckoutGit(t, source, "config", "user.email", "checkout-test@example.com")
+	if err := os.WriteFile(filepath.Join(source, "README.md"), []byte("ready\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runCheckoutGit(t, source, "add", "README.md")
+	runCheckoutGit(t, source, "commit", "-m", "initial")
+	runCheckoutGit(t, source, "remote", "add", "origin", origin)
+	runCheckoutGit(t, source, "push", "origin", "main")
+	runCheckoutGit(t, origin, "symbolic-ref", "HEAD", "refs/heads/main")
+	runCheckoutGit(t, root, "clone", "--no-checkout", origin, workspace)
+
+	if err := os.WriteFile(
+		filepath.Join(workspace, ".git", "HEAD"),
+		[]byte("ref: refs/heads/.invalid\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ConfigureWorkerGit(
+		ctx,
+		ExecGitRunner{},
+		workspace,
+		dataDir,
+		"https://cloud.example.com",
+		"session-1",
+		"ao/session-1",
+		"main",
+	); err != nil {
+		t.Fatalf("ConfigureWorkerGit: %v", err)
+	}
+
+	if got := strings.TrimSpace(runCheckoutGit(t, workspace, "symbolic-ref", "--short", "HEAD")); got != "ao/session-1" {
+		t.Fatalf("HEAD branch = %q, want %q", got, "ao/session-1")
+	}
+	if got := strings.TrimSpace(runCheckoutGit(t, workspace, "show", "HEAD:README.md")); got != "ready" {
+		t.Fatalf("README at repaired HEAD = %q, want %q", got, "ready")
+	}
+}
+
+func runCheckoutGit(t *testing.T, directory string, args ...string) string {
+	t.Helper()
+	command := exec.Command("git", args...)
+	command.Dir = directory
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, output)
+	}
+	return string(output)
 }

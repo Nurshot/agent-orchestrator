@@ -290,6 +290,8 @@ export interface CloudCpRestoreSessionResponse {
 export interface CloudCpSendMessageRequest {
 	/** 1-65536 bytes. */
 	text: string;
+	/** Monotonic order within one renderer startup attempt. */
+	clientSequence: number;
 }
 
 export interface CloudCpClientEvent {

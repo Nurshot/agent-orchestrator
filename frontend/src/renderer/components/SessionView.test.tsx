@@ -12,6 +12,11 @@ import type { WorkspaceSession, WorkspaceSummary } from "../types/workspace";
 import { setChatDraftBoundary } from "../lib/chat-draft-boundary";
 import { chatDraftScopeKey } from "../lib/chat-drafts";
 import { useFileAttachments, type FileAttachment } from "../hooks/useFileAttachments";
+import {
+	createCloudPendingSession,
+	registerCloudPendingSession,
+	resetCloudPendingSessionsForTests,
+} from "../lib/cloud-pending-session";
 
 const navigateMock = vi.hoisted(() => vi.fn());
 const openShellTerminalMock = vi.hoisted(() => vi.fn());
@@ -77,6 +82,9 @@ vi.mock("../hooks/useCloudCp", () => ({
 		client: { resumeSession: cloudResumeMock },
 		ready: true,
 	}),
+}));
+vi.mock("../lib/cloud-startup-progress", () => ({
+	useCloudStartupProgress: () => ({ phase: "preparing_repository" }),
 }));
 vi.mock("../hooks/useSessionInterfaceTransition", async (importOriginal) => ({
 	...await importOriginal<typeof import("../hooks/useSessionInterfaceTransition")>(),
@@ -679,6 +687,7 @@ describe("SessionView", () => {
 	}
 
 	beforeEach(() => {
+		resetCloudPendingSessionsForTests();
 		for (const sessionId of ["sess-1", "sess-2", "sess-orch", "sess-cross-project"]) {
 			setChatDraftBoundary(sessionId, "composer", undefined);
 			setChatDraftBoundary(sessionId, "inline-edit", undefined);
@@ -758,6 +767,31 @@ describe("SessionView", () => {
 			}
 			return { data: { reviewerHandleId: "", reviews: [], runs: [] }, error: undefined };
 		});
+	});
+
+	it("keeps the focused pending composer mounted while the route id binds", async () => {
+		const user = userEvent.setup();
+		const pending = registerCloudPendingSession({
+			attempt: { attemptId: "attempt-view", startedAtMs: performance.now() },
+			create: async () => "cloud-session-view",
+			initialPrompt: "Prepare the workspace",
+			orgId: "org-1",
+			projectId: "proj-1",
+			send: async () => undefined,
+		});
+		const view = render(<SessionView sessionId={pending.routeSessionId} />);
+		const composer = screen.getByRole("textbox", { name: "Add another instruction" });
+		await user.type(composer, "Keep this draft");
+
+		await act(async () => {
+			await createCloudPendingSession(pending.attemptId);
+		});
+		view.rerender(<SessionView sessionId="cloud-session-view" />);
+
+		expect(screen.getByRole("textbox", { name: "Add another instruction" })).toBe(composer);
+		expect(composer).toHaveValue("Keep this draft");
+		expect(composer).toHaveFocus();
+		expect(screen.queryByText("Session not found")).not.toBeInTheDocument();
 	});
 
 	// Regression: shell terminals are an app-wide list, so without a per-session

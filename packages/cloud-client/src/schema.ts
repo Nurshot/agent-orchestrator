@@ -1324,6 +1324,10 @@ export interface components {
         SendMessageInput: {
             text: string;
         };
+        UserSendMessageInput: {
+            text: string;
+            clientSequence: number;
+        };
         WorkerWorkspaceListPayload: {
             path: string;
             cursor?: string;
@@ -2652,9 +2656,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    text: string;
-                };
+                "application/json": components["schemas"]["UserSendMessageInput"];
             };
         };
         responses: {

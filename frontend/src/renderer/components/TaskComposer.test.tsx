@@ -10,7 +10,32 @@ const h = vi.hoisted(() => ({
 	capture: vi.fn(),
 	ensureReadiness: vi.fn(),
 	ensureTargetedReadiness: vi.fn(),
+	createCloudSession: vi.fn(),
+	sendCloudMessage: vi.fn(),
+	beginCloudStartupAttempt: vi.fn(() => ({ attemptId: "attempt-1", startedAtMs: 100 })),
+	bindCloudStartupAttempt: vi.fn(),
+	cloudProjects: [] as Array<{ id: string }>,
 	agentValues: [] as string[],
+}));
+
+vi.mock("../hooks/useCloudCp", () => ({
+	useCloudCp: () => ({
+		client: { createSession: h.createCloudSession, sendSessionMessage: h.sendCloudMessage },
+	}),
+}));
+
+vi.mock("../hooks/useCloudOrg", () => ({
+	useCloudOrg: () => ({ org: { id: "org-1" } }),
+}));
+
+vi.mock("../hooks/useWorkspaceQuery", () => ({
+	cloudSessionsQueryKey: ["cloud-sessions"],
+	useCloudProjectsQuery: () => ({ data: h.cloudProjects }),
+}));
+
+vi.mock("../lib/cloud-startup-timing", () => ({
+	beginCloudStartupAttempt: h.beginCloudStartupAttempt,
+	bindCloudStartupAttempt: h.bindCloudStartupAttempt,
 }));
 
 vi.mock("../hooks/useAgentReadinessQuery", async (importOriginal) => {
@@ -64,6 +89,7 @@ vi.mock("../lib/telemetry", () => ({ captureRendererEvent: h.capture }));
 import { TaskComposer } from "./TaskComposer";
 import { agentReadiness } from "../test/agent-readiness-fixtures";
 import { agentReadinessQueryKey } from "../hooks/useAgentReadinessQuery";
+import { resetCloudPendingSessionsForTests } from "../lib/cloud-pending-session";
 
 function Wrap({ children, queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }) }: {
 	children: ReactNode;
@@ -97,11 +123,67 @@ afterEach(() => {
 	h.capture.mockReset();
 	h.ensureReadiness.mockReset();
 	h.ensureTargetedReadiness.mockReset();
+	h.createCloudSession.mockReset();
+	h.sendCloudMessage.mockReset();
+	h.beginCloudStartupAttempt.mockClear();
+	h.bindCloudStartupAttempt.mockReset();
+	h.cloudProjects.length = 0;
 	vi.unstubAllGlobals();
 	h.agentValues.length = 0;
+	resetCloudPendingSessionsForTests();
 });
 
 describe("TaskComposer", () => {
+	it("binds a Cloud startup attempt to the session created from the user action", async () => {
+		h.cloudProjects.push({ id: "cloud-project" });
+		h.createCloudSession.mockResolvedValue({ session: { id: "cloud-session-1" } });
+		const onCreated = vi.fn();
+
+		render(
+			<Wrap>
+				<TaskComposer projectId="cloud-project" onCreated={onCreated} />
+			</Wrap>,
+		);
+		fireEvent.change(task(), { target: { value: "Measure startup" } });
+		fireEvent.click(screen.getByRole("button", { name: "Start task" }));
+
+		await waitFor(() => expect(onCreated).toHaveBeenCalledWith("cloud-session-1"));
+		expect(h.beginCloudStartupAttempt).toHaveBeenCalledOnce();
+		expect(h.bindCloudStartupAttempt).toHaveBeenCalledWith("cloud-session-1", {
+			attemptId: "attempt-1",
+			startedAtMs: 100,
+		});
+	});
+
+	it("opens the pending route before the Cloud create request settles", async () => {
+		h.cloudProjects.push({ id: "cloud-project" });
+		let resolveCreate!: (value: { session: { id: string } }) => void;
+		h.createCloudSession.mockReturnValue(new Promise((resolve) => {
+			resolveCreate = resolve;
+		}));
+		const onCreated = vi.fn();
+		const onPending = vi.fn();
+
+		render(
+			<Wrap>
+				<TaskComposer projectId="cloud-project" onCreated={onCreated} onPending={onPending} />
+			</Wrap>,
+		);
+		fireEvent.change(task(), { target: { value: "Start immediately" } });
+		fireEvent.click(screen.getByRole("button", { name: "Start task" }));
+
+		expect(onPending).toHaveBeenCalledWith("pending-cloud-attempt-1");
+		expect(onCreated).not.toHaveBeenCalled();
+		expect(h.createCloudSession).toHaveBeenCalledWith(
+			"org-1",
+			expect.any(Object),
+			{ idempotencyKey: "attempt-1" },
+		);
+
+		resolveCreate({ session: { id: "cloud-session-1" } });
+		await waitFor(() => expect(onCreated).toHaveBeenCalledWith("cloud-session-1"));
+	});
+
 	it("starts a standalone worker without loading or sending a project", async () => {
 		const onCreated = vi.fn();
 		h.post.mockResolvedValueOnce({ data: { session: { id: "standalone-1" } } });

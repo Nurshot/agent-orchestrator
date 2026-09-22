@@ -400,7 +400,7 @@ func (s *Store) SetSandboxDesiredState(
 		if tag.RowsAffected() == 0 {
 			return ErrNotFound
 		}
-		return nil
+		return notifySandboxReconcile(ctx, tx)
 	})
 }
 
@@ -442,7 +442,10 @@ func (s *Store) ResumeSession(
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrConflict
 		}
-		return err
+		if err != nil {
+			return err
+		}
+		return notifySandboxReconcile(ctx, tx)
 	})
 	return lifecycle, err
 }
@@ -482,6 +485,9 @@ func (s *Store) WakePausedSessions(
 			return fmt.Errorf("wake paused sessions: %w", err)
 		}
 		woken = tag.RowsAffected()
+		if woken > 0 {
+			return notifySandboxReconcile(ctx, tx)
+		}
 		return nil
 	})
 	return woken, err
@@ -559,6 +565,9 @@ func (s *Store) PauseIfIdle(
 			return fmt.Errorf("pause idle sandbox: %w", err)
 		}
 		paused = tag.RowsAffected() > 0
+		if paused {
+			return notifySandboxReconcile(ctx, tx)
+		}
 		return nil
 	})
 	if err != nil {

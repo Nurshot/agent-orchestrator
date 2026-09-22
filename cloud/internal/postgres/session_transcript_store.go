@@ -123,7 +123,7 @@ func (s *Store) TerminateSession(
 		); err != nil {
 			return fmt.Errorf("request sandbox deletion: %w", err)
 		}
-		return nil
+		return notifySandboxReconcile(ctx, tx)
 	})
 }
 
@@ -201,7 +201,7 @@ func (s *Store) RestoreSession(
 		); err != nil {
 			return fmt.Errorf("restore session sandbox: %w", err)
 		}
-		return nil
+		return notifySandboxReconcile(ctx, tx)
 	})
 }
 

@@ -1,0 +1,198 @@
+# Cloud cold-start validation report
+
+Date: 2026-09-22
+
+## Result
+
+The cold-start interaction is implemented and passes the local Docker, desktop,
+transport, lifecycle, failure, contract, type, build, race, and focused
+regression checks described below.
+
+The user can type immediately into a pending session. Session creation uses a
+stable idempotency key, additional messages are saved with stable keys and a
+monotonic client sequence, and the client flushes them in order after the
+control plane accepts the session. The pending surface remains until a visible,
+input-enabled terminal crosses the first-frame boundary.
+
+No warm capacity was used. Every measured session received a fresh worker.
+Browser startup remained lazy: the test first proved that Chromium was absent,
+then issued an explicit browser command and measured readiness. A prompt that
+mentions a browser does not start Chromium by itself. The reliable intent signal
+is the first browser operation requested by the coding harness.
+
+One product-validation gap remains:
+
+- No supported hosted-provider credentials were present, so no remote latency
+  claim was made.
+
+The earlier frontend browser failures were repaired. The hook fixture passes 20
+consecutive runs when its local fixture process is permitted. A separate full
+backend lint attempt still finds unrelated branch-level drift in tmux contracts,
+inherited worker-session environment, and the expected bundled runtime asset.
+Backend build, vet, and static analysis pass, and no backend package was changed
+for this Cloud implementation.
+
+## Implemented behavior
+
+- Immediate pending-session navigation and a focused composer.
+- Stable create and message idempotency keys for safe retries.
+- Ordered early-message delivery with `clientSequence` values.
+- Durable startup events for checkout, restore, workspace, agent launch, ready,
+  and bounded failure states.
+- Credential preparation and terminal reservation overlap repository setup.
+- Reconcile wakes interrupt the normal polling interval.
+- Stream with relay, stream with durable delivery, and polling fallback.
+- Worker replacement, pause and resume, control-plane restart, full-stack
+  restart, persistent workspace storage, and cleanup.
+- Lazy browser startup with bounded restart behavior.
+- Explicit terminal replay completion, including frame buffering before
+  listeners subscribe and a reset-only replay that cannot reveal an empty pane.
+- A database readiness check that rejects the temporary first-run PostgreSQL
+  postmaster. This fixes a race where migration could connect just as the
+  temporary server shut down.
+
+## User-visible desktop timing
+
+The real Electron app ran from an isolated checkout with isolated data and the
+local Docker control plane. The window was mapped, focused, and visibly painted.
+A renderer-side observer measured one task submission:
+
+| Boundary | Time after submit |
+| --- | ---: |
+| Pending session visible | 339 ms |
+| Durable session route bound | 822 ms |
+| Sandbox provisioned | 301 ms |
+| Browser terminal ready | 861 ms |
+| First terminal output accepted | 1,314 ms |
+| Terminal uncovered and input-ready | 1,751 ms |
+
+The server provisioned the fresh Docker sandbox in 205 ms. The terminal ticket
+returned 201, then the browser terminal attached and became ready. The first
+output followed, the renderer consumed the explicit replay boundary, xterm
+completed its paint preparation, and the pending surface disappeared. The final
+frame showed a connected state, no replay cover, and enabled terminal input.
+This synthetic run validates the renderer and transport boundaries only. It is
+not production harness evidence and must not be presented as the shipped UI.
+
+An earlier 120-second apparent stall was invalid test evidence. The isolated
+window was mapped on an inactive compositor workspace, which paused animation
+frames even though the document reported itself visible. Focusing the exact
+window allowed the pending paint boundary to complete. The final measurement
+was taken only after the window was focused.
+
+## Five-run local Docker distribution
+
+These numbers begin with session creation after the local control plane is
+ready. Worker images and container layers were cached. Control-plane build and
+boot time are excluded. With only five samples, observed p95 equals the maximum.
+
+| Boundary | p50 | p95 / max |
+| --- | ---: | ---: |
+| Session accepted | 14 ms | 16 ms |
+| Early message accepted | 23 ms | 25 ms |
+| Worker connected | 237 ms | 239 ms |
+| Worker ready | 237 ms | 342 ms |
+| Checkout, restore, workspace, and agent ready | 1,166 ms | 1,269 ms |
+| Early message delivered | 1,171 ms | 1,273 ms |
+| Explicit browser command to browser ready | 895 ms | 933 ms |
+
+Individual session-ready results were 1,269 ms, 1,166 ms, 1,169 ms, 1,165 ms,
+and 1,166 ms. Early delivery followed at 1,273 ms, 1,170 ms, 1,173 ms,
+1,169 ms, and 1,171 ms.
+
+## Transport and host-load variations
+
+| Mode | Session accepted | Worker ready | Agent ready | Early delivery | Browser command |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Stream plus relay | 119 ms | 8,115 ms | 9,965 ms | 10,471 ms | 18,229 ms |
+| Stream plus durable mirror | 14 ms | 237 ms | 1,063 ms | 1,067 ms | 972 ms |
+| Polling fallback | 14 ms | 238 ms | 1,576 ms | 1,579 ms | 879 ms |
+
+The first row is a real cold-host and host-load outlier, not the normal cached
+distribution. It is retained because it demonstrates that the pending input and
+exactly-once delivery still work through a roughly 10-second worker start.
+
+The lifecycle continuation passed child coordination, pause and resume, worker
+replacement, control-plane restart, full-stack restart, workspace persistence,
+and cleanup.
+
+## Checkout comparison
+
+All required operations passed for every candidate: status, log, blame, diff,
+branch, fetch, rebase, submodule handling, and large-file pointer handling.
+
+| Repository | Candidate | Clone median | First omitted blob | Git bytes | Missing objects before access |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Small | Full | 14 ms | 2 ms | 70,389 | 0 |
+| Small | Partial | 26 ms | 10 ms | 81,774 | 15 |
+| Small | Protocol-tuned | 21 ms | 10 ms | 81,774 | 15 |
+| Medium | Full | 22 ms | 2 ms | 91,152 | 0 |
+| Medium | Partial | 30 ms | 10 ms | 115,877 | 39 |
+| Medium | Protocol-tuned | 29 ms | 10 ms | 115,877 | 39 |
+| Large | Full | 36 ms | 2 ms | 133,910 | 0 |
+| Large | Partial | 46 ms | 11 ms | 184,818 | 69 |
+| Large | Protocol-tuned | 48 ms | 10 ms | 184,818 | 69 |
+
+Decision: keep full checkout as the production default. In this local synthetic
+matrix, partial checkout was slower, transferred more Git metadata, and added an
+on-demand fetch delay without improving the tested workflow.
+
+## Failure matrix
+
+The following owning boundaries passed:
+
+- Checkout denial prevents agent launch.
+- Credential fetch failure publishes a bounded startup failure.
+- Restore failure stops startup.
+- Process launch failure cleans up the terminal reservation.
+- Stream disconnect falls back to durable delivery, while permanent rejection
+  stops retrying.
+- Repeated browser launch failure parks Chromium rather than looping forever.
+- The renderer projects startup failures without enabling raw terminal input.
+
+## Regression results
+
+- Frontend unit suite: 327 files passed, 4,953 tests passed, 7 skipped.
+- Frontend browser suite: 88 passed, 4 performance workloads skipped.
+- Frontend typecheck, end-to-end typecheck, and packaged desktop build: passed.
+- Cloud client: 21 tests, typecheck, generated-schema drift check, and build
+  passed.
+- Product UI: 128 tests, typecheck, and build passed.
+- Cloud module: tests, race detector, vet, and build passed.
+- Backend: build and vet passed. Static analysis reported zero issues. The hook
+  fixture passed 20 consecutive runs and its complete package passed when local
+  fixture processes were enabled.
+- Docker Compose configuration validation passed after the PostgreSQL health
+  check change.
+- Focused pending-session, startup projection, timing, telemetry, contract,
+  lifecycle, failure, browser, and checkout checks passed.
+
+The full backend `npm run lint` command is not green on this branch. Its
+unrelated failures include tmux tests that expect commands without the named
+`ao` socket while the implementation emits that socket, CLI tests that inherit
+this worker's session identifier, system checks that expect a bundled tmux asset
+outside the checkout, and shell integration that assumes POSIX parameter syntax
+while this host is configured for fish. The Cloud module has its own complete
+test, race, vet, and build pass, so these failures do not reduce the Cloud
+cold-start evidence. They should be resolved with the backend-cleanup branch
+owner rather than folded into this feature.
+
+## Hosted-provider limitation
+
+The implementation supports the configured hosted providers, but this workspace
+contains no matching provider environment variables or deployment credentials.
+Only the example environment file is present. A deployment was neither required
+nor authorized for this local implementation task, so remote fresh-start,
+restore, and browser percentiles were not measured.
+
+Do not use the local Docker percentiles as hosted-provider promises. Remote
+numbers must be gathered against the actual provider, region, image cache
+state, repository size, and network path.
+
+## Cleanup
+
+The isolated desktop app and daemon were stopped. The five worker containers,
+three Compose containers, five workspace volumes, Compose network, test-specific
+image tags, temporary desktop worktree, scratch application data, PostgreSQL
+data, fixture tooling, measurement scripts, screenshot, credential scratch
+paths, and transfer file were removed. No unrelated container was touched.

@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -96,6 +97,74 @@ func testReconciler(store Store, provider sandbox.Provider) *Reconciler {
 	return New(store, lifecycleResolver{provider: provider}, Options{
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
+}
+
+type wakeStore struct {
+	*lifecycleStore
+	claims atomic.Int64
+	seen   chan int64
+}
+
+func (s *wakeStore) ClaimSandboxes(context.Context, string, int, time.Duration) ([]domain.Sandbox, error) {
+	claim := s.claims.Add(1)
+	select {
+	case s.seen <- claim:
+	default:
+	}
+	return nil, nil
+}
+
+func TestReconcilerWake(t *testing.T) {
+	t.Parallel()
+	store := &wakeStore{
+		lifecycleStore: &lifecycleStore{},
+		seen:           make(chan int64, 4),
+	}
+	reconciler := New(store, lifecycleResolver{provider: &lifecycleProvider{}}, Options{
+		Interval: time.Hour,
+		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	for index := 0; index < 10; index++ {
+		reconciler.Wake()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- reconciler.Run(ctx) }()
+	for want := int64(1); want <= 2; want++ {
+		select {
+		case got := <-store.seen:
+			if got != want {
+				t.Fatalf("reconcile pass = %d, want %d", got, want)
+			}
+		case <-time.After(500 * time.Millisecond):
+			t.Fatalf("reconcile pass %d did not run", want)
+		}
+	}
+	select {
+	case got := <-store.seen:
+		t.Fatalf("duplicate wake produced reconcile pass %d", got)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	reconciler.Wake()
+	select {
+	case got := <-store.seen:
+		if got != 3 {
+			t.Fatalf("reconcile pass after wake = %d, want 3", got)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("wake did not interrupt the reconcile interval")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("run reconciler: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("reconciler did not stop after cancellation")
+	}
 }
 
 func runningRecord(keepAlive bool) domain.Sandbox {

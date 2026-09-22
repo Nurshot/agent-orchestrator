@@ -20,7 +20,8 @@ const (
 )
 
 type sendMessageRequest struct {
-	Text string `json:"text"`
+	Text           string `json:"text"`
+	ClientSequence int64  `json:"clientSequence"`
 }
 
 type clientEventResponse struct {
@@ -52,6 +53,10 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, "validation_error", "Message text must be between 1 and 65536 bytes.")
 		return
 	}
+	if request.ClientSequence <= 0 || request.ClientSequence > maxEventSequence {
+		writeError(w, r, http.StatusUnprocessableEntity, "validation_error", "clientSequence must be a positive safe integer.")
+		return
+	}
 	event, err := s.store.SendMessage(
 		r.Context(),
 		principalFrom(r),
@@ -59,6 +64,7 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request) {
 		sessionID,
 		key,
 		request.Text,
+		request.ClientSequence,
 	)
 	if err != nil {
 		s.writeStoreError(w, r, err)

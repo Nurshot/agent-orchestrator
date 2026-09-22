@@ -170,14 +170,14 @@ func cloneIntoNonEmptyWorkspace(ctx context.Context, runner GitRunner, workspace
 func ConfigureWorkerGit(
 	ctx context.Context,
 	runner GitRunner,
-	workspace, dataDir, publicURL, sessionID, branch string,
+	workspace, dataDir, publicURL, sessionID, branch, defaultBranch string,
 ) error {
 	if runner == nil {
 		return errors.New("git runner is required")
 	}
 	for label, value := range map[string]string{
 		"workspace": workspace, "data directory": dataDir, "public URL": publicURL,
-		"session ID": sessionID, "branch": branch,
+		"session ID": sessionID, "branch": branch, "default branch": defaultBranch,
 	} {
 		if strings.TrimSpace(value) == "" {
 			return fmt.Errorf("%s is required", label)
@@ -255,13 +255,17 @@ GH_TOKEN="$github_token" exec "$real_gh" "$@"
 	if err := os.WriteFile(filepath.Join(binDir, "gh"), []byte(githubWrapper), 0o700); err != nil {
 		return fmt.Errorf("write worker GitHub CLI wrapper: %w", err)
 	}
+	checkout := []string{"checkout", "-B", branch}
+	if _, err := runner.Run(ctx, workspace, nil, "rev-parse", "--verify", "--quiet", "HEAD^{commit}"); err != nil {
+		checkout = append(checkout, "refs/remotes/origin/"+defaultBranch)
+	}
 	commands := [][]string{
 		{"config", "--local", "--replace-all", "credential.helper", ""},
 		{"config", "--local", "--add", "credential.helper", helperPath},
 		{"config", "--local", "--replace-all", "credential.useHttpPath", "true"},
 		{"config", "--local", "--replace-all", "user.name", cloudGitAuthorName},
 		{"config", "--local", "--replace-all", "user.email", cloudGitAuthorEmail},
-		{"checkout", "-B", branch},
+		checkout,
 	}
 	for _, command := range commands {
 		if _, err := runner.Run(ctx, workspace, nil, command...); err != nil {

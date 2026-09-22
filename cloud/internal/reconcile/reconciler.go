@@ -149,6 +149,7 @@ type Reconciler struct {
 	owner     string
 	lease     time.Duration
 	log       *slog.Logger
+	wake      chan struct{}
 	// workerBinarySHA256 and workerHelperBinarySHA256 are advertised to each
 	// worker in its environment so a stale baked copy can self-update to this
 	// exact build instead of the control plane uploading it on every provision.
@@ -221,8 +222,18 @@ func New(store Store, providers Resolver, options Options) *Reconciler {
 		owner:                    uuid.NewString(),
 		lease:                    options.LeaseDuration,
 		log:                      options.Logger,
+		wake:                     make(chan struct{}, 1),
 		workerBinarySHA256:       sha256HexOf(options.WorkerBinary),
 		workerHelperBinarySHA256: sha256HexOf(options.WorkerHelperBinary),
+	}
+}
+
+// Wake schedules an immediate reconciliation pass. The durable sandbox rows
+// remain authoritative, and duplicate signals collapse into one pending pass.
+func (r *Reconciler) Wake() {
+	select {
+	case r.wake <- struct{}{}:
+	default:
 	}
 }
 
@@ -238,9 +249,10 @@ func (r *Reconciler) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			if err := r.ReconcileOnce(ctx); err != nil && !errors.Is(err, context.Canceled) {
-				r.log.Error("sandbox reconciliation failed", "err", err)
-			}
+		case <-r.wake:
+		}
+		if err := r.ReconcileOnce(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			r.log.Error("sandbox reconciliation failed", "err", err)
 		}
 	}
 }

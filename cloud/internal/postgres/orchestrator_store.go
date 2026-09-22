@@ -150,7 +150,7 @@ func (s *Store) SendOrchestratorChildMessage(
 			return ErrForbidden
 		}
 		event, err = sendMessageTx(
-			ctx, tx, orgID, childSessionID, idempotencyKey, text, "", orchestratorSessionID,
+			ctx, tx, orgID, childSessionID, idempotencyKey, text, 0, "", orchestratorSessionID,
 			"", nil,
 		)
 		return err
@@ -193,7 +193,7 @@ func (s *Store) ReportToOrchestrator(
 			"[from worker %s %q] %s", shortSessionID(childSessionID), childName, text,
 		)
 		event, err = sendMessageTx(
-			ctx, tx, orgID, parentID, idempotencyKey, prefixed, "", childSessionID,
+			ctx, tx, orgID, parentID, idempotencyKey, prefixed, 0, "", childSessionID,
 			"", nil,
 		)
 		return err
@@ -240,7 +240,7 @@ func (s *Store) DeleteOrchestratorChild(
 		if tag.RowsAffected() == 0 {
 			return ErrForbidden
 		}
-		return nil
+		return notifySandboxReconcile(ctx, tx)
 	})
 }
 

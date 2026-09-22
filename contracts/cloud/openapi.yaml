@@ -497,13 +497,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [text]
-              properties:
-                text:
-                  type: string
-                  minLength: 1
-                  maxLength: 65536
+              $ref: "#/components/schemas/UserSendMessageInput"
       responses:
         "202":
           description: Message accepted and durably appended.
@@ -2450,6 +2444,19 @@ components:
           type: string
           minLength: 1
           maxLength: 65536
+    UserSendMessageInput:
+      type: object
+      additionalProperties: false
+      required: [text, clientSequence]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 65536
+        clientSequence:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
     WorkerWorkspaceListPayload:
       type: object
       additionalProperties: false

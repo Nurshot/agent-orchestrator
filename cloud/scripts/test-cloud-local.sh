@@ -3,6 +3,17 @@ set -euo pipefail
 
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$repository_root/scripts/lib/docker-local.sh"
+
+measure_startup=false
+case "${1:-}" in
+	"") ;;
+	--measure-startup) measure_startup=true ;;
+	*)
+		echo "Usage: $0 [--measure-startup]" >&2
+		exit 2
+		;;
+esac
+
 if ! ao_docker_available; then
 	printf 'SKIP: Docker Engine with Compose is unavailable; local lifecycle smoke test not run.\n'
 	exit 0
@@ -14,6 +25,31 @@ mkdir -p "$state_root"
 umask 077
 state_directory="$(mktemp -d "${state_root}/cloud-smoke.XXXXXX")"
 state_file="${state_directory}/state.json"
+
+export AO_CLOUD_SMOKE_DOCKERFILE="$repository_root/Dockerfile"
+if ! docker buildx version >/dev/null 2>&1; then
+	AO_CLOUD_SMOKE_DOCKERFILE="$state_directory/Dockerfile.classic"
+	python3 - "$repository_root/Dockerfile" "$AO_CLOUD_SMOKE_DOCKERFILE" <<'PY'
+import pathlib
+import sys
+
+source, destination = map(pathlib.Path, sys.argv[1:])
+text = source.read_text()
+text = text.replace(
+    "RUN --mount=type=cache,target=/go/pkg/mod go mod download",
+    "RUN go mod download",
+)
+text = text.replace(
+    "RUN --mount=type=cache,target=/go/pkg/mod \\\n"
+    "    --mount=type=cache,target=/root/.cache/go-build \\\n"
+    "    CGO_ENABLED=0",
+    "RUN CGO_ENABLED=0",
+)
+if "--mount=type=cache" in text:
+    raise SystemExit("classic-builder Dockerfile still contains cache mounts")
+destination.write_text(text)
+PY
+fi
 
 free_port() {
 	python3 - <<'PY'
@@ -35,6 +71,8 @@ AO_CLOUD_WORKER_SIGNING_KEY="$(openssl rand -hex 32)"
 export AO_CLOUD_DOCKER_GID
 AO_CLOUD_DOCKER_GID="$(ao_docker_socket_gid)"
 export AO_CLOUD_DOCKER_WORKER_IMAGE="${project_name}-worker:smoke"
+export AO_CLOUD_DOCKER_EXTRA_LABELS_JSON
+AO_CLOUD_DOCKER_EXTRA_LABELS_JSON="{\"ao.session\":\"${AO_SESSION_ID:-local}\"}"
 export AO_CLOUD_DEVELOPMENT_SKIP_CREDENTIAL_VALIDATION="true"
 # Opt-in low-latency terminal streams (issue #4763). Compose forwards this to
 # the control plane, which forwards it to worker containers. Unset keeps the
@@ -45,8 +83,22 @@ export AO_CLOUD_TERMINAL_STREAM="${AO_CLOUD_TERMINAL_STREAM:-}"
 export AO_CLOUD_TERMINAL_RELAY="${AO_CLOUD_TERMINAL_RELAY:-}"
 export COMPOSE_PROJECT_NAME="$project_name"
 
+case "$(uname -m)" in
+	x86_64) export AO_CLOUD_SMOKE_TARGET_ARCH=amd64 ;;
+	aarch64|arm64) export AO_CLOUD_SMOKE_TARGET_ARCH=arm64 ;;
+	*)
+		echo "Unsupported smoke-test architecture: $(uname -m)" >&2
+		exit 1
+		;;
+esac
+export AO_CLOUD_SMOKE_BUILD_PLATFORM="linux/${AO_CLOUD_SMOKE_TARGET_ARCH}"
+
 compose() {
-	docker compose --project-directory "$repository_root" "$@"
+	docker compose \
+		--project-directory "$repository_root" \
+		--file "$repository_root/compose.yaml" \
+		--file "$repository_root/compose.smoke.yaml" \
+		"$@"
 }
 
 cleanup() {
@@ -175,6 +227,45 @@ def events(org_id, session_id, token):
     )["events"]
 
 
+def wait_for_startup(org_id, session_id, token, started, milestones):
+    wanted = {
+        "sandbox.provisioning": "sandboxProvisioningMs",
+        "worker.connected": "workerConnectedMs",
+        "worker.ready": "workerReadyMs",
+        "checkout.started": "checkoutStartedMs",
+        "checkout.completed": "checkoutCompletedMs",
+        "restore.started": "restoreStartedMs",
+        "restore.completed": "restoreCompletedMs",
+        "workspace.ready": "workspaceReadyMs",
+        "agent.launch_started": "agentLaunchStartedMs",
+        "agent.ready": "agentReadyMs",
+    }
+    deadline = time.monotonic() + 90
+    last_state = None
+    while time.monotonic() < deadline:
+        session = request(
+            "GET",
+            f"/api/cloud/v1/orgs/{org_id}/sessions/{session_id}",
+            token=token,
+        )["session"]
+        last_state = session["runtimeState"]
+        now_ms = round((time.monotonic() - started) * 1000)
+        if last_state == "running":
+            milestones.setdefault("runtimeRunningMs", now_ms)
+        if last_state == "failed":
+            raise RuntimeError(f"worker provisioning failed: {session!r}")
+        for event in events(org_id, session_id, token):
+            key = wanted.get(event.get("type"))
+            if key:
+                milestones.setdefault(key, now_ms)
+        if last_state == "running" and "agentReadyMs" in milestones:
+            return session
+        time.sleep(0.1)
+    raise RuntimeError(
+        f"startup milestones did not complete; state={last_state!r}, milestones={milestones!r}"
+    )
+
+
 def wait_for_terminal_turn(org_id, session_id, token, previous):
     terminal_types = {
         "chat.turn_completed",
@@ -189,6 +280,25 @@ def wait_for_terminal_turn(org_id, session_id, token, previous):
             return len(terminal)
         time.sleep(0.5)
     raise RuntimeError("worker did not durably finish the queued turn")
+
+
+def wait_for_agent_terminal_ticket(org_id, session_id, token):
+    deadline = time.monotonic() + 90
+    while time.monotonic() < deadline:
+        try:
+            return request(
+                "POST",
+                f"/api/cloud/v1/orgs/{org_id}/sessions/{session_id}/terminal-ticket",
+                body={"kind": "agent"},
+                token=token,
+                expected=201,
+            )
+        except RuntimeError as error:
+            detail = str(error)
+            if "returned 409" not in detail or '"code":"WORKER_UNAVAILABLE"' not in detail:
+                raise
+            time.sleep(0.25)
+    raise RuntimeError("agent terminal did not become available")
 
 
 if mode == "create":
@@ -216,24 +326,17 @@ if mode == "create":
         },
         token=token,
     )
-    project = request(
-        "POST",
-        f"/api/cloud/v1/orgs/{org_id}/projects",
-        body={
-            "displayName": "Persistence Test",
-            "repositoryUrl": "https://github.com/octocat/Hello-World",
-            "defaultBranch": "main",
-            "config": {},
-        },
-        token=token,
-        idempotency_key=f"project-{suffix}",
-        expected=201,
-    )["project"]
+    state_file.write_text(json.dumps({"token": token, "orgId": org_id}))
+elif mode == "start":
+    state = json.loads(state_file.read_text())
+    token = state["token"]
+    org_id = state["orgId"]
+    startup_started = time.monotonic()
     session = request(
         "POST",
         f"/api/cloud/v1/orgs/{org_id}/sessions",
         body={
-            "projectId": project["id"],
+            "projectId": state["projectId"],
             "kind": "orchestrator",
             "harness": "claude-code",
             "displayName": "Persistence Test",
@@ -241,10 +344,53 @@ if mode == "create":
             "mode": "trusted",
         },
         token=token,
-        idempotency_key=f"session-{suffix}",
+        idempotency_key=f"session-{time.time_ns()}",
         expected=201,
     )["session"]
-    wait_for_running(org_id, session["id"], token)
+    milestones = {
+        "sessionAcceptedMs": round((time.monotonic() - startup_started) * 1000)
+    }
+    early_message_key = f"early-message-{time.time_ns()}"
+    early_message_text = f"cold-start-early-message-{time.time_ns()}"
+    early_message = request(
+        "POST",
+        f"/api/cloud/v1/orgs/{org_id}/sessions/{session['id']}/messages",
+        body={"text": early_message_text, "clientSequence": 1},
+        token=token,
+        idempotency_key=early_message_key,
+        expected=202,
+    )["event"]
+    repeated_message = request(
+        "POST",
+        f"/api/cloud/v1/orgs/{org_id}/sessions/{session['id']}/messages",
+        body={"text": early_message_text, "clientSequence": 1},
+        token=token,
+        idempotency_key=early_message_key,
+        expected=202,
+    )["event"]
+    if repeated_message.get("sequence") != early_message.get("sequence"):
+        raise RuntimeError(
+            f"idempotent early message changed sequence: {early_message!r} vs {repeated_message!r}"
+        )
+    milestones["earlyMessageAcceptedMs"] = round(
+        (time.monotonic() - startup_started) * 1000
+    )
+    wait_for_startup(org_id, session["id"], token, startup_started, milestones)
+    wait_for_terminal_turn(org_id, session["id"], token, 0)
+    matching_messages = [
+        event
+        for event in events(org_id, session["id"], token)
+        if event.get("type") == "chat.user_message"
+        and event.get("payload", {}).get("clientSequence") == 1
+        and event.get("payload", {}).get("text") == early_message_text
+    ]
+    if len(matching_messages) != 1:
+        raise RuntimeError(
+            f"early message was not durable exactly once: {matching_messages!r}"
+        )
+    milestones["earlyMessageDeliveredMs"] = round(
+        (time.monotonic() - startup_started) * 1000
+    )
     workspace_file = request(
         "PUT",
         f"/api/cloud/v1/orgs/{org_id}/sessions/{session['id']}/workspace/file",
@@ -269,35 +415,16 @@ if mode == "create":
     )
     if ".ao-cloud-smoke-api" not in {item.get("path") for item in listing["items"]}:
         raise RuntimeError(f"workspace listing omitted the written file: {listing!r}")
-    request(
-        "POST",
-        f"/api/cloud/v1/orgs/{org_id}/sessions/{session['id']}/terminal-ticket",
-        body={"kind": "agent"},
-        token=token,
-        expected=201,
-    )
-    state_file.write_text(
-        json.dumps(
-            {
-                "token": token,
-                "orgId": org_id,
-                "sessionId": session["id"],
-            }
-        )
-    )
+    wait_for_agent_terminal_ticket(org_id, session["id"], token)
+    state.update({"sessionId": session["id"], "timing": milestones})
+    state_file.write_text(json.dumps(state))
 elif mode == "verify":
     state = json.loads(state_file.read_text())
     token = state["token"]
     org_id = state["orgId"]
     session_id = state["sessionId"]
     wait_for_running(org_id, session_id, token)
-    request(
-        "POST",
-        f"/api/cloud/v1/orgs/{org_id}/sessions/{session_id}/terminal-ticket",
-        body={"kind": "agent"},
-        token=token,
-        expected=201,
-    )
+    wait_for_agent_terminal_ticket(org_id, session_id, token)
 elif mode == "wake":
     state = json.loads(state_file.read_text())
     token = state["token"]
@@ -312,13 +439,7 @@ elif mode == "wake":
     if resume.get("desiredState") != "running":
         raise RuntimeError(f"resume did not record running intent: {resume!r}")
     wait_for_running(org_id, session_id, token)
-    request(
-        "POST",
-        f"/api/cloud/v1/orgs/{org_id}/sessions/{session_id}/terminal-ticket",
-        body={"kind": "agent"},
-        token=token,
-        expected=201,
-    )
+    wait_for_agent_terminal_ticket(org_id, session_id, token)
 else:
     raise RuntimeError(f"unknown smoke-test mode: {mode}")
 PY
@@ -341,6 +462,45 @@ import pathlib
 import sys
 
 print(json.loads(pathlib.Path(sys.argv[1]).read_text())["orgId"])
+PY
+}
+
+seed_smoke_project() {
+	local org project
+	org="$(org_id)"
+	# Project creation normally verifies a user credential against the remote
+	# repository API. Seed only this disposable local database so the smoke test
+	# stays credential-free and the Docker worker exercises anonymous checkout.
+	project="$(
+		compose exec \
+			-e "PGOPTIONS=-c ao.org_id=${org}" \
+			-T postgres \
+			psql \
+			--username ao_cloud_owner \
+			--dbname ao_cloud \
+			--quiet \
+			--tuples-only \
+			--no-align \
+			--command \
+			"INSERT INTO ao_projects (
+				org_id, display_name, repository_url, default_branch, config
+			) VALUES (
+				'${org}', 'Persistence Test',
+				'https://github.com/octocat/Hello-World', 'main', '{}'::jsonb
+			) RETURNING id"
+	)"
+	python3 - "$state_file" "$project" <<'PY'
+import json
+import pathlib
+import sys
+import uuid
+
+path = pathlib.Path(sys.argv[1])
+state = json.loads(path.read_text())
+project_id = sys.argv[2].strip()
+uuid.UUID(project_id)
+state["projectId"] = project_id
+path.write_text(json.dumps(state))
 PY
 }
 
@@ -383,6 +543,41 @@ wait_for_worker_stopped() {
 	done
 	echo "Worker container ${container_id} did not stop for the pause test." >&2
 	compose logs control-plane >&2
+	return 1
+}
+
+has_chromium_process() {
+	local container_id="$1"
+	docker exec "$container_id" sh -c '
+for process in /proc/[0-9]*; do
+    [ -r "$process/comm" ] || continue
+    name="$(cat "$process/comm")"
+    case "$name" in
+        chromium|chrome|chrome-headless-shell|headless_shell) exit 0 ;;
+    esac
+done
+exit 1
+'
+}
+
+assert_chromium_absent() {
+	local container_id="$1"
+	if has_chromium_process "$container_id"; then
+		echo "Chromium started before explicit browser intent." >&2
+		return 1
+	fi
+}
+
+assert_chromium_running() {
+	local container_id="$1" attempts=30
+	while ((attempts > 0)); do
+		if has_chromium_process "$container_id"; then
+			return 0
+		fi
+		attempts=$((attempts - 1))
+		sleep 0.1
+	done
+	echo "Chromium did not remain running after explicit browser intent." >&2
 	return 1
 }
 
@@ -467,6 +662,61 @@ if asset != "window.vmBrowserSmoke = true;":
 PY
 }
 
+measure_browser_ready() {
+	local container_id="$1"
+	python3 - "$container_id" <<'PY'
+import subprocess
+import sys
+import time
+
+container_id = sys.argv[1]
+command = r'''
+set -e
+agent_pid=""
+for candidate in /proc/[0-9]*; do
+    [ -r "$candidate/environ" ] || continue
+    if tr '\0' '\n' < "$candidate/environ" | grep -q '^AO_BROWSER_API_URL='; then
+        agent_pid="${candidate##*/}"
+        break
+    fi
+done
+[ -n "$agent_pid" ]
+browser_api="$(tr '\0' '\n' < "/proc/$agent_pid/environ" | sed -n 's/^AO_BROWSER_API_URL=//p')"
+browser_capability="$(tr '\0' '\n' < "/proc/$agent_pid/environ" | sed -n 's/^AO_BROWSER_CAPABILITY=//p')"
+session_id="$(tr '\0' '\n' < "/proc/$agent_pid/environ" | sed -n 's/^AO_SESSION_ID=//p')"
+[ -n "$browser_api" ]
+[ -n "$browser_capability" ]
+[ -n "$session_id" ]
+AO_SESSION_ID="$session_id" AO_BROWSER_API_URL="$browser_api" AO_BROWSER_CAPABILITY="$browser_capability" \
+    ao browser open localhost:3000 >/dev/null
+'''
+started = time.monotonic()
+subprocess.run(
+    ["docker", "exec", container_id, "bash", "-c", command],
+    check=True,
+)
+print(round((time.monotonic() - started) * 1000))
+PY
+}
+
+record_startup_result() {
+	local browser_ready_ms="$1"
+	python3 - "$state_file" "$browser_ready_ms" "${AO_CLOUD_STARTUP_RESULT_FILE:-}" <<'PY'
+import json
+import pathlib
+import sys
+
+state_path, browser_ready_ms, result_path = sys.argv[1:]
+state = json.loads(pathlib.Path(state_path).read_text())
+result = dict(state["timing"])
+result["browserReadyMs"] = int(browser_ready_ms)
+payload = json.dumps(result, sort_keys=True)
+if result_path:
+    pathlib.Path(result_path).write_text(payload + "\n")
+print("COLD_START_RESULT " + payload)
+PY
+}
+
 compose --profile worker-image build worker-image
 docker build \
 	--build-arg "BASE_IMAGE=${AO_CLOUD_DOCKER_WORKER_IMAGE}" \
@@ -507,9 +757,19 @@ if [[ "$role_state" != "$expected_role_state" ]]; then
 fi
 
 exercise_api create
+seed_smoke_project
+exercise_api start
 session="$(session_id)"
 org="$(org_id)"
 first_worker="$(wait_for_worker "$session")"
+assert_chromium_absent "$first_worker"
+if [[ "$measure_startup" == true ]]; then
+	exercise_browser_proxy "$first_worker"
+	browser_ready_ms="$(measure_browser_ready "$first_worker")"
+	assert_chromium_running "$first_worker"
+	record_startup_result "$browser_ready_ms"
+	exit 0
+fi
 docker exec "$first_worker" ao list >/dev/null
 # ao-worker boot must materialize the cloud using-ao skill where the standing
 # prompts point the agent.
@@ -520,7 +780,15 @@ docker exec "$first_worker" test -f /workspace/.ao/worker/skills/using-ao/comman
 wait_for_process_marker() {
 	local container="$1" marker="$2" attempts=30
 	while ((attempts > 0)); do
-		if docker exec "$container" sh -c "ps ax | grep -v grep | grep -q '$marker'"; then
+		if docker exec "$container" sh -c '
+			for cmdline in /proc/[0-9]*/cmdline; do
+				[ -r "$cmdline" ] || continue
+				if tr "\000" "\n" < "$cmdline" | grep -Fq -- "$1"; then
+					exit 0
+				fi
+			done
+			exit 1
+		' sh "$marker"; then
 			return 0
 		fi
 		attempts=$((attempts - 1))

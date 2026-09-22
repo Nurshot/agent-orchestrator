@@ -727,7 +727,7 @@ func createSessionTx(
 	}
 	if input.Prompt != "" {
 		if _, err := appendUserMessageEvent(
-			ctx, tx, orgID, session.ID, input.Prompt,
+			ctx, tx, orgID, session.ID, input.Prompt, 0,
 		); err != nil {
 			return domain.Session{}, err
 		}
@@ -761,6 +761,9 @@ func createSessionTx(
 		return domain.Session{}, err
 	}
 	if err := getSession(ctx, tx, orgID, session.ID, &session); err != nil {
+		return domain.Session{}, err
+	}
+	if err := notifySandboxReconcile(ctx, tx); err != nil {
 		return domain.Session{}, err
 	}
 	return session, nil

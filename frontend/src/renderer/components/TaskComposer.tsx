@@ -12,6 +12,11 @@ import { RequiredAgentField } from "./CreateProjectAgentSheet";
 import type { components } from "../../api/schema";
 import { apiClient, apiErrorCode, apiErrorMessage } from "../lib/api-client";
 import { captureRendererEvent } from "../lib/telemetry";
+import { beginCloudStartupAttempt } from "../lib/cloud-startup-timing";
+import {
+	createCloudPendingSession,
+	registerCloudPendingSession,
+} from "../lib/cloud-pending-session";
 import {
 	cacheAgentReadiness,
 	ensureAgentReadiness,
@@ -78,6 +83,7 @@ function hasErrorDetail(details: components["schemas"]["APIError"]["details"] | 
 export type TaskComposerProps = {
 	projectId?: string;
 	onCreated: (sessionId: string) => void;
+	onPending?: (routeSessionId: string) => void;
 	onDirtyChange?: (dirty: boolean) => void;
 	onSubmittingChange?: (submitting: boolean) => void;
 	autoFocusTitle?: boolean;
@@ -86,6 +92,7 @@ export type TaskComposerProps = {
 export function TaskComposer({
 	projectId,
 	onCreated,
+	onPending,
 	onDirtyChange,
 	onSubmittingChange,
 	autoFocusTitle,
@@ -135,7 +142,7 @@ export function TaskComposer({
 	const modelsProjectId = isCloudProject || isStandalone ? "" : (projectId ?? "");
 
 	const createCloudTask = useCallback(
-		async (input: CreateTaskInput): Promise<string> => {
+		async (input: CreateTaskInput, idempotencyKey?: string): Promise<string> => {
 			void captureRendererEvent("ao.renderer.task_create_requested", { project_id: input.projectId });
 			if (!cloudOrg?.id) throw new Error(t("newTask.unableToStart"));
 			try {
@@ -146,7 +153,7 @@ export function TaskComposer({
 					displayName: input.brief.trim().slice(0, 80) || (input.agent ?? "claude-code"),
 					prompt: input.brief,
 					...(selectedProvider ? { provider: selectedProvider } : {}),
-				});
+				}, { idempotencyKey });
 				// The control plane provisions the sandbox asynchronously; surface the
 				// new session on the board immediately.
 				void queryClient.invalidateQueries({ queryKey: cloudSessionsQueryKey });
@@ -375,6 +382,7 @@ export function TaskComposer({
 		approvalMode?: "bypass-permissions",
 	) => {
 		if (!projectId || isSubmitting) return;
+		const cloudStartupAttempt = isCloudProject ? beginCloudStartupAttempt() : undefined;
 
 		const cleanModel = model.trim();
 		const cleanMode = mode.trim();
@@ -387,8 +395,7 @@ export function TaskComposer({
 		setError(undefined);
 		setFallbackAction(undefined);
 		try {
-			const attachmentPayloads = await toSettledPayload();
-			const sessionId = await createTask({
+			const baseInput: CreateTaskInput = {
 				projectId,
 				brief,
 				// The visible selection is authoritative: it is either the user's pick
@@ -398,6 +405,38 @@ export function TaskComposer({
 				effort: interfaceMode === "tui" || !effortTouched ? undefined : effort,
 				mode: interfaceMode,
 				approvalMode,
+			};
+			if (isCloudProject && cloudStartupAttempt && cloudOrg?.id) {
+				const pending = registerCloudPendingSession({
+					attempt: cloudStartupAttempt,
+					orgId: cloudOrg.id,
+					projectId,
+					initialPrompt: brief,
+					create: (idempotencyKey) => createCloudTask(baseInput, idempotencyKey),
+					send: async (sessionId, message, idempotencyKey) => {
+						await cloudClient.sendSessionMessage(
+							cloudOrg.id,
+							sessionId,
+							message,
+							{ idempotencyKey },
+						);
+					},
+					onAccepted: async (sessionId) => {
+						onCreated(sessionId);
+						await queryClient.invalidateQueries({ queryKey: cloudSessionsQueryKey });
+					},
+				});
+				if (onPending) {
+					onPending(pending.routeSessionId);
+					void createCloudPendingSession(pending.attemptId);
+				} else {
+					await createCloudPendingSession(pending.attemptId);
+				}
+				return;
+			}
+			const attachmentPayloads = await toSettledPayload();
+			const sessionId = await createTask({
+				...baseInput,
 				attachments: attachmentPayloads.length > 0 ? attachmentPayloads : undefined,
 			});
 			onCreated(sessionId);

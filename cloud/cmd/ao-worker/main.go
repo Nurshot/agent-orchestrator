@@ -237,27 +237,40 @@ func run(logger *slog.Logger) error {
 	}); err != nil {
 		logger.Warn("publish worker.ready failed", "error", err)
 	}
-	// rehydrateDone gates the coding agent on delete/restore rehydration: the
-	// preserved uncommitted work must be applied and the transcript written
-	// before the agent is built, so --resume finds the conversation and the
-	// workspace holds the restored files. It is closed once (checkout success or
-	// failure) so the agent never hangs.
-	rehydrateDone := make(chan struct{})
+	workspacePrepared := make(chan workspacePreparationResult, 1)
 	go func() {
+		publishStartupMilestone(runCtx, logger, client, bootstrap, "checkout.started", nil)
 		if err := prepareWorkspace(
 			runCtx, logger, client, bootstrap, workspace, dataDir, publicURL,
 		); err != nil {
+			publishStartupFailure(
+				runCtx, logger, client, bootstrap,
+				"preparing_repository", "CHECKOUT_FAILED", "Repository preparation failed.",
+			)
 			if runCtx.Err() == nil {
 				logger.Error("background workspace startup failed", "error", err)
 			}
-			close(rehydrateDone)
+			workspacePrepared <- workspacePreparationResult{Err: err}
 			return
 		}
-		// Restore a previously deleted session's state before the agent launches.
-		// A fresh session finds nothing captured and this returns quickly.
-		rehydrateSession(runCtx, logger, client, bootstrap, workspace, dataDir)
-		close(rehydrateDone)
+		publishStartupMilestone(runCtx, logger, client, bootstrap, "checkout.completed", nil)
+		publishStartupMilestone(runCtx, logger, client, bootstrap, "restore.started", nil)
+		restored, err := rehydrateSession(runCtx, logger, client, bootstrap, workspace, dataDir)
+		if err != nil {
+			publishStartupFailure(
+				runCtx, logger, client, bootstrap,
+				"preparing_repository", "RESTORE_FAILED", "Saved workspace restoration failed.",
+			)
+			if runCtx.Err() == nil {
+				logger.Error("background workspace restore failed", "error", err)
+			}
+			workspacePrepared <- workspacePreparationResult{Err: err}
+			return
+		}
+		publishStartupMilestone(runCtx, logger, client, bootstrap, "restore.completed", &restored)
 		transportSupervisor.MarkWorkspaceReady()
+		publishStartupMilestone(runCtx, logger, client, bootstrap, "workspace.ready", nil)
+		workspacePrepared <- workspacePreparationResult{}
 		// Serve durable-restore checkpointing now that the checkout and the git
 		// credential helper are in place. The capture is triggered by the agent's
 		// turn-completion (Stop) hook via this unix socket, not a timer. Bound to
@@ -271,7 +284,7 @@ func run(logger *slog.Logger) error {
 	go func() {
 		if err := startInteractiveAgent(
 			runCtx, logger, client, bootstrap, workspace, dataDir,
-			pullRequestSocketPath, reviewSocketPath, checkpointSocketPath, &transportSupervisor, rehydrateDone,
+			pullRequestSocketPath, reviewSocketPath, checkpointSocketPath, &transportSupervisor, workspacePrepared,
 			browserdEnv,
 		); err != nil && runCtx.Err() == nil {
 			logger.Error("background coding-agent startup failed", "error", err)
@@ -288,6 +301,57 @@ func run(logger *slog.Logger) error {
 		return nil
 	}
 	return first
+}
+
+type workspacePreparationResult struct {
+	Err error
+}
+
+type credentialPreparationResult struct {
+	Credential worker.CredentialResponse
+	Err        error
+}
+
+type terminalPreparationResult struct {
+	Terminal worker.AgentTerminalResponse
+	Err      error
+}
+
+func publishStartupMilestone(
+	ctx context.Context,
+	logger *slog.Logger,
+	client *client,
+	bootstrap worker.BootstrapResponse,
+	eventType string,
+	restored *bool,
+) {
+	payload := worker.StartupEvent{
+		WorkerID: bootstrap.WorkerID,
+		Epoch:    bootstrap.Epoch,
+		Restored: restored,
+	}
+	if err := client.publishEvent(ctx, eventType, payload); err != nil && ctx.Err() == nil {
+		logger.Warn("publish startup milestone failed", "event_type", eventType, "error", err)
+	}
+}
+
+func publishStartupFailure(
+	ctx context.Context,
+	logger *slog.Logger,
+	client *client,
+	bootstrap worker.BootstrapResponse,
+	phase, code, message string,
+) {
+	payload := worker.StartupFailureEvent{
+		WorkerID: bootstrap.WorkerID,
+		Epoch:    bootstrap.Epoch,
+		Phase:    phase,
+		Code:     code,
+		Message:  message,
+	}
+	if err := client.publishEvent(ctx, "startup.failed", payload); err != nil && ctx.Err() == nil {
+		logger.Warn("publish startup failure failed", "phase", phase, "code", code, "error", err)
+	}
 }
 
 func prepareWorkspace(
@@ -323,7 +387,7 @@ func prepareWorkspace(
 		}
 		if err := worker.ConfigureWorkerGit(
 			ctx, worker.ExecGitRunner{}, workspace, dataDir, publicURL,
-			bootstrap.SessionID, bootstrap.Launch.Branch,
+			bootstrap.SessionID, bootstrap.Launch.Branch, bootstrap.Launch.DefaultBranch,
 		); err != nil {
 			return fmt.Errorf("configure repository tooling: %w", err)
 		}
@@ -338,29 +402,90 @@ func startInteractiveAgent(
 	bootstrap worker.BootstrapResponse,
 	workspace, dataDir, pullRequestSocketPath, reviewSocketPath, checkpointSocketPath string,
 	transportSupervisor *workertransport.Supervisor,
-	rehydrateDone <-chan struct{},
+	workspacePrepared <-chan workspacePreparationResult,
 	browserEnv map[string]string,
 ) error {
-	// Wait until the checkout has completed and any delete/restore rehydration
-	// has run: the transcript must be on disk before the command is built, so
-	// BuildInteractive detects the restored conversation and launches --resume.
-	select {
-	case <-ctx.Done():
-		return nil
-	case <-rehydrateDone:
+	preparationCtx, cancelPreparation := context.WithCancel(ctx)
+	defer cancelPreparation()
+	credentialPrepared := make(chan credentialPreparationResult, 1)
+	terminalPrepared := make(chan terminalPreparationResult, 1)
+	go func() {
+		credential, err := client.Credential(preparationCtx)
+		credentialPrepared <- credentialPreparationResult{Credential: credential, Err: err}
+	}()
+	go func() {
+		terminal, err := client.ensureAgentTerminal(preparationCtx)
+		terminalPrepared <- terminalPreparationResult{Terminal: terminal, Err: err}
+	}()
+
+	var (
+		credential      worker.CredentialResponse
+		agentTerminalID string
+		workspaceReady  bool
+		credentialReady bool
+		terminalReady   bool
+		agentStarted    bool
+	)
+	defer func() {
+		if agentTerminalID != "" && !agentStarted {
+			transportSupervisor.DiscardConfiguredAgent(agentTerminalID)
+		}
+	}()
+	for !workspaceReady || !credentialReady || !terminalReady {
+		select {
+		case <-ctx.Done():
+			return nil
+		case result := <-workspacePrepared:
+			workspaceReady = true
+			if result.Err != nil {
+				return fmt.Errorf("prepare workspace: %w", result.Err)
+			}
+		case result := <-credentialPrepared:
+			credentialReady = true
+			if result.Err != nil {
+				publishStartupFailure(
+					ctx, logger, client, bootstrap,
+					"starting_agent", "CREDENTIAL_FAILED", "The coding harness credential could not be loaded.",
+				)
+				return fmt.Errorf("load coding-agent credential: %w", result.Err)
+			}
+			credential = result.Credential
+		case result := <-terminalPrepared:
+			terminalReady = true
+			if result.Err != nil {
+				publishStartupFailure(
+					ctx, logger, client, bootstrap,
+					"starting_agent", "TERMINAL_PREPARE_FAILED", "The agent terminal could not be prepared.",
+				)
+				return fmt.Errorf("initialize agent terminal: %w", result.Err)
+			}
+			agentTerminalID = result.Terminal.TerminalID
+			if err := transportSupervisor.ConfigureAgent(workerexec.Command{}, agentTerminalID); err != nil {
+				publishStartupFailure(
+					ctx, logger, client, bootstrap,
+					"starting_agent", "TERMINAL_PREPARE_FAILED", "The agent terminal could not be prepared.",
+				)
+				return fmt.Errorf("reserve agent terminal: %w", err)
+			}
+		}
 	}
+
 	if err := verifyHarnessAvailable(bootstrap.Launch.Harness); err != nil {
 		logger.Warn("coding-agent harness unavailable", "error", err)
-		return nil
-	}
-	credential, err := client.Credential(ctx)
-	if err != nil {
-		return fmt.Errorf("load coding-agent credential: %w", err)
+		publishStartupFailure(
+			ctx, logger, client, bootstrap,
+			"starting_agent", "HARNESS_UNAVAILABLE", "The configured coding harness is unavailable in this worker image.",
+		)
+		return err
 	}
 	agentCommand, err := (workerexec.HarnessBuilder{DataDir: dataDir}).BuildInteractive(
 		bootstrap.Launch, credential, workspace,
 	)
 	if err != nil {
+		publishStartupFailure(
+			ctx, logger, client, bootstrap,
+			"starting_agent", "HARNESS_COMMAND_FAILED", "The coding harness command could not be prepared.",
+		)
 		return fmt.Errorf("build interactive coding-agent command: %w", err)
 	}
 	agentCommand.Env["AO_CLOUD_WORKER_API_URL"] = client.baseURL
@@ -382,16 +507,15 @@ func startInteractiveAgent(
 	for key, value := range browserEnv {
 		agentCommand.Env[key] = value
 	}
-	agentTerminal, err := client.ensureAgentTerminal(ctx)
-	if err != nil {
-		if agentCommand.Cleanup != nil {
-			agentCommand.Cleanup()
-		}
-		return fmt.Errorf("initialize agent terminal: %w", err)
-	}
-	if err := transportSupervisor.StartAgent(ctx, agentCommand, agentTerminal.TerminalID); err != nil {
+	publishStartupMilestone(ctx, logger, client, bootstrap, "agent.launch_started", nil)
+	if err := transportSupervisor.StartAgent(ctx, agentCommand, agentTerminalID); err != nil {
+		publishStartupFailure(
+			ctx, logger, client, bootstrap,
+			"starting_agent", "HARNESS_LAUNCH_FAILED", "The coding harness could not start.",
+		)
 		return fmt.Errorf("start interactive coding-agent terminal: %w", err)
 	}
+	agentStarted = true
 	if err := client.publishEvent(ctx, "agent.ready", map[string]any{
 		"workerId":     bootstrap.WorkerID,
 		"epoch":        bootstrap.Epoch,

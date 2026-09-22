@@ -20,6 +20,7 @@ import type { components } from "../../api/schema";
 import { defaultShortcutBindings, shortcutBindingLabel } from "../../shared/shortcuts";
 import { BrowserPanelView, useBrowserAnnotationQueue } from "./BrowserPanel";
 import { CenterPane } from "./CenterPane";
+import { CloudPendingSession } from "./CloudPendingSession";
 import type { FileOpenOptions, FileViewMode } from "./FileContentPane";
 import {
 	SessionChatSurface,
@@ -64,6 +65,7 @@ import {
 import { useAgentSwitchRouteVisibility } from "../hooks/useAgentSwitchVisibility";
 import { useWorkspaceSession, workspaceQueryKey } from "../hooks/useWorkspaceQuery";
 import { cloudLifecycleStage, type CloudLifecycleStage } from "../lib/cloud-lifecycle";
+import { useCloudPendingSession } from "../lib/cloud-pending-session";
 import { useCloudCp } from "../hooks/useCloudCp";
 import { useSessionHandoffMenu } from "../hooks/useSessionHandoffMenu";
 import { clearSwitchAgentState } from "../hooks/useSwitchAgent";
@@ -454,6 +456,7 @@ function CloudLifecycleStatus({ stage }: { stage: CloudLifecycleStage }) {
 
 export function SessionView({ sessionId }: SessionViewProps) {
 	const { t } = useTranslation();
+	const pendingCloudSession = useCloudPendingSession(sessionId);
 	const [confirmedDraftDiscard, setConfirmedDraftDiscard] = useState<{
 		sessionId: string;
 		transitionId: string;
@@ -1856,7 +1859,7 @@ export function SessionView({ sessionId }: SessionViewProps) {
 			inspectorMotionReadyRef.current = false;
 		};
 	}, [hasInspector]);
-	if (!session && !workspaceQuery.isLoading) {
+	if (!session && !workspaceQuery.isLoading && !pendingCloudSession) {
 		return (
 			<div className="grid h-full place-items-center p-6 text-center font-mono text-xs text-passive">
 				{t("session.notFound")}
@@ -2117,6 +2120,9 @@ export function SessionView({ sessionId }: SessionViewProps) {
 					{/* Keep the global notification action trailing at the window edge. */}
 					<NotificationCenter style={noDragStyle} />
 				</div>
+			) : null}
+			{pendingCloudSession ? (
+				<CloudPendingSession attempt={pendingCloudSession} session={session} />
 			) : null}
 			<SessionInterfaceSwitchDialog
 				open={interfaceSwitchDialogOpen}
