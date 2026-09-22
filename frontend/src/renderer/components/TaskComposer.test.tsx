@@ -125,6 +125,7 @@ describe("TaskComposer", () => {
 	});
 
 	it("preserves an explicitly selected standalone agent when readiness rankings refresh", async () => {
+		const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 		h.agentCatalog = {
 			agents: [
 				agentReadiness("codex", "Codex", { usageCount: 3, lastUsedAt: "2026-09-20T12:00:00Z" }),
@@ -133,7 +134,7 @@ describe("TaskComposer", () => {
 		};
 
 		const { rerender } = render(
-			<Wrap>
+			<Wrap queryClient={queryClient}>
 				<TaskComposer projectId="__standalone__" onCreated={vi.fn()} />
 			</Wrap>,
 		);
@@ -149,7 +150,7 @@ describe("TaskComposer", () => {
 			],
 		};
 		rerender(
-			<Wrap>
+			<Wrap queryClient={queryClient}>
 				<TaskComposer projectId="__standalone__" onCreated={vi.fn()} />
 			</Wrap>,
 		);
