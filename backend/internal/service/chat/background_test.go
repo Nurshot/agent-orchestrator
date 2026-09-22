@@ -1,81 +1,34 @@
-package chat
+package chat_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
 	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
+	chatsvc "github.com/aoagents/agent-orchestrator/backend/internal/service/chat"
 )
 
-type backgroundTestRegistry struct{ driver ports.ChatDriver }
-
-func (r backgroundTestRegistry) Driver(domain.AgentHarness) (ports.ChatDriver, error) {
-	if r.driver == nil {
-		return nil, ports.ErrChatUnsupported
-	}
-	return r.driver, nil
-}
-
-func (r backgroundTestRegistry) SupportsChat(domain.AgentHarness) bool { return r.driver != nil }
-
-type backgroundTestDriver struct {
-	start ports.ChatStartConfig
-	conv  *backgroundTestConversation
-}
-
-func (*backgroundTestDriver) Harness() domain.AgentHarness { return domain.HarnessCodex }
-func (*backgroundTestDriver) Probe(context.Context) (ports.ChatCapabilities, error) {
-	return nil, nil
-}
-func (d *backgroundTestDriver) Start(_ context.Context, cfg ports.ChatStartConfig) (ports.ChatConversation, error) {
-	d.start = cfg
-	return d.conv, nil
-}
-func (*backgroundTestDriver) Resume(context.Context, ports.ChatResumeConfig) (ports.ChatConversation, error) {
-	return nil, errors.New("not used")
-}
-
 type backgroundTestConversation struct {
-	events     chan ports.ChatEvent
-	message    ports.ChatUserMessage
-	terminated bool
+	*terminatingConversation
 }
 
-func newBackgroundTestConversation() *backgroundTestConversation {
-	return &backgroundTestConversation{events: make(chan ports.ChatEvent, 2)}
-}
-
-func (*backgroundTestConversation) ProviderConversationID() string       { return "provider-1" }
-func (*backgroundTestConversation) Capabilities() ports.ChatCapabilities { return nil }
-func (c *backgroundTestConversation) SendTurn(_ context.Context, message ports.ChatUserMessage) (ports.ChatTurnRef, error) {
-	c.message = message
-	return ports.ChatTurnRef{ProviderTurnID: "turn-1"}, nil
-}
-func (c *backgroundTestConversation) StartDeferredTurn(string) error {
-	c.events <- ports.ChatEvent{Kind: ports.ChatEventMessageCompleted, ProviderTurnID: "turn-1", Text: "Fix renderer"}
-	c.events <- ports.ChatEvent{Kind: ports.ChatEventTurnCompleted, ProviderTurnID: "turn-1", TurnState: domain.TurnStateCompleted}
+func (c *backgroundTestConversation) StartDeferredTurn(providerTurnID string) error {
+	c.emit(
+		ports.ChatEvent{Kind: ports.ChatEventMessageCompleted, ProviderTurnID: providerTurnID, Text: "Fix renderer"},
+		ports.ChatEvent{Kind: ports.ChatEventTurnCompleted, ProviderTurnID: providerTurnID, TurnState: domain.TurnStateCompleted},
+	)
 	return nil
 }
-func (*backgroundTestConversation) DiscardDeferredTurn(string)              {}
-func (*backgroundTestConversation) Interrupt(context.Context, string) error { return nil }
-func (*backgroundTestConversation) ResolveRequest(context.Context, string, ports.ChatDecision) error {
-	return nil
-}
-func (c *backgroundTestConversation) Events() <-chan ports.ChatEvent { return c.events }
-func (*backgroundTestConversation) Close() error                     { return nil }
-func (c *backgroundTestConversation) Terminate() error {
-	c.terminated = true
-	return nil
-}
+func (*backgroundTestConversation) DiscardDeferredTurn(string) {}
 
 func TestRunBackgroundTaskUsesNativeDriverAndTerminatesIt(t *testing.T) {
-	conversation := newBackgroundTestConversation()
-	driver := &backgroundTestDriver{conv: conversation}
+	conversation := &backgroundTestConversation{terminatingConversation: &terminatingConversation{fakeConversation: newFakeConversation()}}
+	var started ports.ChatStartConfig
+	driver := fakeDriver{conv: conversation, startCfg: &started}
 	ids := []string{"task-id", "scope-id"}
-	service := New(Options{
-		Drivers: backgroundTestRegistry{driver: driver},
+	service := chatsvc.New(chatsvc.Options{
+		Drivers: fakeRegistry{driver: driver},
 		NewID: func() string {
 			id := ids[0]
 			ids = ids[1:]
@@ -91,16 +44,17 @@ func TestRunBackgroundTaskUsesNativeDriverAndTerminatesIt(t *testing.T) {
 	if err != nil || title != "Fix renderer" {
 		t.Fatalf("RunBackgroundTask = %q, %v", title, err)
 	}
-	if driver.start.SessionID != "background-task-id" || driver.start.ProviderScopeID != "scope-id" || !driver.start.ProviderIDsScoped {
-		t.Fatalf("start identity = %#v", driver.start)
+	if started.SessionID != "background-task-id" || started.ProviderScopeID != "scope-id" || !started.ProviderIDsScoped {
+		t.Fatalf("start identity = %#v", started)
 	}
-	if driver.start.Model != "small" || driver.start.Effort != "low" || driver.start.Env["CODEX_HOME"] != "/account" {
-		t.Fatalf("start config = %#v", driver.start)
+	if started.Model != "small" || started.Effort != "low" || started.Env["CODEX_HOME"] != "/account" {
+		t.Fatalf("start config = %#v", started)
 	}
-	if conversation.message.Text != "Fix the renderer" || conversation.message.Origin != domain.MessageOriginAutomation {
-		t.Fatalf("message = %#v", conversation.message)
+	messages := conversation.sentMessages()
+	if len(messages) != 1 || messages[0].Text != "Fix the renderer" || messages[0].Origin != domain.MessageOriginAutomation {
+		t.Fatalf("messages = %#v", messages)
 	}
-	if !conversation.terminated {
+	if !conversation.terminated.Load() {
 		t.Fatal("background provider was not terminated")
 	}
 }

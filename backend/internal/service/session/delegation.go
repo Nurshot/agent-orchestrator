@@ -21,10 +21,6 @@ const (
 	delegatedTaskTitleSystemPrompt      = "Return only a concise task title of at most 100 characters. Do not use tools, change files, or explain the answer."
 )
 
-type backgroundTaskCommander interface {
-	RunBackgroundTask(ctx context.Context, id domain.SessionID, systemPrompt, prompt, effort string) (string, error)
-}
-
 // DelegateTaskInput describes a task AO should spawn as a worker session. Brief
 // may be empty to open an idle worker that the user can instruct later. Empty
 // RequestedAgent means the spawn uses the project's worker-agent default.
@@ -125,12 +121,8 @@ func (s *Service) refineDelegatedTaskTitleInBackground(workerID domain.SessionID
 }
 
 func (s *Service) refineDelegatedTaskTitle(ctx context.Context, workerID domain.SessionID, in DelegateTaskInput) error {
-	runner, ok := s.manager.(backgroundTaskCommander)
-	if !ok {
-		return ports.ErrChatUnsupported
-	}
 	effort, _ := optionalTuningValue(in.Effort)
-	raw, err := runner.RunBackgroundTask(ctx, workerID, delegatedTaskTitleSystemPrompt, in.Brief, effort)
+	raw, err := s.manager.RunBackgroundTask(ctx, workerID, delegatedTaskTitleSystemPrompt, in.Brief, effort)
 	if err != nil {
 		return fmt.Errorf("generate title with worker harness: %w", err)
 	}
@@ -138,14 +130,11 @@ func (s *Service) refineDelegatedTaskTitle(ctx context.Context, workerID domain.
 	if title == "" {
 		return errors.New("worker harness returned an empty title")
 	}
-	renamed, err := s.store.RenameSessionIfDisplayName(
+	_, err = s.store.RenameSessionIfDisplayName(
 		ctx, workerID, delegatedTaskDisplayName(in.Brief), title, s.now(),
 	)
 	if err != nil {
 		return fmt.Errorf("apply generated title to %s: %w", workerID, err)
-	}
-	if !renamed {
-		return nil // A user or provider renamed the task while generation was running.
 	}
 	return nil
 }
@@ -162,12 +151,8 @@ func delegatedTaskDisplayName(brief string) string {
 }
 
 func generatedTaskTitle(raw string) string {
-	if i := strings.IndexAny(raw, "\r\n"); i >= 0 {
-		raw = raw[:i]
-	}
-	title := strings.TrimLeft(strings.TrimSpace(raw), "#*->+ \t")
-	title = strings.Trim(title, "\"'`“”‘’ \t")
-	title = strings.TrimRight(title, ".,;:!。 \t")
+	firstLine, _, _ := strings.Cut(raw, "\n")
+	title := strings.Trim(firstLine, "#*->+ \"'`“”‘’\t\r.,;:!。")
 	if strings.IndexFunc(title, func(r rune) bool {
 		return unicode.IsLetter(r) || unicode.IsDigit(r)
 	}) < 0 {

@@ -98,19 +98,9 @@ func (m *Manager) RunBackgroundTask(
 	}
 	defer releaseCodex()
 
-	config := effectiveAgentConfig(rec.Harness, rec.Kind, project.Config)
-	if rec.Metadata.Model != "" {
-		config.Model = rec.Metadata.Model
-	}
-	if strings.TrimSpace(effort) != "" {
-		config.Effort = strings.TrimSpace(effort)
-	}
-	if rec.Metadata.Permissions != "" {
-		config.Permissions = rec.Metadata.Permissions
-	}
-	if config.Permissions == "" {
-		config.Permissions = ports.PermissionModeAuto
-	}
+	config := applySpawnAgentConfig(effectiveAgentConfig(rec.Harness, rec.Kind, project.Config), ports.AgentConfig{
+		Model: rec.Metadata.Model, Effort: strings.TrimSpace(effort), Permissions: rec.Metadata.Permissions,
+	})
 	env := m.runtimeEnv(rec.ID, rec.ProjectID, rec.IssueID, project.Config.Env)
 	if m.agents != nil {
 		if agent, found := m.agents.Agent(rec.Harness); found {
