@@ -1396,7 +1396,11 @@ function CloudProjectCard({
 		queryKey: ["github-repos"],
 		enabled: hasGithubConnection,
 		staleTime: 60_000,
-		retry: (failureCount, error) => !isGitHubAuthInvalidError(error) && failureCount < 3,
+		// A 401 here is often transient (e.g. the daemon fetching repos before it
+		// has re-read a valid stored token right after launch), so give auth
+		// errors one retry to self-heal before surfacing a reconnect prompt;
+		// non-auth errors keep the usual three.
+		retry: (failureCount, error) => (isGitHubAuthInvalidError(error) ? failureCount < 1 : failureCount < 3),
 		queryFn: async () => {
 			const { repos } = await listGitHubRepos();
 			return repos.map((r) => ({
@@ -1669,20 +1673,33 @@ function CloudProjectCard({
 										<div className="flex items-center gap-2 text-[12px] leading-5 text-destructive" role="alert">
 											<span>
 												{isGitHubAuthInvalidError(githubRepos.error)
-													? t("createProject.githubAuthorizationExpired", { defaultValue: "GitHub authorization expired." })
+													? t("createProject.githubReposUnavailable", { defaultValue: "Couldn't load your GitHub repositories." })
 													: t("createProject.githubReposFailed", { defaultValue: "Failed to load repositories." })}
 											</span>
 											{isGitHubAuthInvalidError(githubRepos.error) ? (
-												<button
-													type="button"
-													className="shrink-0 rounded-md border border-destructive/30 px-2 py-0.5 font-medium text-foreground transition-colors hover:bg-accent disabled:opacity-60"
-													disabled={githubOAuthBusy}
-													onClick={() => void connectGitHub()}
-												>
-													{githubOAuthBusy
-														? t("createProject.openingGitHub", { defaultValue: "Opening GitHub..." })
-														: t("createProject.reconnectGitHub", { defaultValue: "Reconnect GitHub" })}
-												</button>
+												<>
+													{/* Try again first: the stored token is usually still valid, so a
+													    plain refetch clears a transient 401 without a full OAuth round-trip.
+													    Reconnect stays as the fallback for a genuinely revoked token. */}
+													<button
+														type="button"
+														className="underline"
+														disabled={githubRepos.isFetching}
+														onClick={() => void githubRepos.refetch()}
+													>
+														{t("createProject.retry")}
+													</button>
+													<button
+														type="button"
+														className="shrink-0 rounded-md border border-destructive/30 px-2 py-0.5 font-medium text-foreground transition-colors hover:bg-accent disabled:opacity-60"
+														disabled={githubOAuthBusy}
+														onClick={() => void connectGitHub()}
+													>
+														{githubOAuthBusy
+															? t("createProject.openingGitHub", { defaultValue: "Opening GitHub..." })
+															: t("createProject.reconnectGitHub", { defaultValue: "Reconnect GitHub" })}
+													</button>
+												</>
 											) : (
 												<button type="button" className="underline" onClick={() => void githubRepos.refetch()}>
 													{t("createProject.retry")}
