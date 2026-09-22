@@ -747,7 +747,7 @@ func (o *Observer) discoverSubjects(ctx context.Context) (map[string]*subject, [
 			projects[sess.ProjectID] = p
 			proj = p
 			if origin, ok := o.provider.ParseRepository(p.RepoOriginURL); ok {
-				scanRepos[sess.ProjectID] = o.resolveScanRepos(p, origin)
+				scanRepos[sess.ProjectID] = o.resolveScanRepos(ctx, p, origin)
 			}
 		}
 		repos := append([]ports.SCMRepo(nil), scanRepos[sess.ProjectID]...)
@@ -789,13 +789,13 @@ func (o *Observer) discoverSubjects(ctx context.Context) (map[string]*subject, [
 }
 
 // The stored origin remains usable when the checkout is temporarily unavailable.
-func (o *Observer) resolveScanRepos(proj domain.ProjectRecord, origin ports.SCMRepo) []ports.SCMRepo {
+func (o *Observer) resolveScanRepos(ctx context.Context, proj domain.ProjectRecord, origin ports.SCMRepo) []ports.SCMRepo {
 	repos := []ports.SCMRepo{origin}
 	if strings.TrimSpace(proj.Path) == "" {
 		return repos
 	}
 	seen := map[string]bool{strings.ToLower(prKey(origin, 0)): true}
-	for _, url := range gitRemoteURLsFunc(proj.Path) {
+	for _, url := range gitRemoteURLsFunc(ctx, proj.Path) {
 		repo, ok := o.provider.ParseRepository(url)
 		if !ok {
 			continue
@@ -855,7 +855,7 @@ func (o *Observer) workspaceSCMSessionRepos(ctx context.Context, proj domain.Pro
 			continue
 		}
 		childPath := filepath.Join(proj.Path, filepath.FromSlash(child.RelativePath))
-		checkouts = append(checkouts, o.resolveScanRepos(domain.ProjectRecord{Path: childPath}, repo))
+		checkouts = append(checkouts, o.resolveScanRepos(ctx, domain.ProjectRecord{Path: childPath}, repo))
 	}
 	return checkoutSessionRepos(sess, branch, true, checkouts...), nil
 }
@@ -2127,8 +2127,8 @@ func resolveGitOriginURL(path string) string {
 	return strings.TrimSpace(string(out))
 }
 
-func gitRemoteURLs(path string) []string {
-	out, err := aoprocess.Command("git", "-C", path, "remote").Output()
+func gitRemoteURLs(ctx context.Context, path string) []string {
+	out, err := aoprocess.CommandContext(ctx, "git", "-C", path, "remote").Output()
 	if err != nil {
 		return nil
 	}
@@ -2138,7 +2138,7 @@ func gitRemoteURLs(path string) []string {
 		for _, options := range [][]string{{"--all"}, {"--push", "--all"}} {
 			args := append([]string{"-C", path, "remote", "get-url"}, options...)
 			args = append(args, name)
-			output, err := aoprocess.Command("git", args...).Output()
+			output, err := aoprocess.CommandContext(ctx, "git", args...).Output()
 			if err != nil {
 				continue
 			}

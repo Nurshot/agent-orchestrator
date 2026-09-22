@@ -28,6 +28,17 @@ func remoteAddress(repository ports.SCMRepo) string {
 	return "https://" + repository.Host + "/" + repository.Repo + ".git"
 }
 
+func TestGitRemoteURLs_StopsWhenCanceled(t *testing.T) {
+	directory := t.TempDir()
+	mustGit(t, "init", directory)
+	mustGit(t, "-C", directory, "remote", "add", "origin", "https://github.com/team/widget.git")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if urls := gitRemoteURLs(ctx, directory); len(urls) != 0 {
+		t.Fatalf("git remotes after cancellation = %v; want none", urls)
+	}
+}
+
 func TestPoll_RemoteAttributionMatrix(t *testing.T) {
 	upstream := ports.SCMRepo{Provider: "github", Host: "github.com", Owner: "team", Name: "widget", Repo: "team/widget"}
 	personal := ports.SCMRepo{Provider: "github", Host: "github.com", Owner: "dev", Name: "widget", Repo: "dev/widget"}
