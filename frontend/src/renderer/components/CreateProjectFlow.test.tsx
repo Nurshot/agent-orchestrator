@@ -1074,6 +1074,50 @@ describe("CreateProjectFlow project import validation", () => {
 			expect(screen.getByRole("button", { name: "Create repository and continue" })).toBeEnabled();
 	});
 
+	it.each([
+		"/repo/AO Desktop App",
+		"C:\\repo\\AO Desktop App",
+	])("normalizes spaces in a repository name from %s", async (repoPath) => {
+		const user = userEvent.setup();
+		bridgeMocks.chooseDirectory.mockResolvedValue(repoPath);
+		apiMocks.POST
+			.mockResolvedValueOnce({
+				data: projectValidation(repoPath, {
+					nextStep: "prepare_git",
+					root: { hasOrigin: false, requiredActions: ["create_remote_repository"] },
+				}),
+			})
+			.mockResolvedValueOnce({
+				data: {
+					events: [{ repoPath, action: "create_remote_repository", state: "success" }],
+					validation: projectValidation(repoPath),
+				},
+			});
+
+		renderChooseFlow();
+		await openSource(user, "Import an existing project");
+
+		expect(await screen.findByLabelText("Repository name")).toHaveValue("AO Desktop App");
+		expect(screen.getByText("Will create `AO-Desktop-App`")).toBeInTheDocument();
+		await waitFor(() => expect(bridgeMocks.checkGitHubRepositoryAvailability).toHaveBeenCalledWith({
+			owner: "username",
+			name: "AO-Desktop-App",
+		}));
+		await waitFor(() => expect(screen.getByRole("button", { name: "Create repository and continue" })).toBeEnabled());
+		await user.click(screen.getByRole("button", { name: "Create repository and continue" }));
+
+		await waitFor(() => expect(apiMocks.POST).toHaveBeenLastCalledWith("/api/v1/imports/prepare-git", {
+			body: {
+				importKind: "project",
+				path: repoPath,
+				approvedActions: ["create_remote_repository"],
+				remoteUrl: "https://github.com/username/AO-Desktop-App.git",
+				githubRepository: { owner: "username", name: "AO-Desktop-App", private: true },
+				stepwise: true,
+			},
+		}));
+	});
+
 	it("prepares the project and then opens agent selection", async () => {
 		const user = userEvent.setup();
 		bridgeMocks.chooseDirectory.mockResolvedValue("/repo/project");

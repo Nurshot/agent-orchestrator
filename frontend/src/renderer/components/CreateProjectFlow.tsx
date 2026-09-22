@@ -634,7 +634,9 @@ export function CreateProjectFlow({
 		if (!projectValidation) return;
 		setError(null);
 		const needsRemoteSetup = importNeedsRemoteSetup(projectValidation.root.requiredActions);
-		const githubRepository = needsRemoteSetup ? projectGitHubRepo : null;
+		const githubRepository = needsRemoteSetup && projectGitHubRepo
+			? { ...projectGitHubRepo, name: normalizeGitHubRepositoryName(projectGitHubRepo.name) }
+			: null;
 		const remoteUrl = githubRepository ? githubRepositoryRemoteUrl(githubRepository) : projectRemoteUrl.trim();
 		if (remoteUrl !== "" && !isValidProjectRemote(remoteUrl)) {
 			reportProjectError(t("createProject.cloneInvalidUrl"));
@@ -1030,9 +1032,13 @@ function projectNameFromPath(repoPath: string): string {
 
 function githubRepositoryRemoteUrl(repository: ProjectGitHubRepository): string {
 	const owner = repository.owner.trim();
-	const name = repository.name.trim().replace(/\.git$/i, "");
+	const name = normalizeGitHubRepositoryName(repository.name);
 	if (!owner || !name) return "";
 	return `https://github.com/${owner}/${name}.git`;
+}
+
+function normalizeGitHubRepositoryName(value: string): string {
+	return value.trim().replace(/\s+/g, "-").replace(/\.git$/i, "");
 }
 
 function projectRequestedActionEvents(repoPath: string, actions: string[]): GitPreparationEvent[] {
@@ -1869,7 +1875,9 @@ function ProjectImportDialog({
 	const requiredActions = validation?.root.requiredActions ?? [];
 	const needsRemote = importNeedsRemoteSetup(requiredActions);
 	const githubOwner = githubRepository?.owner.trim() ?? "";
-	const githubName = githubRepository?.name.trim() ?? "";
+	const githubNameInput = githubRepository?.name ?? "";
+	const githubName = normalizeGitHubRepositoryName(githubNameInput);
+	const githubNameWasNormalized = githubName !== "" && githubName !== githubNameInput.trim();
 	const isPrivate = githubRepository?.private ?? true;
 	const visibilityLabel = isPrivate
 		? t("createProject.privateRepository", { defaultValue: "Private repository" })
@@ -1885,6 +1893,10 @@ function ProjectImportDialog({
 	const [customGitHubOwner, setCustomGitHubOwner] = useState(false);
 	const selectedGitHubOwner = githubOwners.find((owner) => owner.login === githubOwner);
 	const [availability, setAvailability] = useState<GitHubRepositoryAvailability>({ state: "idle" });
+	const githubNameDescription = [
+		availability.state === "unavailable" ? "githubRepoNameError" : null,
+		githubNameWasNormalized ? "githubRepoNameNormalization" : null,
+	].filter(Boolean).join(" ") || undefined;
 	useEffect(() => {
 		if (!open || !needsRemote) return;
 		let cancelled = false;
@@ -2090,7 +2102,7 @@ function ProjectImportDialog({
 													<Input
 														id="githubRepoName"
 														aria-label={t("createProject.githubRepositoryName")}
-														aria-describedby={availability.state === "unavailable" ? "githubRepoNameError" : undefined}
+														aria-describedby={githubNameDescription}
 														aria-invalid={availability.state === "unavailable" ? true : undefined}
 														className="h-8 bg-[var(--color-bg-import-card)] pr-8 font-mono text-[12px]"
 														disabled={disabled}
@@ -2117,6 +2129,11 @@ function ProjectImportDialog({
 														) : null}
 													</AnimatePresence>
 												</div>
+												{githubNameWasNormalized ? (
+													<p id="githubRepoNameNormalization" className="text-[11px] leading-4 text-muted-foreground">
+														{t("createProject.githubRepoWillCreate", { repo: githubName })}
+													</p>
+												) : null}
 											</div>
 											<div className="flex items-center justify-between gap-3 py-1">
 												<Label htmlFor="githubRepoPrivate" className="flex cursor-pointer items-center gap-2.5 min-w-0">
