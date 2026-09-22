@@ -239,6 +239,47 @@ describe("onboarding route", () => {
 		}
 	});
 
+	it("holds the first agent step until one harness is installed and signed in", async () => {
+		routeMocks.agentsQuery = {
+			data: {
+				authorized: [],
+				installed: [],
+				supported: [{ id: "claude-code", label: "Claude Code" }],
+			},
+			isFetching: false,
+			isLoading: false,
+		};
+		const user = userEvent.setup();
+		await renderOnboarding();
+		await goToOrchestratorStep(user);
+
+		// With nothing installed the only affordance is the install action, and the
+		// step refuses to hand the user an orchestrator that cannot start.
+		expect(screen.getByRole("button", { name: "Install Claude Code" })).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Choose workers" })).toBeDisabled();
+		expect(screen.getByText("Install and sign in to at least one agent to continue.")).toBeInTheDocument();
+	});
+
+	it("holds the first agent step when the only installed harness is signed out", async () => {
+		routeMocks.agentsQuery = {
+			data: {
+				authorized: [],
+				installed: [{ id: "claude-code", label: "Claude Code", authStatus: "unknown" }],
+				supported: [{ id: "claude-code", label: "Claude Code" }],
+			},
+			isFetching: false,
+			isLoading: false,
+		};
+		const user = userEvent.setup();
+		await renderOnboarding();
+		await goToOrchestratorStep(user);
+
+		// Installed is not enough: an orchestrator that cannot authenticate is the
+		// same dead end as one that is missing.
+		expect(screen.getByRole("button", { name: "Choose workers" })).toBeDisabled();
+		expect(screen.getByText("Install and sign in to at least one agent to continue.")).toBeInTheDocument();
+	});
+
 	it("walks through the preview steps and requires separate agent role selections", async () => {
 		const user = userEvent.setup();
 		await renderOnboarding();

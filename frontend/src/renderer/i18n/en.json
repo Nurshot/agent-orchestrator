@@ -655,6 +655,7 @@
 	"onboarding.hierarchyIllustration": "Agent hierarchy illustration",
 	"onboarding.pickerOrchestratorLabel": "Orchestrator agent",
 	"onboarding.pickerWorkersLabel": "Worker agents",
+	"onboarding.needsAgentSetup": "Install and sign in to at least one agent to continue.",
 	"onboarding.topologyOrchestrator": "Orchestrator",
 	"onboarding.topologyWorkers": "Worker agents",
 	"onboarding.step.welcome.title": "Stop babysitting agents.",

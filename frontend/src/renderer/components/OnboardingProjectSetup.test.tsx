@@ -38,7 +38,6 @@ function renderStep() {
 		<OnboardingProjectSetup
 			onCloudProjectCreated={vi.fn()}
 			onPrepared={vi.fn()}
-			preparedProject={null}
 		/>,
 	);
 }

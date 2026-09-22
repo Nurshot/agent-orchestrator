@@ -192,6 +192,13 @@ export function OnboardingPage() {
 		});
 	}, [agentCatalog, agentCheckIndicatorTimedOut, agentsQuery.isFetching, agentsQuery.isLoading]);
 
+	// One working harness is the floor for leaving the first agent step. Picking
+	// an agent that is missing or signed out would hand a first-run user an
+	// orchestrator that cannot start, so the step holds until one is ready. A
+	// catalog that never resolved leaves every row without an indicator, and an
+	// unresponsive probe should not trap anyone here.
+	const hasReadyAgent = agents.some((agent) => agent.installed && agent.indicator === "none");
+
 	useEffect(() => {
 		if (agentCatalog || (!agentsQuery.isLoading && !agentsQuery.isFetching)) {
 			setAgentCheckIndicatorTimedOut(false);
@@ -279,7 +286,8 @@ export function OnboardingPage() {
 	}, [navigate]);
 
 	const isProjectStep = step === "project";
-	const isAgentStep = step === "orchestrator" || step === "workers";
+	const isOrchestratorStep = step === "orchestrator";
+	const isAgentStep = isOrchestratorStep || step === "workers";
 	const isGuideStep = step === "guide";
 	const isSetupStep = step === "github" || step === "cloud";
 	const isListStep = isProjectStep || isSetupStep;
@@ -360,21 +368,24 @@ export function OnboardingPage() {
 						</div>
 						<div className={cn("min-h-0 pt-2", isListStep && "flex justify-center")}>
 							{isAgentStep && (
-								<AgentPicker
-									role={step === "orchestrator" ? "orchestrator" : "worker"}
-									agents={agents}
-									harnessSetup={harnessSetup}
-									orchestratorAgent={orchestratorAgent}
-									workerAgent={workerAgent}
-									hoveredOrchestrator={hoveredOrchestrator}
-									hoveredWorker={hoveredWorker}
-									onInstall={handleInstallAgent}
-									onSignIn={handleSignInAgent}
-								onOrchestratorHover={setHoveredOrchestrator}
-								onWorkerHover={setHoveredWorker}
-								onOrchestratorSelect={setOrchestratorAgent}
-								onWorkerSelect={setWorkerAgent}
-								/>
+								<div className="w-full max-w-[440px] text-left">
+									<AgentRolePicker
+										label={isOrchestratorStep ? t("onboarding.pickerOrchestratorLabel") : t("onboarding.pickerWorkersLabel")}
+										agents={agents}
+										harnessSetup={harnessSetup}
+										value={isOrchestratorStep ? orchestratorAgent : workerAgent}
+										hovered={isOrchestratorStep ? hoveredOrchestrator : hoveredWorker}
+										onHover={isOrchestratorStep ? setHoveredOrchestrator : setHoveredWorker}
+										onSelect={isOrchestratorStep ? setOrchestratorAgent : setWorkerAgent}
+										onInstall={handleInstallAgent}
+										onSignIn={handleSignInAgent}
+									/>
+									{isOrchestratorStep && !hasReadyAgent ? (
+										<p className="mt-3 text-caption leading-snug text-muted-foreground" role="status">
+											{t("onboarding.needsAgentSetup")}
+										</p>
+									) : null}
+								</div>
 							)}
 							{step === "github" && <OnboardingGitHubStep setup={githubSetup} />}
 							{step === "cloud" && (
@@ -388,7 +399,6 @@ export function OnboardingPage() {
 										if (project) setStep("orchestrator");
 									}}
 									onCloudProjectCreated={handleCloudProjectCreated}
-									preparedProject={preparedProject}
 									/>
 								</div>
 							)}
@@ -466,7 +476,7 @@ export function OnboardingPage() {
 						onClick={next}
 					disabled={
 						(step === "project" && !preparedProject) ||
-						(step === "orchestrator" && !orchestratorAgent) ||
+						(isOrchestratorStep && (!orchestratorAgent || !hasReadyAgent)) ||
 						(step === "workers" && !workerAgent) ||
 						// GitHub is the one prerequisite the flow will not let you skip:
 						// agents cannot open pull requests or read issues without it.
@@ -510,54 +520,6 @@ function OnboardingGuide() {
 			<p className="mt-4 text-xs leading-5 text-muted-foreground">
 				{t("onboarding.guideExplainer")}
 			</p>
-		</div>
-	);
-}
-
-function AgentPicker({
-	role,
-	agents,
-	harnessSetup,
-	orchestratorAgent,
-	workerAgent,
-	hoveredOrchestrator,
-	hoveredWorker,
-	onInstall,
-	onSignIn,
-	onOrchestratorHover,
-	onWorkerHover,
-	onOrchestratorSelect,
-	onWorkerSelect,
-}: {
-	role: "orchestrator" | "worker";
-	agents: OnboardingAgent[];
-	harnessSetup: HarnessSetup;
-	orchestratorAgent: string | null;
-	workerAgent: string | null;
-	hoveredOrchestrator: string | null;
-	hoveredWorker: string | null;
-	onInstall: (id: string) => void;
-	onSignIn: (id: string) => void;
-	onOrchestratorHover: (id: string | null) => void;
-	onWorkerHover: (id: string | null) => void;
-	onOrchestratorSelect: (id: string) => void;
-	onWorkerSelect: (id: string) => void;
-}) {
-	const { t } = useTranslation();
-	const isOrchestrator = role === "orchestrator";
-	return (
-		<div className="w-full max-w-[440px] text-left">
-			<AgentRolePicker
-				label={isOrchestrator ? t("onboarding.pickerOrchestratorLabel") : t("onboarding.pickerWorkersLabel")}
-				agents={agents}
-				harnessSetup={harnessSetup}
-				value={isOrchestrator ? orchestratorAgent : workerAgent}
-				hovered={isOrchestrator ? hoveredOrchestrator : hoveredWorker}
-				onHover={isOrchestrator ? onOrchestratorHover : onWorkerHover}
-				onSelect={isOrchestrator ? onOrchestratorSelect : onWorkerSelect}
-				onInstall={onInstall}
-				onSignIn={onSignIn}
-			/>
 		</div>
 	);
 }

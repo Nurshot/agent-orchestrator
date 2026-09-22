@@ -660,6 +660,7 @@
 	"onboarding.hierarchyIllustration": "에이전트 계층 그림",
 	"onboarding.pickerOrchestratorLabel": "오케스트레이터 에이전트",
 	"onboarding.pickerWorkersLabel": "워커 에이전트",
+	"onboarding.needsAgentSetup": "계속하려면 에이전트를 하나 이상 설치하고 로그인하세요.",
 	"onboarding.topologyOrchestrator": "오케스트레이터",
 	"onboarding.topologyWorkers": "워커 에이전트",
 	"onboarding.step.welcome.title": "에이전트를 지켜보지 마세요.",

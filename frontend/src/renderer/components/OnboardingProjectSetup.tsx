@@ -1,5 +1,5 @@
 import { Cloud, FolderOpen, GitFork } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiClient, apiErrorMessage } from "../lib/api-client";
 import { useCloudGate } from "../hooks/useCloudGate";
@@ -12,20 +12,16 @@ type ProjectMode = "folder" | "git";
 export function OnboardingProjectSetup({
 	onPrepared,
 	onCloudProjectCreated,
-	preparedProject,
 }: {
 	onPrepared: (input: PreparedProjectInput | null) => void;
 	onCloudProjectCreated: () => void;
-	preparedProject: PreparedProjectInput | null;
 }) {
 	const { t } = useTranslation();
 	const { cloudEnabled } = useCloudGate();
 	const [trigger, setTrigger] = useState<{ kind: "clone" | "folder"; nonce: number } | undefined>(undefined);
 	const [showCloud, setShowCloud] = useState(false);
-	const lastPreparedPath = useRef<string | null>(preparedProject?.path ?? null);
 
 	const resetPrepared = useCallback(() => {
-		lastPreparedPath.current = null;
 		onPrepared(null);
 	}, [onPrepared]);
 
@@ -89,12 +85,7 @@ export function OnboardingProjectSetup({
 					if (error) throw new Error(apiErrorMessage(error));
 				}}
 				onboardingTrigger={trigger}
-				prepareOnly={{
-					onPrepared: (input) => {
-						lastPreparedPath.current = input.path;
-						onPrepared(input);
-					},
-				}}
+				prepareOnly={{ onPrepared }}
 			/>
 		</>
 	);

@@ -663,6 +663,7 @@
 	"onboarding.hierarchyIllustration": "Illustration de la hiérarchie des agents",
 	"onboarding.pickerOrchestratorLabel": "Agent orchestrateur",
 	"onboarding.pickerWorkersLabel": "Agents de travail",
+	"onboarding.needsAgentSetup": "Installez un agent et connectez-vous pour continuer.",
 	"onboarding.topologyOrchestrator": "Orchestrateur",
 	"onboarding.topologyWorkers": "Agents de travail",
 	"onboarding.step.welcome.title": "Arrêtez de surveiller les agents.",

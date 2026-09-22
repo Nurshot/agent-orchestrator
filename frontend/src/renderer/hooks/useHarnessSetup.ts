@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { components } from "../../api/schema";
 import type { AuthWorkflow } from "../components/AuthTerminalPanel";
+import { isActiveInstallJob } from "../components/InstallDependencyDialog";
 import { apiClient, apiErrorCode, apiErrorMessage } from "../lib/api-client";
 import { agentsQueryKey, refreshAgents } from "./useAgentsQuery";
 import { useAgentAuthPlans, useStartAgentAuth } from "./useAgentAuth";
@@ -30,10 +31,6 @@ async function fetchInstallJobs(): Promise<InstallJob[]> {
 
 function upsertJob(current: InstallJob[] | undefined, next: InstallJob): InstallJob[] {
 	return [...(current ?? []).filter((job) => job.target !== next.target), next];
-}
-
-export function isActiveInstallJob(job: InstallJob | undefined): boolean {
-	return job?.status === "running" || job?.status === "installing" || job?.status === "verifying";
 }
 
 /**

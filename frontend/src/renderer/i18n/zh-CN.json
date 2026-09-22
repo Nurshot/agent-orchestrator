@@ -660,6 +660,7 @@
 	"onboarding.hierarchyIllustration": "代理层级示意图",
 	"onboarding.pickerOrchestratorLabel": "编排代理",
 	"onboarding.pickerWorkersLabel": "工作代理",
+	"onboarding.needsAgentSetup": "安装并登录至少一个代理以继续。",
 	"onboarding.topologyOrchestrator": "编排代理",
 	"onboarding.topologyWorkers": "工作代理",
 	"onboarding.step.welcome.title": "别再盯着代理干活了。",

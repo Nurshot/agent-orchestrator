@@ -660,6 +660,7 @@
 	"onboarding.hierarchyIllustration": "エージェント階層の図",
 	"onboarding.pickerOrchestratorLabel": "オーケストレーターエージェント",
 	"onboarding.pickerWorkersLabel": "ワーカーエージェント",
+	"onboarding.needsAgentSetup": "続行するには、少なくとも1つのエージェントをインストールしてサインインしてください。",
 	"onboarding.topologyOrchestrator": "オーケストレーター",
 	"onboarding.topologyWorkers": "ワーカーエージェント",
 	"onboarding.step.welcome.title": "エージェントの監視から離れましょう。",
