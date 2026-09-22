@@ -643,7 +643,6 @@ func (c *conversation) finishPrompt(
 		}
 	}
 	c.mu.Unlock()
-
 	c.emit(ports.ChatEvent{Kind: ports.ChatEventControllerState, ControllerState: ports.ChatControllerReady})
 }
 

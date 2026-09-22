@@ -303,6 +303,9 @@ func migrate(db *sql.DB) error {
 	if err := repairRenumberedChatMigrationHistory(db); err != nil {
 		return fmt.Errorf("repair renumbered chat migration history: %w", err)
 	}
+	if err := repairRenumberedTaskProvisioningMigrationHistory(db); err != nil {
+		return fmt.Errorf("repair renumbered task-provisioning migration history: %w", err)
+	}
 	if err := repairRenumberedUsageCostMigrationHistory(db); err != nil {
 		return fmt.Errorf("repair renumbered usage-cost migration history: %w", err)
 	}
@@ -353,6 +356,81 @@ func migrate(db *sql.DB) error {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 	return reconcileSchema(db)
+}
+
+// repairRenumberedTaskProvisioningMigrationHistory preserves databases opened
+// while this branch used 0149 and 0150. Main now owns 0149, so map the already
+// present task-preparation schema to 0151 and release 0149 for Goose to apply.
+func repairRenumberedTaskProvisioningMigrationHistory(db *sql.DB) error {
+	var gooseTable int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'goose_db_version'`,
+	).Scan(&gooseTable); err != nil {
+		return err
+	}
+	if gooseTable == 0 {
+		return nil
+	}
+
+	var provisionColumns, taskPreparationColumn, reviewerColumn int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name IN ('provision_state', 'provision_error')`,
+	).Scan(&provisionColumns); err != nil {
+		return err
+	}
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name = 'is_task_preparation'`,
+	).Scan(&taskPreparationColumn); err != nil {
+		return err
+	}
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM pragma_table_info('review') WHERE name = 'interface_mode'`,
+	).Scan(&reviewerColumn); err != nil {
+		return err
+	}
+	if provisionColumns != 2 || taskPreparationColumn != 1 || reviewerColumn != 0 {
+		return nil
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	for _, version := range []int64{149, 150} {
+		var applied int
+		if err := tx.QueryRow(`
+SELECT COALESCE((
+    SELECT is_applied FROM goose_db_version
+    WHERE version_id = ? ORDER BY id DESC LIMIT 1
+), 0)`, version).Scan(&applied); err != nil {
+			return err
+		}
+		if applied == 0 {
+			return tx.Commit()
+		}
+	}
+
+	var taskPreparationMapped int
+	if err := tx.QueryRow(`
+SELECT COALESCE((
+    SELECT is_applied FROM goose_db_version
+    WHERE version_id = 151 ORDER BY id DESC LIMIT 1
+), 0)`).Scan(&taskPreparationMapped); err != nil {
+		return err
+	}
+	if taskPreparationMapped == 0 {
+		if _, err := tx.Exec(
+			`INSERT INTO goose_db_version (version_id, is_applied) VALUES (151, 1)`,
+		); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`DELETE FROM goose_db_version WHERE version_id = 149`); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // repairRenumberedAgentInstallJobsMigrationHistory preserves development
