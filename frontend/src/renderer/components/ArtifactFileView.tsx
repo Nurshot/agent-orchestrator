@@ -1,7 +1,14 @@
 import { useFileAnnotation } from "../hooks/useFileAnnotation";
-import { FileContentPane } from "./FileContentPane";
+import { FileContentPane, type FileViewMode } from "./FileContentPane";
 
 const ARTIFACT_SOURCE = { kind: "artifact" as const };
+
+// Mirrors FileContentPane's own canRenderMarkdown extension check: a markdown
+// artifact should open already rendered, the same way GitHub opens a README,
+// rather than making the reader click over to the "Rendered" tab themselves.
+function initialModeFor(path: string): FileViewMode {
+	return /\.(md|markdown)$/i.test(path) ? "rendered" : "file";
+}
 
 /**
  * Content view for one file in a session's artifact directory, reusing the
@@ -29,7 +36,7 @@ export function ArtifactFileView({
 
 	return (
 		<div className="h-full min-h-0">
-			<FileContentPane annotation={annotation} initialMode="file" path={path} sessionId={sessionId} source={ARTIFACT_SOURCE} split={false} />
+			<FileContentPane annotation={annotation} initialMode={initialModeFor(path)} path={path} sessionId={sessionId} source={ARTIFACT_SOURCE} split={false} />
 		</div>
 	);
 }

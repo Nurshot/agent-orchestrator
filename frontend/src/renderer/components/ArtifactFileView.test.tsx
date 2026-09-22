@@ -32,33 +32,43 @@ describe("ArtifactFileView", () => {
 		vi.unstubAllGlobals();
 	});
 
-	it("fetches the artifact through the artifact-scoped preview route and renders its content", async () => {
+	it("fetches a .txt artifact through the artifact-scoped preview route and renders its content", async () => {
+		fetchMock.mockResolvedValue(new Response("hello world", { status: 200 }));
+
+		renderWithQuery(<ArtifactFileView artifactName="notes.txt" path="notes.txt" sessionId="sess-1" />);
+
+		await waitFor(() => expect(screen.getByText("hello world")).toBeInTheDocument());
+
+		expect(fetchMock).toHaveBeenCalledWith(
+			"http://127.0.0.1:3001/api/v1/sessions/sess-1/preview/files/__ao_artifacts__/notes.txt",
+		);
+	});
+
+	it("opens a .md artifact already rendered, not as raw markdown source", async () => {
 		fetchMock.mockResolvedValue(new Response("# Notes\n\nhello", { status: 200 }));
 
 		renderWithQuery(<ArtifactFileView artifactName="notes.md" path="notes.md" sessionId="sess-1" />);
 
-		await waitFor(() => expect(screen.getByText(/# Notes/)).toBeInTheDocument());
-
-		expect(fetchMock).toHaveBeenCalledWith(
-			"http://127.0.0.1:3001/api/v1/sessions/sess-1/preview/files/__ao_artifacts__/notes.md",
-		);
+		await waitFor(() => expect(screen.getByRole("heading", { name: "Notes" })).toBeInTheDocument());
+		expect(screen.getByText("hello")).toBeInTheDocument();
+		expect(screen.queryByText(/^# Notes/)).not.toBeInTheDocument();
 	});
 
 	it("URL-encodes nested artifact paths per segment", async () => {
 		fetchMock.mockResolvedValue(new Response("content", { status: 200 }));
 
-		renderWithQuery(<ArtifactFileView artifactName="report.md" path="sub dir/report.md" sessionId="sess-1" />);
+		renderWithQuery(<ArtifactFileView artifactName="report.txt" path="sub dir/report.txt" sessionId="sess-1" />);
 
 		await waitFor(() => expect(fetchMock).toHaveBeenCalled());
 		expect(fetchMock).toHaveBeenCalledWith(
-			"http://127.0.0.1:3001/api/v1/sessions/sess-1/preview/files/__ao_artifacts__/sub%20dir/report.md",
+			"http://127.0.0.1:3001/api/v1/sessions/sess-1/preview/files/__ao_artifacts__/sub%20dir/report.txt",
 		);
 	});
 
 	it("does not show an edit affordance (no write endpoint for artifacts yet)", async () => {
 		fetchMock.mockResolvedValue(new Response("content", { status: 200 }));
 
-		renderWithQuery(<ArtifactFileView artifactName="notes.md" path="notes.md" sessionId="sess-1" />);
+		renderWithQuery(<ArtifactFileView artifactName="notes.txt" path="notes.txt" sessionId="sess-1" />);
 
 		await waitFor(() => expect(screen.getByText("content")).toBeInTheDocument());
 		expect(screen.queryByRole("button", { name: "Edit file" })).not.toBeInTheDocument();
@@ -67,7 +77,7 @@ describe("ArtifactFileView", () => {
 	it("shows a retry option when the fetch fails", async () => {
 		fetchMock.mockResolvedValue(new Response("nope", { status: 404 }));
 
-		renderWithQuery(<ArtifactFileView artifactName="notes.md" path="notes.md" sessionId="sess-1" />);
+		renderWithQuery(<ArtifactFileView artifactName="notes.txt" path="notes.txt" sessionId="sess-1" />);
 
 		await waitFor(() => expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument());
 	});
