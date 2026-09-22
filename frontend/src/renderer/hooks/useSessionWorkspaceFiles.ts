@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UseQueryOptions } from "@tanstack/react-query";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import type { components } from "../../api/schema";
-import { apiClient, apiErrorMessage } from "../lib/api-client";
+import { apiClient, apiErrorMessage, getApiBaseUrl } from "../lib/api-client";
 import {
 	getWorkspaceFileConnectionState,
 	subscribeWorkspaceFileChanges,
@@ -94,6 +94,47 @@ async function fetchSessionPRFile(sessionId: string, number: number, sourceUrl: 
 	if (error) throw new Error(apiErrorMessage(error, errorMessage));
 	if (!data) throw new Error(errorMessage);
 	return data as WorkspaceFileDetail;
+}
+
+// Artifact files live in the session's artifact directory, outside the git
+// workspace, so they have no diff/status and aren't reachable through the
+// workspace-files endpoint. `/preview/files/*` already serves any file rooted
+// under either the workspace or the artifact dir (the `__ao_artifacts__/`
+// prefix picks the latter) as raw bytes — the same route the Browser preview
+// uses for HTML artifacts, just fetched directly here instead of navigated to.
+function artifactPreviewFileUrl(sessionId: string, path: string): string {
+	const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+	return `${getApiBaseUrl()}/api/v1/sessions/${encodeURIComponent(sessionId)}/preview/files/__ao_artifacts__/${encodedPath}`;
+}
+
+async function fetchSessionArtifactFile(sessionId: string, path: string, errorMessage: string): Promise<WorkspaceFileDetail> {
+	const response = await fetch(artifactPreviewFileUrl(sessionId, path));
+	if (!response.ok) throw new Error(errorMessage);
+	const content = await response.text();
+	return {
+		additions: 0,
+		binary: false,
+		content,
+		contentTruncated: false,
+		deleted: false,
+		deletions: 0,
+		diff: "",
+		diffTruncated: false,
+		editable: false,
+		fileFingerprint: "",
+		path,
+		sessionId,
+		size: content.length,
+		status: "unmodified",
+		workspaceVersion: "",
+	};
+}
+
+export function sessionArtifactFileQueryOptions(sessionId: string, path: string, errorMessage = "Unable to load artifact"): UseQueryOptions<WorkspaceFileDetail> {
+	return {
+		queryKey: ["session-artifact-file", sessionId, path],
+		queryFn: () => fetchSessionArtifactFile(sessionId, path, errorMessage),
+	};
 }
 
 // Shared so the diff view (expand-on-demand) and the plain read-only viewer

@@ -1660,6 +1660,7 @@
 	"files.noChangesHead": "Keine Änderungen gegenüber HEAD.",
 	"files.noChangesBase": "Keine Änderungen gegenüber der Basis.",
 	"files.noneChanged": "Keine geänderten Dateien gefunden.",
+	"files.error.loadArtifact": "Artefaktdatei konnte nicht geladen werden",
 	"files.error.loadWorkspaceFile": "Workspace-Datei konnte nicht geladen werden",
 	"files.error.emptyResponse": "Antwort der Workspace-Datei war leer",
 	"files.binaryUnavailable": "Vorschau für Binärdateien ist nicht verfügbar.",

@@ -1660,6 +1660,7 @@
 	"files.noChangesHead": "HEAD に対する変更はありません。",
 	"files.noChangesBase": "ベースに対する変更はありません。",
 	"files.noneChanged": "変更されたファイルは見つかりませんでした。",
+	"files.error.loadArtifact": "アーティファクトファイルを読み込めません",
 	"files.error.loadWorkspaceFile": "ワークスペースファイルを読み込めません",
 	"files.error.emptyResponse": "ワークスペースファイルの応答が空でした",
 	"files.binaryUnavailable": "バイナリファイルのプレビューは利用できません。",

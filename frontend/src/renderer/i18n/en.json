@@ -1834,6 +1834,7 @@
 	"files.noChangesHead": "No changes against HEAD.",
 	"files.noChangesBase": "No changes against base.",
 	"files.noneChanged": "No changed files found.",
+	"files.error.loadArtifact": "Unable to load artifact file",
 	"files.error.loadWorkspaceFile": "Unable to load workspace file",
 	"files.error.emptyResponse": "Workspace file response was empty",
 	"files.binaryUnavailable": "Binary file preview is not available.",

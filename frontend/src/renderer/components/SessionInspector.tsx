@@ -172,6 +172,7 @@ export const SessionInspector = memo(function SessionInspector({
 	browserAnnotationQueue,
 	isInspectorVisible = true,
 	onToggleBrowserPopOut,
+	onOpenArtifact,
 	onOpenFiles,
 	onOpenReviewFile,
 	onOpenReviewerChat,
@@ -188,6 +189,7 @@ export const SessionInspector = memo(function SessionInspector({
 	browserAnnotationQueue?: BrowserAnnotationQueueModel;
 	isInspectorVisible?: boolean;
 	onToggleBrowserPopOut?: (next: boolean) => void;
+	onOpenArtifact?: (target: { path: string }) => void;
 	onOpenFiles?: () => void;
 	onOpenReviewFile?: (target: { line?: number; path: string }) => void;
 	onOpenReviewerChat?: (reviewId: string) => void;
@@ -296,7 +298,7 @@ export const SessionInspector = memo(function SessionInspector({
 					session ? (
 						<SummaryView
 							canOpenReviews={reviewsAvailable}
-							onOpenReviewFile={onOpenReviewFile}
+							onOpenArtifact={onOpenArtifact}
 							onOpenReviews={openReviews}
 							session={session}
 						/>
@@ -325,12 +327,12 @@ function normalizeReviewerId(value: string | undefined): string {
 
 const SummaryView = memo(function SummaryView({
 	canOpenReviews,
-	onOpenReviewFile,
+	onOpenArtifact,
 	onOpenReviews,
 	session,
 }: {
 	canOpenReviews: boolean;
-	onOpenReviewFile?: (target: { line?: number; path: string }) => void;
+	onOpenArtifact?: (target: { path: string }) => void;
 	onOpenReviews: () => void;
 	session: WorkspaceSession;
 }) {
@@ -401,7 +403,7 @@ const SummaryView = memo(function SummaryView({
 								<ArtifactSummaryCard
 									artifact={artifact}
 									key={artifact.path}
-									onOpenReviewFile={onOpenReviewFile}
+									onOpenArtifact={onOpenArtifact}
 									session={session}
 								/>
 							))}
@@ -1325,16 +1327,17 @@ function PRSummaryCard({
 /**
  * One row in the Summary panel's Artifacts list. HTML artifacts open in the
  * existing Browser preview flow (same mechanism as any other AO Browser
- * link); markdown/file artifacts open through the existing Files inspector
- * file-open flow, exactly like a workspace file.
+ * link); markdown/file artifacts open in a dedicated read-only viewer in the
+ * Files inspector, since artifact files live outside the git workspace and
+ * the workspace-diff Files flow can't resolve them.
  */
 function ArtifactSummaryCard({
 	artifact,
-	onOpenReviewFile,
+	onOpenArtifact,
 	session,
 }: {
 	artifact: SessionArtifact;
-	onOpenReviewFile?: (target: { line?: number; path: string }) => void;
+	onOpenArtifact?: (target: { path: string }) => void;
 	session: WorkspaceSession;
 }) {
 	const openInAOBrowser = useSessionBrowserLink(session);
@@ -1343,7 +1346,7 @@ function ArtifactSummaryCard({
 			openInAOBrowser(artifact.previewUrl);
 			return;
 		}
-		onOpenReviewFile?.({ path: artifact.path });
+		onOpenArtifact?.({ path: artifact.path });
 	};
 	return (
 		<button

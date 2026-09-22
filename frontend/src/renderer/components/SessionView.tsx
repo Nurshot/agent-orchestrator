@@ -30,6 +30,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { NotificationCenter } from "./NotificationCenter";
 import { ResizeHandle } from "./ResizeHandle";
 import { SessionFileExplorer } from "./SessionFileExplorer";
+import { ArtifactFileView } from "./ArtifactFileView";
 import { CloudFileContentPane, CloudWorkspaceDiff } from "./CloudWorkspaceDiff";
 import { SessionFileTab } from "./SessionFileTabs";
 import { SessionFileWorkspace } from "./SessionFileWorkspace";
@@ -594,7 +595,7 @@ export function SessionView({ sessionId }: SessionViewProps) {
 	const [filesPoppedOut, setFilesPoppedOut] = useState(false);
 	const [filesSplit, setFilesSplit] = useState(() => window.localStorage.getItem("ao.files.diffStyle") === "split");
 	const [filePreviewRequestsBySession, setFilePreviewRequestsBySession] = useState<
-		Record<string, { path: string; key: number }>
+		Record<string, { path: string; key: number; source?: "artifact" }>
 	>({});
 	const [fileTabsBySession, setFileTabsBySession] = useState<Record<string, SessionFileTabState>>({});
 	const fileTabs = fileTabsBySession[sessionId] ?? EMPTY_SESSION_FILE_TABS;
@@ -1773,6 +1774,18 @@ export function SessionView({ sessionId }: SessionViewProps) {
 		[prepareFilesInspector, revealResolvedWorkspaceFile],
 	);
 
+	const handleOpenArtifact = useCallback(
+		(target: { path: string }) => {
+			if (browserOnly) return;
+			prepareFilesInspector();
+			setFilePreviewRequestsBySession((current) => ({
+				...current,
+				[sessionId]: { path: target.path, key: (current[sessionId]?.key ?? 0) + 1, source: "artifact" },
+			}));
+		},
+		[browserOnly, prepareFilesInspector, sessionId],
+	);
+
 	const handleToggleFilesPopOut = useCallback(
 		(next: boolean) => {
 			if (next) setBrowserPopOutState({ sessionId, phase: "docked" });
@@ -2183,6 +2196,16 @@ export function SessionView({ sessionId }: SessionViewProps) {
 								inspectorView === "files" && session ? (
 									session.cloud ? (
 										<CloudWorkspaceDiff annotation={fileAnnotation} onOpenFile={openCenterFile} onSplitChange={setFilesSplit} onToggleMaximized={handleToggleFilesPopOut} session={session} split={filesSplit} />
+									) : filePreviewRequestsBySession[sessionId]?.source === "artifact" ? (
+										<ArtifactFileView
+											artifactName={
+												session.artifactFiles?.find((artifact) => artifact.path === filePreviewRequestsBySession[sessionId]?.path)
+													?.name ?? filePreviewRequestsBySession[sessionId]!.path
+											}
+											key={filePreviewRequestsBySession[sessionId]!.key}
+											path={filePreviewRequestsBySession[sessionId]!.path}
+											sessionId={session.id}
+										/>
 									) : (
 										<SessionFileExplorer
 										onOpenFile={openCenterFile}
@@ -2196,6 +2219,7 @@ export function SessionView({ sessionId }: SessionViewProps) {
 								) : null
 							}
 							isInspectorVisible={inspectorPanelVisible}
+							onOpenArtifact={browserOnly ? undefined : handleOpenArtifact}
 							onOpenFiles={browserOnly ? undefined : handleOpenFiles}
 							onOpenReviewFile={handleOpenReviewFile}
 								onOpenReviewerTerminal={selectReviewerTerminal}

@@ -959,11 +959,11 @@ describe("SessionInspector Artifacts section", () => {
     );
   });
 
-  it("opens a markdown/file artifact through the existing Files open flow", () => {
-    const onOpenReviewFile = vi.fn();
+  it("opens a markdown/file artifact through the artifact viewer flow", () => {
+    const onOpenArtifact = vi.fn();
     renderWithQuery(
       <SessionInspector
-        onOpenReviewFile={onOpenReviewFile}
+        onOpenArtifact={onOpenArtifact}
         session={session([], {
           outputType: "artifact",
           artifactFiles: [artifact({ path: "notes.md", name: "notes.md", kind: "markdown" })],
@@ -973,7 +973,7 @@ describe("SessionInspector Artifacts section", () => {
 
     fireEvent.click(screen.getByText("notes.md"));
 
-    expect(onOpenReviewFile).toHaveBeenCalledWith({ path: "notes.md" });
+    expect(onOpenArtifact).toHaveBeenCalledWith({ path: "notes.md" });
     expect(postMock).not.toHaveBeenCalledWith(
       "/api/v1/sessions/{sessionId}/preview",
       expect.anything(),

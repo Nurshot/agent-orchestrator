@@ -1686,6 +1686,7 @@
 	"files.noChangesHead": "Aucune modification par rapport à HEAD.",
 	"files.noChangesBase": "Aucune modification par rapport à la base.",
 	"files.noneChanged": "Aucun fichier modifié trouvé.",
+	"files.error.loadArtifact": "Impossible de charger le fichier d'artefact",
 	"files.error.loadWorkspaceFile": "Impossible de charger le fichier de l'espace de travail",
 	"files.error.emptyResponse": "La réponse du fichier de l'espace de travail était vide",
 	"files.binaryUnavailable": "L'aperçu des fichiers binaires n'est pas disponible.",
