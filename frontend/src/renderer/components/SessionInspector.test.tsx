@@ -23,6 +23,7 @@ import { sessionInterfaceTransitionStatus } from "../test/interface-transition-f
 import type {
   PRState,
   PullRequestFacts,
+  SessionArtifact,
   WorkspaceSession,
   WorkspaceSummary,
 } from "../types/workspace";
@@ -858,6 +859,101 @@ describe("SessionInspector PR section", () => {
       "https://example.com/pr/41",
       "https://example.com/pr/42",
     ]);
+  });
+});
+
+const artifact = (
+  overrides: Partial<SessionArtifact> & { path: string },
+): SessionArtifact => ({
+  kind: "file",
+  name: overrides.path,
+  size: 128,
+  updatedAt: "2026-06-15T00:00:00Z",
+  ...overrides,
+});
+
+describe("SessionInspector Artifacts section", () => {
+  it("shows an artifact list, not the empty PR state, when the session output is artifacts", () => {
+    renderWithQuery(
+      <SessionInspector
+        session={session([], {
+          outputType: "artifact",
+          artifactFiles: [
+            artifact({ path: "notes.md", name: "notes.md", kind: "markdown" }),
+            artifact({ path: "report.html", name: "report.html", kind: "html" }),
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.getByText("Artifacts (2)")).toBeInTheDocument();
+    expect(screen.getByText("notes.md")).toBeInTheDocument();
+    expect(screen.getByText("report.html")).toBeInTheDocument();
+    expect(
+      screen.queryByText("No pull request opened yet."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps PR presentation unchanged: PRs take priority over artifacts", () => {
+    renderWithQuery(
+      <SessionInspector
+        session={session([pr(7, "open")], {
+          outputType: "artifact",
+          artifactFiles: [artifact({ path: "notes.md" })],
+        })}
+      />,
+    );
+
+    expect(screen.getByText("Pull request")).toBeInTheDocument();
+    expect(screen.queryByText("notes.md")).not.toBeInTheDocument();
+  });
+
+  it("opens an html artifact through the Browser preview flow", async () => {
+    renderWithQuery(
+      <SessionInspector
+        session={session([], {
+          outputType: "artifact",
+          artifactFiles: [
+            artifact({
+              path: "report.html",
+              name: "report.html",
+              kind: "html",
+              previewUrl: "http://sess-1.localhost:3001/report.html",
+            }),
+          ],
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("report.html"));
+
+    await waitFor(() =>
+      expect(postMock).toHaveBeenCalledWith("/api/v1/sessions/{sessionId}/preview", {
+        params: { path: { sessionId: "sess-1" } },
+        body: { url: "http://sess-1.localhost:3001/report.html" },
+      }),
+    );
+  });
+
+  it("opens a markdown/file artifact through the existing Files open flow", () => {
+    const onOpenReviewFile = vi.fn();
+    renderWithQuery(
+      <SessionInspector
+        onOpenReviewFile={onOpenReviewFile}
+        session={session([], {
+          outputType: "artifact",
+          artifactFiles: [artifact({ path: "notes.md", name: "notes.md", kind: "markdown" })],
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("notes.md"));
+
+    expect(onOpenReviewFile).toHaveBeenCalledWith({ path: "notes.md" });
+    expect(postMock).not.toHaveBeenCalledWith(
+      "/api/v1/sessions/{sessionId}/preview",
+      expect.anything(),
+    );
   });
 });
 
