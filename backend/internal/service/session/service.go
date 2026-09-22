@@ -12,11 +12,13 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
+	accountcore "github.com/aoagents/agent-orchestrator/backend/internal/accountsmanager"
 	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
 	"github.com/aoagents/agent-orchestrator/backend/internal/httpd/apierr"
 	"github.com/aoagents/agent-orchestrator/backend/internal/observe/ownership"
 	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
 	"github.com/aoagents/agent-orchestrator/backend/internal/reqid"
+	accountsvc "github.com/aoagents/agent-orchestrator/backend/internal/service/accountsmanager"
 	sessionmanager "github.com/aoagents/agent-orchestrator/backend/internal/session_manager"
 	"github.com/aoagents/agent-orchestrator/backend/internal/telemetrymeta"
 )
@@ -1121,6 +1123,14 @@ func mapSessionError(err error) error {
 	switch {
 	case err == nil:
 		return nil
+	case errors.Is(err, accountcore.ErrUnavailable):
+		return apierr.Conflict("ACCOUNTS_MANAGER_UNAVAILABLE", "Accounts Manager is unavailable. Open Settings > Accounts or disable routing.", nil)
+	case errors.Is(err, accountsvc.ErrRoutingNotConfigured):
+		return apierr.Conflict("ROUTING_NOT_CONFIGURED", "Configure an account in Settings > Accounts or disable routing.", nil)
+	case errors.Is(err, accountsvc.ErrRoutingAccountUnavailable):
+		return apierr.Conflict("ROUTING_ACCOUNT_UNAVAILABLE", "This session's selected account is unavailable. Open Settings > Accounts or disable routing for new sessions.", nil)
+	case errors.Is(err, accountsvc.ErrRoutingNoEligibleAccount):
+		return apierr.Conflict("ROUTING_NO_ELIGIBLE_ACCOUNT", "No eligible account is available. Open Settings > Accounts or disable routing.", nil)
 	case errors.Is(err, sessionmanager.ErrNotFound):
 		return apierr.NotFound("SESSION_NOT_FOUND", "Unknown session")
 	case errors.Is(err, sessionmanager.ErrNotRestorable):

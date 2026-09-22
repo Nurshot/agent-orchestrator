@@ -74,6 +74,7 @@ func TestRunnerStreamsThroughFakeOpenAIProviderWithoutLeakingSecrets(t *testing.
 	}
 	writePrivateFile(t, filepath.Join(stateDir, "control.key"), controlKey+"\n")
 	writePrivateFile(t, filepath.Join(stateDir, "management.key"), managementKey+"\n")
+	writePrivateFile(t, filepath.Join(stateDir, "routing.key"), strings.Repeat("11", 32)+"\n")
 	config := fmt.Sprintf(`host: 127.0.0.1
 port: %d
 auth-dir: %s
@@ -199,6 +200,7 @@ func TestServeRequiresManagementKeyForManagementAPI(t *testing.T) {
 	}
 	writePrivateFile(t, filepath.Join(stateDir, "control.key"), controlKey+"\n")
 	writePrivateFile(t, filepath.Join(stateDir, "management.key"), managementKey+"\n")
+	writePrivateFile(t, filepath.Join(stateDir, "routing.key"), strings.Repeat("22", 32)+"\n")
 	config := fmt.Sprintf(`host: 127.0.0.1
 port: %d
 auth-dir: %s

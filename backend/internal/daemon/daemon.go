@@ -293,7 +293,7 @@ func Run() error {
 	// becoming available. Cancelling ctx stops lease renewal without killing a
 	// healthy runner, allowing a replacement daemon to reattach.
 	accountsManager.Start(ctx)
-	accountsManagerService := accountsvc.New(accountsmanager.NewManagementClient(accountsManager, nil))
+	accountsManagerService := accountsvc.New(accountsmanager.NewManagementClient(accountsManager, nil), store)
 	accountsManagerService.Start(ctx)
 	policyCoordinator.StartWatcher(ctx)
 	defer func() { _ = policyCoordinator.CloseAndDrain(context.Background()) }()
@@ -435,7 +435,8 @@ func Run() error {
 				HasMoreBefore:                    rows.HasMoreBefore,
 			}, nil
 		}),
-		Drivers: chatDrivers,
+		Drivers:         chatDrivers,
+		AccountsManager: accountsManagerService,
 		// The LCM satisfies ActivityRecorder directly: a chat turn is a pure
 		// lifecycle reduction, same as a hook signal from a terminal session.
 		Activity: lcStack.LCM,
@@ -509,7 +510,7 @@ func Run() error {
 	agentSvc = agentsvc.NewWithDeps(agentDeps)
 	agentSvc.WarmModelCatalogs(ctx)
 
-	sessionSvc, reviewSvc, wiredSessMgr, err := startSession(ctx, cfg, runtimeAdapter, store, lcStack.LCM, messenger, telemetrySink, agents, agentSvc, managedPreview, browserBroker, browserAuthority, chatLauncher{svc: chatSvc}, settingsSvc, policyCoordinator, tracker, codexOperationGate, log)
+	sessionSvc, reviewSvc, wiredSessMgr, err := startSession(ctx, cfg, runtimeAdapter, store, lcStack.LCM, messenger, telemetrySink, agents, agentSvc, managedPreview, browserBroker, browserAuthority, chatLauncher{svc: chatSvc}, settingsSvc, policyCoordinator, tracker, codexOperationGate, accountsManagerService, log)
 	if err != nil {
 		stop()
 		lcStack.Stop()

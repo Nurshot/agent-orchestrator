@@ -19,6 +19,7 @@ const (
 	configFileName        = "config.yaml"
 	controlKeyFileName    = "control.key"
 	managementKeyFileName = "management.key"
+	routingKeyFileName    = "routing.key"
 	runtimeFileName       = "runtime.json"
 )
 
@@ -28,6 +29,7 @@ type privateState struct {
 	ControlKey    string
 	ClientKey     string
 	ManagementKey string
+	RoutingKey    string
 	Port          int
 }
 
@@ -88,6 +90,10 @@ func ensureState(stateDir string) (privateState, error) {
 	if err != nil {
 		return privateState{}, fmt.Errorf("accounts manager management key: %w", err)
 	}
+	routingKey, err := ensurePrivateKey(filepath.Join(root, routingKeyFileName))
+	if err != nil {
+		return privateState{}, fmt.Errorf("accounts manager routing key: %w", err)
+	}
 	configPath := filepath.Join(root, configFileName)
 	cfg, err := loadOrCreateConfig(configPath, authDir)
 	if err != nil {
@@ -99,6 +105,7 @@ func ensureState(stateDir string) (privateState, error) {
 		ControlKey:    controlKey,
 		ClientKey:     cfg.APIKeys[0],
 		ManagementKey: managementKey,
+		RoutingKey:    routingKey,
 		Port:          cfg.Port,
 	}, nil
 }

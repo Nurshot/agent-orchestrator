@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -14,6 +15,7 @@ const (
 	configFileName    = "config.yaml"
 	controlKeyName    = "control.key"
 	managementKeyName = "management.key"
+	routingKeyName    = "routing.key"
 	authDirName       = "auth"
 )
 
@@ -23,6 +25,7 @@ type State struct {
 	ConfigPath    string
 	ControlKey    string
 	ManagementKey string
+	RoutingKey    []byte
 	Config        *sdkconfig.Config
 }
 
@@ -60,6 +63,14 @@ func LoadState(root string) (*State, error) {
 	if managementKey == "" {
 		return nil, fmt.Errorf("management key is empty")
 	}
+	routingBytes, err := readPrivateRegularFile(filepath.Join(root, routingKeyName))
+	if err != nil {
+		return nil, fmt.Errorf("routing key: %w", err)
+	}
+	routingKey, err := hex.DecodeString(strings.TrimSpace(string(routingBytes)))
+	if err != nil || len(routingKey) != 32 {
+		return nil, fmt.Errorf("routing key is invalid")
+	}
 
 	configPath := filepath.Join(root, configFileName)
 	configBytes, err := readPrivateRegularFile(configPath)
@@ -79,6 +90,7 @@ func LoadState(root string) (*State, error) {
 		ConfigPath:    configPath,
 		ControlKey:    controlKey,
 		ManagementKey: managementKey,
+		RoutingKey:    routingKey,
 		Config:        cfg,
 	}, nil
 }

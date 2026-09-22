@@ -18,6 +18,7 @@ function snapshot(revision: number, accountCount: number): AccountsManagerSnapsh
       cooldowns: [],
     })),
     oauthSessions: [],
+    routing: [],
   };
 }
 

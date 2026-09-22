@@ -192,3 +192,16 @@ export async function resetAccountsManagerQuota(accountId: string) {
   );
   if (error) throw new Error(apiErrorMessage(error));
 }
+
+export async function updateAccountsManagerRouting(
+  provider: "codex" | "claude",
+  enabled: boolean,
+  accountIds: string[],
+) {
+  const { data, error } = await apiClient.PUT(
+    "/api/v1/accounts-manager/routing/{provider}",
+    { params: { path: { provider } }, body: { enabled, accountIds } },
+  );
+  if (error) throw new Error(apiErrorMessage(error));
+  return data as AccountsManagerSnapshot;
+}

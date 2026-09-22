@@ -41,6 +41,7 @@ func (c *AccountsManagerController) Register(r chi.Router) {
 	r.Get("/accounts-manager/accounts/{accountId}/models", c.models)
 	r.Get("/accounts-manager/accounts/{accountId}/quota", c.quota)
 	r.Post("/accounts-manager/accounts/{accountId}/quota/reset", c.resetQuota)
+	r.Put("/accounts-manager/routing/{provider}", c.updateRouting)
 }
 
 func (c *AccountsManagerController) RegisterStreams(r chi.Router) {
@@ -196,6 +197,24 @@ func (c *AccountsManagerController) resetQuota(w http.ResponseWriter, r *http.Re
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (c *AccountsManagerController) updateRouting(w http.ResponseWriter, r *http.Request) {
+	var req UpdateAccountsManagerRoutingRequest
+	if !c.decode(w, r, 64<<10, &req) {
+		return
+	}
+	snapshot, err := c.Service.SetRoutingPolicy(
+		r.Context(),
+		accountsmanager.Provider(strings.TrimSpace(chi.URLParam(r, "provider"))),
+		req.Enabled,
+		req.AccountIDs,
+	)
+	if err != nil {
+		c.writeError(w, r, err)
+		return
+	}
+	envelope.WriteJSON(w, http.StatusOK, newAccountsManagerResponse(snapshot))
+}
+
 func (c *AccountsManagerController) events(w http.ResponseWriter, r *http.Request) {
 	if c.Service == nil {
 		c.notImplemented(w, r)
@@ -271,6 +290,12 @@ func (c *AccountsManagerController) writeError(w http.ResponseWriter, r *http.Re
 	switch {
 	case errors.Is(err, accountsmanager.ErrUnavailable):
 		envelope.WriteAPIError(w, r, 503, "unavailable", "ACCOUNTS_MANAGER_UNAVAILABLE", "Accounts Manager is unavailable", nil)
+	case errors.Is(err, accountsvc.ErrRoutingNotConfigured):
+		envelope.WriteAPIError(w, r, 409, "conflict", "ROUTING_NOT_CONFIGURED", "Choose at least one available account before enabling routing", nil)
+	case errors.Is(err, accountsvc.ErrRoutingAccountUnavailable):
+		envelope.WriteAPIError(w, r, 409, "conflict", "ROUTING_ACCOUNT_UNAVAILABLE", "The account selected for this session is unavailable", nil)
+	case errors.Is(err, accountsvc.ErrRoutingNoEligibleAccount):
+		envelope.WriteAPIError(w, r, 409, "conflict", "ROUTING_NO_ELIGIBLE_ACCOUNT", "No eligible account is available for routing", nil)
 	case errors.Is(err, accountsmanager.ErrUnsupportedProvider):
 		envelope.WriteAPIError(w, r, 400, "validation", "ACCOUNTS_MANAGER_PROVIDER_UNSUPPORTED", "Provider must be codex or claude", nil)
 	case errors.Is(err, accountsmanager.ErrInvalidCredential):
@@ -291,7 +316,7 @@ func (c *AccountsManagerController) writeError(w http.ResponseWriter, r *http.Re
 }
 
 func newAccountsManagerResponse(snapshot accountsvc.Snapshot) AccountsManagerAccountsResponse {
-	result := AccountsManagerAccountsResponse{Revision: snapshot.Revision, Availability: string(snapshot.Availability), Stale: snapshot.Stale, Accounts: make([]AccountsManagerAccountResponse, 0, len(snapshot.Accounts)), OAuthSessions: make([]AccountsManagerOAuthSessionResponse, 0, len(snapshot.OAuthSessions))}
+	result := AccountsManagerAccountsResponse{Revision: snapshot.Revision, Availability: string(snapshot.Availability), Stale: snapshot.Stale, Accounts: make([]AccountsManagerAccountResponse, 0, len(snapshot.Accounts)), OAuthSessions: make([]AccountsManagerOAuthSessionResponse, 0, len(snapshot.OAuthSessions)), Routing: make([]AccountsManagerRoutingResponse, 0, len(snapshot.Routing))}
 	for _, a := range snapshot.Accounts {
 		cooldowns := make([]AccountsManagerCooldownResponse, 0, len(a.Cooldowns))
 		for _, v := range a.Cooldowns {
@@ -301,6 +326,9 @@ func newAccountsManagerResponse(snapshot accountsvc.Snapshot) AccountsManagerAcc
 	}
 	for _, session := range snapshot.OAuthSessions {
 		result.OAuthSessions = append(result.OAuthSessions, newOAuthSessionResponse(session))
+	}
+	for _, policy := range snapshot.Routing {
+		result.Routing = append(result.Routing, AccountsManagerRoutingResponse{Provider: string(policy.Provider), Enabled: policy.Enabled, AccountIDs: append([]string(nil), policy.AccountIDs...)})
 	}
 	return result
 }

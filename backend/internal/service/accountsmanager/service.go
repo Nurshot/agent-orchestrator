@@ -5,10 +5,19 @@ package accountsmanager
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
 	core "github.com/aoagents/agent-orchestrator/backend/internal/accountsmanager"
+	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
+	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
+)
+
+var (
+	ErrRoutingNotConfigured      = errors.New("accounts manager routing is not configured")
+	ErrRoutingAccountUnavailable = errors.New("accounts manager pinned account is unavailable")
+	ErrRoutingNoEligibleAccount  = errors.New("accounts manager has no eligible account")
 )
 
 type Availability string
@@ -52,6 +61,7 @@ type Snapshot struct {
 	Stale         bool
 	Accounts      []Account
 	OAuthSessions []OAuthSession
+	Routing       []domain.AccountsManagerRoutingPolicy
 }
 
 type Client interface {
@@ -75,8 +85,46 @@ type lifecycleClient interface {
 	ResetCredentialQuota(context.Context, string) error
 }
 
+type routingClient interface {
+	MintRoute(context.Context, core.Provider, string, string) (core.RouteCapability, error)
+}
+
+type RoutingStore interface {
+	GetAccountsManagerRoutingPolicy(context.Context, domain.AccountsManagerProvider) (domain.AccountsManagerRoutingPolicy, error)
+	PutAccountsManagerRoutingPolicy(context.Context, domain.AccountsManagerRoutingPolicy) error
+	GetAccountsManagerSessionRoute(context.Context, domain.SessionID, domain.AccountsManagerProvider) (domain.AccountsManagerSessionRoute, bool, error)
+	GetOrCreateAccountsManagerSessionRoute(context.Context, domain.AccountsManagerSessionRoute) (domain.AccountsManagerSessionRoute, bool, error)
+}
+
+type LaunchRoute struct {
+	Provider  core.Provider
+	AccountID string
+	BaseURL   string
+	Token     string
+}
+
+func (s *Service) PrepareAgentLaunchRoute(ctx context.Context, sessionID domain.SessionID, provider domain.AccountsManagerProvider, model string) (*ports.AccountsManagerLaunchRoute, error) {
+	route, err := s.PrepareLaunchRoute(ctx, sessionID, core.Provider(provider), model)
+	if err != nil || route == nil {
+		return nil, err
+	}
+	return &ports.AccountsManagerLaunchRoute{BaseURL: route.BaseURL, Token: route.Token}, nil
+}
+
+func (s *Service) AgentRoutingEnabled(ctx context.Context, provider domain.AccountsManagerProvider) (bool, error) {
+	if !provider.Valid() || s.routingStore == nil {
+		return false, nil
+	}
+	policy, err := s.routingStore.GetAccountsManagerRoutingPolicy(ctx, provider)
+	if err != nil {
+		return false, fmt.Errorf("read accounts manager routing policy: %w", err)
+	}
+	return policy.Enabled, nil
+}
+
 type Service struct {
-	client Client
+	client       Client
+	routingStore RoutingStore
 
 	mu          sync.RWMutex
 	snapshot    Snapshot
@@ -85,11 +133,16 @@ type Service struct {
 	subscribers map[chan Snapshot]struct{}
 }
 
-func New(client Client) *Service {
+func New(client Client, stores ...RoutingStore) *Service {
+	var routingStore RoutingStore
+	if len(stores) > 0 {
+		routingStore = stores[0]
+	}
 	return &Service{
-		client:      client,
-		snapshot:    Snapshot{Revision: time.Now().UnixMilli(), Availability: AvailabilityStarting, Stale: true},
-		rawAccounts: make(map[string]string), rawOAuth: make(map[string]string), subscribers: make(map[chan Snapshot]struct{}),
+		client:       client,
+		routingStore: routingStore,
+		snapshot:     Snapshot{Revision: time.Now().UnixMilli(), Availability: AvailabilityStarting, Stale: true},
+		rawAccounts:  make(map[string]string), rawOAuth: make(map[string]string), subscribers: make(map[chan Snapshot]struct{}),
 	}
 }
 
@@ -151,15 +204,137 @@ func (s *Service) Refresh(ctx context.Context) (Snapshot, error) {
 		raw[id] = credential.Ref
 		accounts = append(accounts, accountFromCredential(id, credential))
 	}
+	routing, err := s.loadAndPruneRouting(ctx, accounts)
+	if err != nil {
+		s.markDegraded()
+		return s.Snapshot(), err
+	}
 	s.mu.Lock()
 	s.rawAccounts = raw
 	s.snapshot.Accounts = accounts
+	s.snapshot.Routing = routing
 	s.snapshot.Availability = AvailabilityReady
 	s.snapshot.Stale = false
 	s.bumpLocked()
 	result := cloneSnapshot(s.snapshot)
 	s.mu.Unlock()
 	return result, nil
+}
+
+func (s *Service) SetRoutingPolicy(ctx context.Context, provider core.Provider, enabled bool, accountIDs []string) (Snapshot, error) {
+	domainProvider, ok := domainProvider(provider)
+	if !ok || s.routingStore == nil {
+		return s.Snapshot(), core.ErrUnsupportedProvider
+	}
+	snapshot, err := s.Refresh(ctx)
+	if err != nil {
+		return snapshot, err
+	}
+	seen := make(map[string]struct{}, len(accountIDs))
+	eligible := false
+	for _, id := range accountIDs {
+		if id == "" {
+			return s.Snapshot(), core.ErrInvalidCredential
+		}
+		if _, duplicate := seen[id]; duplicate {
+			return s.Snapshot(), core.ErrCredentialConflict
+		}
+		seen[id] = struct{}{}
+		account, found := accountByID(snapshot.Accounts, id)
+		if !found || account.Provider != provider {
+			return s.Snapshot(), core.ErrCredentialNotFound
+		}
+		eligible = eligible || accountUsable(account, "", time.Now())
+	}
+	if enabled && (!eligible || len(accountIDs) == 0) {
+		return s.Snapshot(), ErrRoutingNotConfigured
+	}
+	policy := domain.AccountsManagerRoutingPolicy{Provider: domainProvider, Enabled: enabled, AccountIDs: append([]string(nil), accountIDs...)}
+	if err = s.routingStore.PutAccountsManagerRoutingPolicy(ctx, policy); err != nil {
+		return s.Snapshot(), fmt.Errorf("save accounts manager routing policy: %w", err)
+	}
+	return s.Refresh(ctx)
+}
+
+func (s *Service) PrepareLaunchRoute(ctx context.Context, sessionID domain.SessionID, provider core.Provider, model string) (*LaunchRoute, error) {
+	domainProvider, ok := domainProvider(provider)
+	client, clientOK := s.client.(routingClient)
+	if !ok || !clientOK || s.routingStore == nil {
+		if !ok {
+			return nil, core.ErrUnsupportedProvider
+		}
+		return nil, core.ErrUnavailable
+	}
+	if existing, found, err := s.routingStore.GetAccountsManagerSessionRoute(ctx, sessionID, domainProvider); err != nil {
+		return nil, fmt.Errorf("read accounts manager session route: %w", err)
+	} else if found {
+		return s.preparePinnedRoute(ctx, client, existing, provider, model)
+	}
+	policy, err := s.routingStore.GetAccountsManagerRoutingPolicy(ctx, domainProvider)
+	if err != nil {
+		return nil, fmt.Errorf("read accounts manager routing policy: %w", err)
+	}
+	if !policy.Enabled {
+		return nil, nil
+	}
+	if len(policy.AccountIDs) == 0 {
+		return nil, ErrRoutingNotConfigured
+	}
+	snapshot, err := s.Refresh(ctx)
+	if err != nil || snapshot.Availability != AvailabilityReady {
+		return nil, core.ErrUnavailable
+	}
+	for _, accountID := range policy.AccountIDs {
+		account, found := accountByID(snapshot.Accounts, accountID)
+		if !found || account.Provider != provider || !accountUsable(account, model, time.Now()) {
+			continue
+		}
+		ref := s.rawAccountRef(accountID)
+		if ref == "" {
+			continue
+		}
+		capability, mintErr := client.MintRoute(ctx, provider, ref, string(sessionID))
+		if mintErr != nil {
+			if errors.Is(mintErr, core.ErrCredentialNotFound) {
+				continue
+			}
+			return nil, mintErr
+		}
+		pinned, _, pinErr := s.routingStore.GetOrCreateAccountsManagerSessionRoute(ctx, domain.AccountsManagerSessionRoute{
+			SessionID: sessionID, Provider: domainProvider, AccountID: accountID, CreatedAt: time.Now().UTC(),
+		})
+		if pinErr != nil {
+			return nil, fmt.Errorf("pin accounts manager session route: %w", pinErr)
+		}
+		if pinned.AccountID != accountID {
+			return s.preparePinnedRoute(ctx, client, pinned, provider, model)
+		}
+		return &LaunchRoute{Provider: provider, AccountID: accountID, BaseURL: capability.BaseURL, Token: capability.Token}, nil
+	}
+	return nil, ErrRoutingNoEligibleAccount
+}
+
+func (s *Service) preparePinnedRoute(ctx context.Context, client routingClient, pinned domain.AccountsManagerSessionRoute, provider core.Provider, model string) (*LaunchRoute, error) {
+	snapshot, err := s.Refresh(ctx)
+	if err != nil || snapshot.Availability != AvailabilityReady {
+		return nil, core.ErrUnavailable
+	}
+	account, found := accountByID(snapshot.Accounts, pinned.AccountID)
+	if !found || account.Provider != provider || !accountUsable(account, model, time.Now()) {
+		return nil, ErrRoutingAccountUnavailable
+	}
+	ref := s.rawAccountRef(pinned.AccountID)
+	if ref == "" {
+		return nil, ErrRoutingAccountUnavailable
+	}
+	capability, err := client.MintRoute(ctx, provider, ref, string(pinned.SessionID))
+	if err != nil {
+		if errors.Is(err, core.ErrCredentialNotFound) {
+			return nil, ErrRoutingAccountUnavailable
+		}
+		return nil, err
+	}
+	return &LaunchRoute{Provider: provider, AccountID: pinned.AccountID, BaseURL: capability.BaseURL, Token: capability.Token}, nil
 }
 
 func (s *Service) Subscribe(ctx context.Context) <-chan Snapshot {
@@ -396,11 +571,113 @@ func (s *Service) pruneTerminalLocked(now time.Time) {
 func accountFromCredential(id string, value core.CredentialSummary) Account {
 	return Account{ID: id, Provider: value.Provider, Kind: value.Kind, Email: value.Email, Status: value.Status, Disabled: value.Disabled, Unavailable: value.Unavailable, CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt, LastRefreshedAt: value.LastRefreshedAt, QuotaSupported: value.QuotaSupported, Cooldowns: append([]core.CredentialCooldown(nil), value.Cooldowns...)}
 }
+
+func domainProvider(provider core.Provider) (domain.AccountsManagerProvider, bool) {
+	switch provider {
+	case core.ProviderCodex:
+		return domain.AccountsManagerProviderCodex, true
+	case core.ProviderClaude:
+		return domain.AccountsManagerProviderClaude, true
+	default:
+		return "", false
+	}
+}
+
+func accountByID(accounts []Account, id string) (Account, bool) {
+	for _, account := range accounts {
+		if account.ID == id {
+			return account, true
+		}
+	}
+	return Account{}, false
+}
+
+func accountUsable(account Account, model string, now time.Time) bool {
+	if account.Disabled || account.Unavailable || account.Status != core.CredentialActive {
+		return false
+	}
+	for _, cooldown := range account.Cooldowns {
+		active := cooldown.RemainingSeconds > 0
+		if !cooldown.RetryAt.IsZero() {
+			active = cooldown.RetryAt.After(now)
+		}
+		if !active {
+			continue
+		}
+		if cooldown.Model == "" || (model != "" && cooldown.Model == model) {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Service) rawAccountRef(id string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.rawAccounts[id]
+}
+
+func (s *Service) loadAndPruneRouting(ctx context.Context, accounts []Account) ([]domain.AccountsManagerRoutingPolicy, error) {
+	providers := []domain.AccountsManagerProvider{
+		domain.AccountsManagerProviderCodex,
+		domain.AccountsManagerProviderClaude,
+	}
+	policies := make([]domain.AccountsManagerRoutingPolicy, 0, len(providers))
+	for _, provider := range providers {
+		policy := domain.AccountsManagerRoutingPolicy{Provider: provider, AccountIDs: []string{}}
+		if s.routingStore != nil {
+			stored, err := s.routingStore.GetAccountsManagerRoutingPolicy(ctx, provider)
+			if err != nil {
+				return nil, fmt.Errorf("read accounts manager routing policy: %w", err)
+			}
+			policy = stored
+			policy.Provider = provider
+			if policy.AccountIDs == nil {
+				policy.AccountIDs = []string{}
+			}
+		}
+
+		filtered := make([]string, 0, len(policy.AccountIDs))
+		for _, id := range policy.AccountIDs {
+			account, ok := accountByID(accounts, id)
+			if ok && string(account.Provider) == string(provider) {
+				filtered = append(filtered, id)
+			}
+		}
+		if s.routingStore != nil && !sameStrings(policy.AccountIDs, filtered) {
+			policy.AccountIDs = filtered
+			if err := s.routingStore.PutAccountsManagerRoutingPolicy(ctx, policy); err != nil {
+				return nil, fmt.Errorf("prune accounts manager routing policy: %w", err)
+			}
+		} else {
+			policy.AccountIDs = filtered
+		}
+		policies = append(policies, policy)
+	}
+	return policies, nil
+}
+
+func sameStrings(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
 func cloneSnapshot(value Snapshot) Snapshot {
 	value.Accounts = append([]Account(nil), value.Accounts...)
 	value.OAuthSessions = append([]OAuthSession(nil), value.OAuthSessions...)
+	value.Routing = append([]domain.AccountsManagerRoutingPolicy(nil), value.Routing...)
 	for i := range value.Accounts {
 		value.Accounts[i].Cooldowns = append([]core.CredentialCooldown(nil), value.Accounts[i].Cooldowns...)
+	}
+	for i := range value.Routing {
+		value.Routing[i].AccountIDs = append([]string(nil), value.Routing[i].AccountIDs...)
 	}
 	return value
 }

@@ -129,6 +129,7 @@ func (p *Plugin) GetLaunchCommand(ctx context.Context, cfg ports.LaunchConfig) (
 	}
 	appendTerminalCompatibilityFlags(&providerArgs)
 	appendReasoningEffortFlag(&providerArgs, cfg.Config.Effort)
+	appendAccountsManagerRouteFlags(&providerArgs, cfg.Route)
 	return agentruntime.BuildLaunchCommand(agentruntime.LaunchConfig{
 		Harness:          agentruntime.HarnessCodex,
 		Binary:           binary,
@@ -168,6 +169,7 @@ func (p *Plugin) GetRestoreCommand(ctx context.Context, cfg ports.RestoreConfig)
 	}
 	appendTerminalCompatibilityFlags(&providerArgs)
 	appendReasoningEffortFlag(&providerArgs, cfg.Config.Effort)
+	appendAccountsManagerRouteFlags(&providerArgs, cfg.Route)
 	return agentruntime.BuildRestoreCommand(agentruntime.RestoreConfig{
 		Harness:          agentruntime.HarnessCodex,
 		Binary:           binary,
@@ -186,6 +188,24 @@ func (p *Plugin) GetRestoreCommand(ctx context.Context, cfg ports.RestoreConfig)
 func appendReasoningEffortFlag(args *[]string, effort string) {
 	if effort = strings.TrimSpace(effort); effort != "" {
 		*args = append(*args, "-c", "model_reasoning_effort="+codexTOMLConfigString(effort))
+	}
+}
+
+func appendAccountsManagerRouteFlags(args *[]string, route *ports.AgentProviderRoute) {
+	if route == nil || strings.TrimSpace(route.BaseURL) == "" || strings.TrimSpace(route.TokenEnv) == "" {
+		return
+	}
+	baseURL := strings.TrimRight(strings.TrimSpace(route.BaseURL), "/") + "/v1"
+	values := []string{
+		"model_provider=" + codexTOMLConfigString("ao_accounts_manager"),
+		"model_providers.ao_accounts_manager.name=" + codexTOMLConfigString("AO Accounts Manager"),
+		"model_providers.ao_accounts_manager.base_url=" + codexTOMLConfigString(baseURL),
+		"model_providers.ao_accounts_manager.env_key=" + codexTOMLConfigString(strings.TrimSpace(route.TokenEnv)),
+		"model_providers.ao_accounts_manager.wire_api=" + codexTOMLConfigString("responses"),
+		"model_providers.ao_accounts_manager.requires_openai_auth=false",
+	}
+	for _, value := range values {
+		*args = append(*args, "-c", value)
 	}
 }
 

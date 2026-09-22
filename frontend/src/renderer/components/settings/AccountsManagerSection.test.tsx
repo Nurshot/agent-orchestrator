@@ -8,12 +8,14 @@ const mocks = vi.hoisted(() => ({
   startOAuth: vi.fn(),
   cancelOAuth: vi.fn(),
   addKey: vi.fn(),
+  updateRouting: vi.fn(),
   snapshot: {
     revision: 1,
     availability: "ready",
     stale: false,
     accounts: [],
     oauthSessions: [],
+    routing: [],
   } as Record<string, unknown>,
 }));
 
@@ -34,6 +36,7 @@ vi.mock("../../hooks/useAccountsManagerQuery", async () => {
     startAccountsManagerOAuth: mocks.startOAuth,
     cancelAccountsManagerOAuth: mocks.cancelOAuth,
     addAccountsManagerAPIKey: mocks.addKey,
+    updateAccountsManagerRouting: mocks.updateRouting,
   };
 });
 
@@ -55,6 +58,7 @@ describe("AccountsManagerSection", () => {
       stale: false,
       accounts: [],
       oauthSessions: [],
+      routing: [],
     };
   });
 
@@ -136,5 +140,122 @@ describe("AccountsManagerSection", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add account" }));
     await waitFor(() => expect(mocks.addKey).toHaveBeenCalled());
     expect(input.value).toBe("");
+  });
+
+  it("enables routing with eligible accounts in displayed order", async () => {
+    mocks.snapshot = {
+      revision: 3,
+      availability: "ready",
+      stale: false,
+      accounts: [
+        {
+          id: "account-a",
+          provider: "codex",
+          kind: "oauth",
+          email: "a@example.com",
+          status: "active",
+          disabled: false,
+          unavailable: false,
+          quotaSupported: false,
+          cooldowns: [],
+        },
+        {
+          id: "account-b",
+          provider: "codex",
+          kind: "oauth",
+          email: "b@example.com",
+          status: "active",
+          disabled: false,
+          unavailable: false,
+          quotaSupported: false,
+          cooldowns: [],
+        },
+      ],
+      oauthSessions: [],
+      routing: [{ provider: "codex", enabled: false, accountIds: [] }],
+    };
+    mocks.updateRouting.mockResolvedValue({
+      ...mocks.snapshot,
+      revision: 4,
+      routing: [
+        {
+          provider: "codex",
+          enabled: true,
+          accountIds: ["account-a", "account-b"],
+        },
+      ],
+    });
+    renderSection();
+    fireEvent.click(
+      screen.getByRole("switch", {
+        name: "Route new codex sessions through Accounts Manager",
+      }),
+    );
+    await waitFor(() =>
+      expect(mocks.updateRouting).toHaveBeenCalledWith("codex", true, [
+        "account-a",
+        "account-b",
+      ]),
+    );
+    expect(
+      screen.getAllByText(
+        "Changes apply to new sessions. Existing sessions keep their selected account.",
+      ),
+    ).toHaveLength(2);
+    expect(
+      screen.getByText("Codex Chat continues to use the native device account."),
+    ).toBeInTheDocument();
+  });
+
+  it("replaces an unusable saved selection when routing is enabled", async () => {
+    mocks.snapshot = {
+      revision: 5,
+      availability: "ready",
+      stale: false,
+      accounts: [
+        {
+          id: "disabled-account",
+          provider: "claude",
+          kind: "oauth",
+          status: "disabled",
+          disabled: true,
+          unavailable: false,
+          quotaSupported: false,
+          cooldowns: [],
+        },
+        {
+          id: "ready-account",
+          provider: "claude",
+          kind: "oauth",
+          status: "active",
+          disabled: false,
+          unavailable: false,
+          quotaSupported: false,
+          cooldowns: [],
+        },
+      ],
+      oauthSessions: [],
+      routing: [
+        {
+          provider: "claude",
+          enabled: false,
+          accountIds: ["disabled-account"],
+        },
+      ],
+    };
+    mocks.updateRouting.mockResolvedValue({ ...mocks.snapshot, revision: 6 });
+
+    renderSection();
+    fireEvent.click(
+      screen.getByRole("switch", {
+        name: "Route new claude sessions through Accounts Manager",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(mocks.updateRouting).toHaveBeenCalledWith("claude", true, [
+        "ready-account",
+      ]),
+    );
   });
 });

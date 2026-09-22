@@ -306,6 +306,9 @@ type ChatStartConfig struct {
 	// MCPServers are client-supplied tool servers for this provider conversation.
 	// User/provider configuration still loads normally; these are additive.
 	MCPServers []ChatMCPServerConfig
+	// Route carries an AO-private gateway override for provider process launches.
+	// Secrets remain in Env and never enter conversation persistence.
+	Route *AgentProviderRoute
 }
 
 // ChatResumeConfig reattaches to a provider conversation after a restart.
@@ -332,6 +335,7 @@ type ChatResumeConfig struct {
 	ProviderScopeID       string
 	AdditionalDirectories []string
 	MCPServers            []ChatMCPServerConfig
+	Route                 *AgentProviderRoute
 }
 
 // ChatMCPServerConfig is the provider-neutral session-setup shape for a tool

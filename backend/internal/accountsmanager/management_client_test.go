@@ -61,6 +61,40 @@ func TestManagementClientRoutingUsesManagementAuthentication(t *testing.T) {
 	}
 }
 
+func TestManagementClientMintsPrivateRouteCapability(t *testing.T) {
+	t.Parallel()
+	const managementToken = "management-secret"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/ao/internal/routes/token" || r.Header.Get("Authorization") != "Bearer "+managementToken {
+			http.Error(w, "unexpected request", http.StatusBadRequest)
+			return
+		}
+		var input map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			t.Fatal(err)
+		}
+		if input["provider"] != "codex" || input["authIndex"] != "private-ref" || input["sessionId"] != "session-1" {
+			t.Fatalf("route request = %#v", input)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"baseUrl":"`+serverURL(r)+`","token":"opaque-route-token"}`)
+	}))
+	defer server.Close()
+
+	client := NewManagementClient(staticEndpointSource{endpoint: Endpoint{BaseURL: server.URL, ManagementToken: managementToken}, ready: true}, server.Client())
+	got, err := client.MintRoute(context.Background(), ProviderCodex, "private-ref", "session-1")
+	if err != nil {
+		t.Fatalf("MintRoute() error = %v", err)
+	}
+	if got.BaseURL != server.URL || got.Token != "opaque-route-token" {
+		t.Fatalf("MintRoute() = %#v", got)
+	}
+}
+
+func serverURL(r *http.Request) string {
+	return "http://" + r.Host
+}
+
 func TestManagementClientUnavailableDoesNotSendRequest(t *testing.T) {
 	t.Parallel()
 

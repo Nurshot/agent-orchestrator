@@ -335,6 +335,49 @@ paths:
       summary: Cancel account sign-in
       tags:
       - system
+  /api/v1/accounts-manager/routing/{provider}:
+    put:
+      operationId: updateAccountsManagerRouting
+      parameters:
+      - in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAccountsManagerRoutingRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountsManagerAccountsResponse'
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Bad Request
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Conflict
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+          description: Service Unavailable
+      summary: Update routing for new sessions
+      tags:
+      - system
   /api/v1/accounts-manager/status:
     get:
       operationId: getAccountsManagerStatus
@@ -7552,6 +7595,10 @@ components:
         revision:
           format: int64
           type: integer
+        routing:
+          items:
+            $ref: '#/components/schemas/AccountsManagerRoutingResponse'
+          type: array
         stale:
           type: boolean
       required:
@@ -7560,6 +7607,7 @@ components:
       - stale
       - accounts
       - oauthSessions
+      - routing
       type: object
     AccountsManagerCooldownResponse:
       properties:
@@ -7738,6 +7786,24 @@ components:
       - plan
       - tierName
       - tierId
+      type: object
+    AccountsManagerRoutingResponse:
+      properties:
+        accountIds:
+          items:
+            type: string
+          type: array
+        enabled:
+          type: boolean
+        provider:
+          enum:
+          - codex
+          - claude
+          type: string
+      required:
+      - provider
+      - enabled
+      - accountIds
       type: object
     AccountsManagerStatusResponse:
       properties:
@@ -12837,6 +12903,18 @@ components:
           type: boolean
       required:
       - disabled
+      type: object
+    UpdateAccountsManagerRoutingRequest:
+      properties:
+        accountIds:
+          items:
+            type: string
+          type: array
+        enabled:
+          type: boolean
+      required:
+      - enabled
+      - accountIds
       type: object
     UpdateProjectSettingsInput:
       properties:

@@ -32,7 +32,7 @@ func TestEnsureStateCreatesPrivateLoopbackConfiguration(t *testing.T) {
 	if state.Port < 1 || state.Port > 65535 {
 		t.Fatalf("port = %d", state.Port)
 	}
-	if state.ControlKey == "" || state.ClientKey == "" || state.ManagementKey == "" {
+	if state.ControlKey == "" || state.ClientKey == "" || state.ManagementKey == "" || state.RoutingKey == "" {
 		t.Fatal("private keys were not generated")
 	}
 	if state.ControlKey == state.ClientKey || state.ControlKey == state.ManagementKey || state.ClientKey == state.ManagementKey {
@@ -44,6 +44,7 @@ func TestEnsureStateCreatesPrivateLoopbackConfiguration(t *testing.T) {
 	assertPrivateMode(t, filepath.Join(root, "auth"), 0o700)
 	assertPrivateMode(t, filepath.Join(root, "control.key"), 0o600)
 	assertPrivateMode(t, filepath.Join(root, "management.key"), 0o600)
+	assertPrivateMode(t, filepath.Join(root, "routing.key"), 0o600)
 	assertPrivateMode(t, filepath.Join(root, "config.yaml"), 0o600)
 
 	b, err := os.ReadFile(filepath.Join(root, "config.yaml"))

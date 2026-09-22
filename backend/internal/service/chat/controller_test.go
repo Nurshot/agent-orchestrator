@@ -418,6 +418,19 @@ type fakeRegistry struct{ driver ports.ChatDriver }
 func (r fakeRegistry) Driver(domain.AgentHarness) (ports.ChatDriver, error) { return r.driver, nil }
 func (r fakeRegistry) SupportsChat(domain.AgentHarness) bool                { return true }
 
+type claudeFakeDriver struct{ fakeDriver }
+
+func (claudeFakeDriver) Harness() domain.AgentHarness { return domain.HarnessClaudeCode }
+
+type fakeChatAccountsManager struct{}
+
+func (fakeChatAccountsManager) PrepareAgentLaunchRoute(context.Context, domain.SessionID, domain.AccountsManagerProvider, string) (*ports.AccountsManagerLaunchRoute, error) {
+	return &ports.AccountsManagerLaunchRoute{BaseURL: "http://127.0.0.1:43127", Token: "opaque-route-token"}, nil
+}
+func (fakeChatAccountsManager) AgentRoutingEnabled(context.Context, domain.AccountsManagerProvider) (bool, error) {
+	return true, nil
+}
+
 type recordingActivity struct {
 	mu      sync.Mutex
 	signals []ports.ActivitySignal
@@ -481,6 +494,39 @@ func TestSuccessfulChatProbeIsReusedByStart(t *testing.T) {
 	}
 	if probes != 1 {
 		t.Fatalf("Probe calls = %d, want 1 successful probe reused by Start", probes)
+	}
+}
+
+func TestClaudeChatLaunchUsesChildScopedAccountsManagerRoute(t *testing.T) {
+	st := openStore(t)
+	var started ports.ChatStartConfig
+	svc := chatsvc.New(chatsvc.Options{
+		Store: st, Sessions: st,
+		Drivers:         fakeRegistry{driver: claudeFakeDriver{fakeDriver{conv: newFakeConversation(), startCfg: &started}}},
+		AccountsManager: fakeChatAccountsManager{},
+		Log:             slog.New(slog.DiscardHandler),
+		NewID:           func() string { return "claude-routed-conversation" },
+	})
+	t.Cleanup(func() { _ = svc.Stop(context.Background(), testSession) })
+
+	_, err := svc.Start(context.Background(), chatsvc.StartConfig{
+		SessionID: testSession, ProjectID: testProject, Harness: domain.HarnessClaudeCode,
+		WorkspacePath: t.TempDir(), Env: map[string]string{"ANTHROPIC_API_KEY": "native-key"},
+		PrepareControllerEnv: func(context.Context, domain.SessionControllerOwner) (map[string]string, error) {
+			return map[string]string{"CLAUDE_CODE_OAUTH_TOKEN": "native-oauth"}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if started.Env["ANTHROPIC_BASE_URL"] != "http://127.0.0.1:43127" || started.Env["ANTHROPIC_AUTH_TOKEN"] != "opaque-route-token" {
+		t.Fatalf("routed env = %#v", started.Env)
+	}
+	if _, ok := started.Env["ANTHROPIC_API_KEY"]; ok {
+		t.Fatal("native API key leaked into routed Claude process")
+	}
+	if _, ok := started.Env["CLAUDE_CODE_OAUTH_TOKEN"]; ok {
+		t.Fatal("native OAuth token leaked into routed Claude process")
 	}
 }
 

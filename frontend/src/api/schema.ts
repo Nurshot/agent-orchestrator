@@ -192,6 +192,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/accounts-manager/routing/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update routing for new sessions */
+        put: operations["updateAccountsManagerRouting"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/accounts-manager/status": {
         parameters: {
             query?: never;
@@ -2708,6 +2725,7 @@ export interface components {
             oauthSessions: components["schemas"]["AccountsManagerOAuthSessionResponse"][];
             /** Format: int64 */
             revision: number;
+            routing: components["schemas"]["AccountsManagerRoutingResponse"][];
             stale: boolean;
         };
         AccountsManagerCooldownResponse: {
@@ -2780,6 +2798,12 @@ export interface components {
             plan: string;
             tierId: string;
             tierName: string;
+        };
+        AccountsManagerRoutingResponse: {
+            accountIds: string[];
+            enabled: boolean;
+            /** @enum {string} */
+            provider: "codex" | "claude";
         };
         AccountsManagerStatusResponse: {
             engineVersion?: string;
@@ -4683,6 +4707,10 @@ export interface components {
         UpdateAccountsManagerAccountRequest: {
             disabled: boolean;
         };
+        UpdateAccountsManagerRoutingRequest: {
+            accountIds: string[];
+            enabled: boolean;
+        };
         UpdateProjectSettingsInput: {
             config: components["schemas"]["ProjectConfig"];
             displayName: string;
@@ -5307,6 +5335,59 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    updateAccountsManagerRouting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAccountsManagerRoutingRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountsManagerAccountsResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
             };
             /** @description Service Unavailable */
             503: {

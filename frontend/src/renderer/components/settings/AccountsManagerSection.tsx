@@ -1,4 +1,6 @@
 import {
+  ArrowDown,
+  ArrowUp,
   ChevronDown,
   ChevronRight,
   LoaderCircle,
@@ -21,6 +23,7 @@ import {
   resetAccountsManagerQuota,
   setAccountsManagerDisabled,
   startAccountsManagerOAuth,
+  updateAccountsManagerRouting,
   useAccountsManagerEvents,
   useAccountsManagerQuery,
   type AccountsManagerAccount,
@@ -28,6 +31,7 @@ import {
 } from "../../hooks/useAccountsManagerQuery";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { Switch } from "../ui/switch";
 import { AgentProviderGroup } from "./AgentProviderGroup";
 import { SettingsSection } from "./SettingsSection";
 
@@ -185,6 +189,9 @@ export function AccountsManagerSection({
             data?.accounts.filter((account) => account.provider === provider) ??
             [];
           const unavailable = !data || data.availability !== "ready";
+          const routing = data?.routing?.find(
+            (policy) => policy.provider === provider,
+          ) ?? { provider, enabled: false, accountIds: [] };
           return (
             <AgentProviderGroup
               key={provider}
@@ -211,6 +218,13 @@ export function AccountsManagerSection({
                 </Button>
               }
             >
+              <RoutingPanel
+                provider={provider}
+                accounts={accounts}
+                policy={routing}
+                disabled={unavailable}
+                update={update}
+              />
               {adding === provider ? (
                 <AddAccountPanel
                   provider={provider}
@@ -256,6 +270,163 @@ export function AccountsManagerSection({
         })}
       </div>
     </SettingsSection>
+  );
+}
+
+function RoutingPanel({
+  provider,
+  accounts,
+  policy,
+  disabled,
+  update,
+}: {
+  provider: Provider;
+  accounts: AccountsManagerAccount[];
+  policy: { enabled: boolean; accountIds: string[] };
+  disabled: boolean;
+  update: (next: AccountsManagerSnapshot) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const byID = new Map(accounts.map((account) => [account.id, account]));
+  const ordered = [
+    ...policy.accountIds
+      .map((id) => byID.get(id))
+      .filter((account): account is AccountsManagerAccount => Boolean(account)),
+    ...accounts.filter((account) => !policy.accountIds.includes(account.id)),
+  ];
+  const eligible = (account: AccountsManagerAccount) =>
+    !account.disabled && !account.unavailable && account.status === "active";
+  const save = async (enabled: boolean, accountIds: string[]) => {
+    setBusy(true);
+    setError(null);
+    try {
+      update(
+        await updateAccountsManagerRouting(provider, enabled, accountIds),
+      );
+    } catch {
+      setError("Could not update routing. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const toggle = (checked: boolean) => {
+    const selected = policy.accountIds.filter((id) => byID.has(id));
+    const selectedHasEligibleAccount = selected.some((id) => {
+      const account = byID.get(id);
+      return account ? eligible(account) : false;
+    });
+    const next =
+      !checked || selectedHasEligibleAccount
+        ? selected
+        : accounts.filter(eligible).map((account) => account.id);
+    void save(checked, next);
+  };
+  const move = (id: string, delta: number) => {
+    const next = [...policy.accountIds];
+    const index = next.indexOf(id);
+    const target = index + delta;
+    if (index < 0 || target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    void save(policy.enabled, next);
+  };
+  const setIncluded = (id: string, included: boolean) => {
+    const next = included
+      ? [...policy.accountIds, id]
+      : policy.accountIds.filter((value) => value !== id);
+    void save(policy.enabled, next);
+  };
+
+  return (
+    <div className="border-b border-border bg-muted/10 px-4 py-3">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium">
+            Route new sessions through Accounts Manager
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Changes apply to new sessions. Existing sessions keep their selected
+            account.
+          </p>
+          {provider === "codex" ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Codex Chat continues to use the native device account.
+            </p>
+          ) : null}
+        </div>
+        <Switch
+          aria-label={`Route new ${provider} sessions through Accounts Manager`}
+          checked={policy.enabled}
+          disabled={disabled || busy || (!policy.enabled && !accounts.some(eligible))}
+          onCheckedChange={toggle}
+        />
+      </div>
+      {accounts.length ? (
+        <div className="mt-3 space-y-1">
+          {ordered.map((account) => {
+            const index = policy.accountIds.indexOf(account.id);
+            const included = index >= 0;
+            const selectable = eligible(account);
+            const label =
+              account.email ||
+              `${provider === "codex" ? "Codex" : "Claude"} ${account.kind === "api_key" ? "API key" : "account"}`;
+            return (
+              <div
+                key={account.id}
+                className="flex min-h-9 items-center gap-2 rounded-md px-2 text-sm"
+              >
+                <span className="min-w-0 flex-1 truncate">{label}</span>
+                {included && index === 0 ? (
+                  <span className="text-xs text-muted-foreground">Preferred</span>
+                ) : null}
+                {included ? (
+                  <>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      aria-label={`Move ${label} up`}
+                      disabled={disabled || busy || index === 0}
+                      onClick={() => move(account.id, -1)}
+                    >
+                      <ArrowUp className="size-3.5" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      aria-label={`Move ${label} down`}
+                      disabled={
+                        disabled || busy || index === policy.accountIds.length - 1
+                      }
+                      onClick={() => move(account.id, 1)}
+                    >
+                      <ArrowDown className="size-3.5" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={disabled || busy || (policy.enabled && policy.accountIds.length === 1)}
+                      onClick={() => setIncluded(account.id, false)}
+                    >
+                      Remove
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={disabled || busy || !selectable}
+                    onClick={() => setIncluded(account.id, true)}
+                  >
+                    Use for routing
+                  </Button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+      {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
+    </div>
   );
 }
 

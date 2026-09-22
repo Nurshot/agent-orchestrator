@@ -19,6 +19,7 @@ func TestLoadStateAcceptsPrivateLoopbackConfiguration(t *testing.T) {
 	}
 	writePrivateFile(t, filepath.Join(root, "control.key"), "control-secret\n")
 	writePrivateFile(t, filepath.Join(root, "management.key"), "management-secret\n")
+	writePrivateFile(t, filepath.Join(root, "routing.key"), strings.Repeat("11", 32)+"\n")
 	writePrivateFile(t, filepath.Join(root, "config.yaml"), strings.Join([]string{
 		"host: 127.0.0.1",
 		"port: 43127",
@@ -49,6 +50,9 @@ func TestLoadStateAcceptsPrivateLoopbackConfiguration(t *testing.T) {
 	}
 	if state.ManagementKey != "management-secret" {
 		t.Fatalf("management key was not loaded")
+	}
+	if len(state.RoutingKey) != 32 {
+		t.Fatalf("routing key length = %d, want 32", len(state.RoutingKey))
 	}
 	if state.Config.Host != "127.0.0.1" || state.Config.Port != 43127 {
 		t.Fatalf("unexpected listener: %s:%d", state.Config.Host, state.Config.Port)
@@ -239,6 +243,7 @@ func validStateFixture(t *testing.T) (string, string) {
 	}
 	writePrivateFile(t, filepath.Join(root, "control.key"), "control-secret\n")
 	writePrivateFile(t, filepath.Join(root, "management.key"), "management-secret\n")
+	writePrivateFile(t, filepath.Join(root, "routing.key"), strings.Repeat("11", 32)+"\n")
 	writePrivateFile(t, filepath.Join(root, "config.yaml"), "host: 127.0.0.1\nport: 43127\nauth-dir: "+authDir+"\napi-keys:\n  - client-secret\nremote-management:\n  allow-remote: false\n  secret-key: ''\n  disable-control-panel: true\n  disable-auto-update-panel: true\nplugins:\n  enabled: false\npprof:\n  enabled: false\ndiscovery:\n  enabled: false\n")
 	return root, authDir
 }

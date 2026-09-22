@@ -6,11 +6,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/accountsmanager"
+	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
 	accountsvc "github.com/aoagents/agent-orchestrator/backend/internal/service/accountsmanager"
 )
 
@@ -20,6 +22,33 @@ type fakeAccountsManagerStatus struct {
 }
 
 type fakeAccountsManagerCatalog struct{}
+
+type fakeAccountsManagerRoutingStore struct {
+	mu       sync.Mutex
+	policies map[domain.AccountsManagerProvider]domain.AccountsManagerRoutingPolicy
+}
+
+func (f *fakeAccountsManagerRoutingStore) GetAccountsManagerRoutingPolicy(_ context.Context, provider domain.AccountsManagerProvider) (domain.AccountsManagerRoutingPolicy, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	policy := f.policies[provider]
+	policy.Provider = provider
+	policy.AccountIDs = append([]string(nil), policy.AccountIDs...)
+	return policy, nil
+}
+func (f *fakeAccountsManagerRoutingStore) PutAccountsManagerRoutingPolicy(_ context.Context, policy domain.AccountsManagerRoutingPolicy) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	policy.AccountIDs = append([]string(nil), policy.AccountIDs...)
+	f.policies[policy.Provider] = policy
+	return nil
+}
+func (*fakeAccountsManagerRoutingStore) GetAccountsManagerSessionRoute(context.Context, domain.SessionID, domain.AccountsManagerProvider) (domain.AccountsManagerSessionRoute, bool, error) {
+	return domain.AccountsManagerSessionRoute{}, false, nil
+}
+func (*fakeAccountsManagerRoutingStore) GetOrCreateAccountsManagerSessionRoute(_ context.Context, route domain.AccountsManagerSessionRoute) (domain.AccountsManagerSessionRoute, bool, error) {
+	return route, true, nil
+}
 
 func (fakeAccountsManagerCatalog) ListCredentials(context.Context) ([]accountsmanager.CredentialSummary, error) {
 	return []accountsmanager.CredentialSummary{{Ref: "raw-auth-index", Provider: accountsmanager.ProviderCodex, Kind: accountsmanager.CredentialOAuth, Email: "safe@example.com", Status: accountsmanager.CredentialActive}}, nil
@@ -107,5 +136,24 @@ func TestAccountsManagerAccountsResponseNeverExposesPrivateReference(t *testing.
 	body := response.Body.String()
 	if strings.Contains(body, "raw-auth-index") || !strings.Contains(body, "amc_safe") || !strings.Contains(body, "safe@example.com") {
 		t.Fatalf("unsafe response: %s", body)
+	}
+}
+
+func TestAccountsManagerRoutingUpdatePreservesOrderedSafeIDs(t *testing.T) {
+	store := &fakeAccountsManagerRoutingStore{policies: make(map[domain.AccountsManagerProvider]domain.AccountsManagerRoutingPolicy)}
+	router := chi.NewRouter()
+	controller := AccountsManagerController{Service: accountsvc.New(fakeAccountsManagerCatalog{}, store)}
+	controller.Register(router)
+	request := httptest.NewRequest(http.MethodPut, "/accounts-manager/routing/codex", strings.NewReader(`{"enabled":true,"accountIds":["amc_safe"]}`))
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), `"routing":[{"provider":"codex","enabled":true,"accountIds":["amc_safe"]}`) {
+		t.Fatalf("routing response = %s", response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), "raw-auth-index") {
+		t.Fatalf("routing response exposed private ref: %s", response.Body.String())
 	}
 }

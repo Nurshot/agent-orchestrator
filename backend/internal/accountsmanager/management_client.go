@@ -125,6 +125,13 @@ const (
 	RoutingFillFirst          RoutingStrategy = "fill-first"
 )
 
+// RouteCapability is private child-process connection material. It must never
+// cross the daemon's public API boundary or be persisted.
+type RouteCapability struct {
+	BaseURL string
+	Token   string
+}
+
 type EndpointSource interface {
 	Endpoint() (Endpoint, bool)
 }
@@ -193,6 +200,38 @@ func (c *ManagementClient) RoutingStrategy(ctx context.Context) (RoutingStrategy
 	default:
 		return "", ErrInvalidResponse
 	}
+}
+
+func (c *ManagementClient) MintRoute(ctx context.Context, provider Provider, ref, sessionID string) (RouteCapability, error) {
+	if provider != ProviderCodex && provider != ProviderClaude {
+		return RouteCapability{}, ErrUnsupportedProvider
+	}
+	ref = strings.TrimSpace(ref)
+	sessionID = strings.TrimSpace(sessionID)
+	if ref == "" || sessionID == "" {
+		return RouteCapability{}, ErrInvalidCredential
+	}
+	var payload struct {
+		BaseURL string `json:"baseUrl"`
+		Token   string `json:"token"`
+	}
+	err := c.doJSON(ctx, "mint route", http.MethodPost, "/ao/internal/routes/token", map[string]string{
+		"provider": string(provider), "authIndex": ref, "sessionId": sessionID,
+	}, &payload)
+	if err != nil {
+		var statusErr *ManagementStatusError
+		if errors.As(err, &statusErr) && statusErr.StatusCode == http.StatusNotFound {
+			return RouteCapability{}, ErrCredentialNotFound
+		}
+		return RouteCapability{}, err
+	}
+	endpoint, ready := c.source.Endpoint()
+	baseURL, ok := verifiedManagementBaseURL(payload.BaseURL)
+	expected, expectedOK := verifiedManagementBaseURL(endpoint.BaseURL)
+	if !ready || !ok || !expectedOK || baseURL != expected || strings.TrimSpace(payload.Token) == "" {
+		return RouteCapability{}, ErrInvalidResponse
+	}
+	return RouteCapability{BaseURL: baseURL, Token: payload.Token}, nil
 }
 
 func (c *ManagementClient) doJSON(ctx context.Context, operation, method, path string, src, dst any) error {

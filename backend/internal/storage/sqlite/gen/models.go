@@ -12,6 +12,26 @@ import (
 	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
 )
 
+type AccountsManagerRoutingPolicy struct {
+	Provider  string
+	Enabled   int64
+	UpdatedAt time.Time
+}
+
+type AccountsManagerRoutingPolicyAccount struct {
+	Provider  string
+	AccountID string
+	Position  int64
+}
+
+type AccountsManagerSessionRoute struct {
+	SessionID string
+	Provider  string
+	AccountID string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 type AgentInstallJob struct {
 	Target              string
 	Status              string

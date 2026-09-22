@@ -466,6 +466,15 @@ type LaunchConfig struct {
 	SystemPrompt     string
 	SystemPromptFile string
 	WorkspacePath    string
+	// Route is an AO-private, per-process provider override. It never contains
+	// the bearer token itself; TokenEnv names the child-only environment variable
+	// that carries it.
+	Route *AgentProviderRoute
+}
+
+type AgentProviderRoute struct {
+	BaseURL  string
+	TokenEnv string
 }
 
 // WorkspaceHookConfig carries inputs needed to install workspace-local agent hooks.
@@ -493,6 +502,7 @@ type RestoreConfig struct {
 	// should append it to the restore command; after-start adapters leave it
 	// empty and receive the turn through the interactive terminal instead.
 	Prompt string
+	Route  *AgentProviderRoute
 	// SystemPrompt carries the session's standing instructions (e.g. the
 	// orchestrator role). Agent CLIs rebuild their system prompt from flags on
 	// resume — it is not part of the transcript — so adapters whose CLI has a

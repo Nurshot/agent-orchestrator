@@ -715,6 +715,22 @@ type AccountsManagerAccountsResponse struct {
 	Stale         bool                                  `json:"stale"`
 	Accounts      []AccountsManagerAccountResponse      `json:"accounts"`
 	OAuthSessions []AccountsManagerOAuthSessionResponse `json:"oauthSessions"`
+	Routing       []AccountsManagerRoutingResponse      `json:"routing"`
+}
+
+type AccountsManagerRoutingResponse struct {
+	Provider   string   `json:"provider" enum:"codex,claude"`
+	Enabled    bool     `json:"enabled"`
+	AccountIDs []string `json:"accountIds"`
+}
+
+type UpdateAccountsManagerRoutingRequest struct {
+	Enabled    bool     `json:"enabled"`
+	AccountIDs []string `json:"accountIds"`
+}
+
+type AccountsManagerProviderParam struct {
+	Provider string `path:"provider"`
 }
 
 type StartAccountsManagerOAuthRequest struct {
