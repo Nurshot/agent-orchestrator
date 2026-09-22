@@ -158,8 +158,11 @@ Opening a Cloud task composer creates a fresh promptless worker session. The
 session is hidden from normal lists, begins provider allocation immediately,
 and expires after two minutes unless Start Task commits it. Submit changes the
 display name, reveals the session, and queues the first prompt atomically.
-Closing the composer cancels the preparation. Changing harness or sandbox
-provider cancels it and starts a replacement.
+Closing the composer detaches it and leaves a two-minute reconnect grace.
+Reopening with the same compute-affecting settings reuses that preparation.
+Changing harness or sandbox provider cancels it and starts a replacement.
+Lease renewal, reconnect, idle expiry, and late-submit recovery are specified
+in `2026-09-23-cloud-preparation-reconnect-grace.md`.
 
 ### Baseline implementation audit
 
@@ -259,8 +262,8 @@ keyframe. Browser readiness is independent of agent execution readiness.
 
 If preparation or commit definitively fails, locally held text remains visible
 and editable. Ambiguous retries reuse the same idempotency key. Closing an
-unsubmitted composer requests deletion, while the server expiry covers crashes
-and disconnected clients.
+unsubmitted composer detaches it for a two-minute reconnect grace. The server
+expiry covers idle, crashed, and disconnected clients.
 
 ### 4.2 Reconciliation and compute
 
@@ -370,7 +373,9 @@ Required tests:
 
 - click starts one preparation before submit;
 - submit commits the prepared identifier exactly once;
-- close and selection changes request deletion;
+- close detaches for a two-minute reconnect grace;
+- compatible reopen reuses the same preparation;
+- selection changes request deletion and replacement;
 - expiry requests deletion without a connected client;
 - normal session lists hide preparations until commit;
 - credential and orchestrator preflights overlap;
