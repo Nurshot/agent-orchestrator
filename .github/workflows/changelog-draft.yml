@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
   pull-requests: write
 
 concurrency:
@@ -98,6 +99,22 @@ jobs:
           existing="$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
           if [ -n "$existing" ]; then
             gh pr edit "$existing" --title "docs: weekly changelog $CHANGELOG_DATE" --body-file "$BODY_PATH"
+            pull_request="$existing"
           else
-            gh pr create --base main --head "$BRANCH" --title "docs: weekly changelog $CHANGELOG_DATE" --body-file "$BODY_PATH"
+            pull_request_url="$(gh pr create --draft --base main --head "$BRANCH" --title "docs: weekly changelog $CHANGELOG_DATE" --body-file "$BODY_PATH")"
+            pull_request="$(gh pr view "$pull_request_url" --json number --jq '.number')"
+          fi
+
+          gh pr edit "$pull_request" \
+            --add-assignee somewherelostt,illegalcall,AgentWrapper \
+            --add-reviewer somewherelostt,illegalcall,AgentWrapper
+
+          marker='<!-- weekly-changelog-review-request -->'
+          existing_notice="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$pull_request/comments" \
+            --jq ".[] | select(.body | contains(\"$marker\")) | .id" | head -n 1)"
+          if [ -z "$existing_notice" ]; then
+            gh pr comment "$pull_request" --body "$marker
+          @somewherelostt @illegalcall @AgentWrapper — the weekly changelog draft is ready for editorial review.
+
+          Please confirm the included changes are available to users, rewrite the generated copy, add exactly one high-quality image or video for the most important feature, verify links and previews, then mark the PR ready and merge it after CI passes."
           fi
