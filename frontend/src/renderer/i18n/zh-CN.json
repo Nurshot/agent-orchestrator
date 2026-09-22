@@ -1243,6 +1243,7 @@
 	"shell.projects": "项目",
 	"shell.showMore": "显示更多",
 	"shell.showMoreProjects": "显示另外 {{count}} 个项目",
+	"shell.showMoreAgents": "显示另外 {{count}} 个代理",
 	"shell.projectActions": "{{name}} 的项目操作",
 	"shell.projectSettings": "项目设置",
 	"shell.provisioning": "正在设置项目 — 正在启动编排器…",

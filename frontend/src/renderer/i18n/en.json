@@ -1394,6 +1394,7 @@
 	"shell.projects": "Projects",
 	"shell.showMore": "Show more",
 	"shell.showMoreProjects": "Show {{count}} more projects",
+	"shell.showMoreAgents": "Show {{count}} more agents",
 	"shell.projectActions": "Project actions for {{name}}",
 	"shell.projectSettings": "Project settings",
 	"shell.provisioning": "Setting up the project — starting the orchestrator…",
