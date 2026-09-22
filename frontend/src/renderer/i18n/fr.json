@@ -424,6 +424,8 @@
 	"inspector.activity": "Activité",
 	"inspector.agent": "Agent",
 	"inspector.aria": "Inspecteur de session",
+	"inspector.artifact": "Artefact",
+	"inspector.artifacts": "Artefacts ({{count}})",
 	"inspector.branch": "Branche",
 	"inspector.ci.autoInject": "Automatically fix CI failures",
 	"inspector.ci.autoInjectDescription": "Envoie les échecs CI des pull requests de cette session à l’agent worker.",
