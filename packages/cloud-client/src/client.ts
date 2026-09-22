@@ -9,6 +9,8 @@ import type {
   CreateProjectInput,
   CreateSessionInput,
   PrepareSessionInput,
+  PrepareSessionResponse,
+  RenewSessionPreparationResponse,
   CommitSessionPreparationInput,
   CurrentAccount,
   DeleteProjectResponse,
@@ -339,13 +341,24 @@ export class CloudClient {
     orgId: string,
     input: PrepareSessionInput,
     options: IdempotentRequestOptions,
-  ): Promise<{ session: Session }> {
+  ): Promise<PrepareSessionResponse> {
     return this.request(this.orgPath(orgId, "/session-preparations"), {
       method: "POST",
       body: input,
       idempotencyKey: options.idempotencyKey,
       signal: options.signal,
     });
+  }
+
+  renewSessionPreparation(
+    orgId: string,
+    sessionId: string,
+    options: RequestOptions = {},
+  ): Promise<RenewSessionPreparationResponse> {
+    return this.request(
+      this.orgPath(orgId, `/sessions/${encodeURIComponent(sessionId)}/renew-preparation`),
+      { method: "POST", signal: options.signal },
+    );
   }
 
   commitSessionPreparation(

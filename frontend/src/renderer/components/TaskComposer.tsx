@@ -18,6 +18,7 @@ import {
 	registerCloudPendingSession,
 } from "../lib/cloud-pending-session";
 import {
+	isCloudSessionPreparationExpired,
 	startCloudSessionPreparation,
 	type CloudSessionPreparation,
 } from "../lib/cloud-session-preparation";
@@ -134,7 +135,7 @@ export function TaskComposer({
 	// creation to the control plane (which provisions a sandbox), while a local
 	// project keeps the existing daemon flow untouched.
 	const { client: cloudClient } = useCloudCp();
-	const { org: cloudOrg } = useCloudOrg();
+	const { org: cloudOrg, userId: cloudUserId } = useCloudOrg();
 	// The user's client-side sandbox-provider preference (when the control plane
 	// offers more than one); omitted lets the control plane use its default.
 	const selectedProvider = useSandboxProviderStore((s) => s.selectedProvider);
@@ -372,10 +373,17 @@ export function TaskComposer({
 		const harness = selectedAgent || DEFAULT_AGENT_PRIORITY[0];
 		const preparation = startCloudSessionPreparation({
 			attempt,
+			compatibilityKey: JSON.stringify([
+				cloudUserId ?? "",
+				cloudOrg.id,
+				projectId,
+				harness,
+				selectedProvider ?? "",
+			]),
 			create: async (idempotencyKey) => {
 				void captureRendererEvent("ao.renderer.cloud_preparation_requested", { project_id: projectId });
 				try {
-					const { session } = await cloudClient.prepareSession(
+					const { preparation: lease, session } = await cloudClient.prepareSession(
 						cloudOrg.id,
 						{
 							projectId,
@@ -385,7 +393,7 @@ export function TaskComposer({
 						{ idempotencyKey },
 					);
 					void captureRendererEvent("ao.renderer.cloud_preparation_succeeded", { project_id: projectId });
-					return session.id;
+					return { lease, sessionId: session.id };
 				} catch (error) {
 					void captureRendererEvent("ao.renderer.cloud_preparation_failed", { project_id: projectId });
 					throw error;
@@ -398,17 +406,30 @@ export function TaskComposer({
 			cancel: async (sessionId) => {
 				await cloudClient.deleteSession(cloudOrg.id, sessionId);
 			},
+			onEvent: (event, properties) => {
+				void captureRendererEvent(`ao.renderer.cloud_preparation_${event}`, {
+					project_id: projectId,
+					...properties,
+				});
+			},
+			renew: async (sessionId) => {
+				const { preparation: lease } = await cloudClient.renewSessionPreparation(cloudOrg.id, sessionId);
+				return lease;
+			},
+			scopeKey: `${cloudUserId ?? ""}:${cloudOrg.id}:${projectId}`,
 		});
 		cloudPreparationRef.current = preparation;
 		return () => {
 			if (cloudPreparationRef.current === preparation) cloudPreparationRef.current = undefined;
-			preparation.cancel();
+			preparation.release();
 		};
 	}, [
 		cloudClient.commitSessionPreparation,
 		cloudClient.deleteSession,
 		cloudClient.prepareSession,
+		cloudClient.renewSessionPreparation,
 		cloudOrg?.id,
+		cloudUserId,
 		isCloudProject,
 		projectId,
 		queryClient,
@@ -420,7 +441,13 @@ export function TaskComposer({
 	const handlePromptChange = useCallback((value: string) => {
 		const nextDirty = value.trim() !== "";
 		setIsPromptDirty((wasDirty) => (wasDirty === nextDirty ? wasDirty : nextDirty));
+		cloudPreparationRef.current?.recordActivity();
 	}, []);
+	useEffect(() => {
+		if (modelTouched || effortTouched || attachments.length > 0) {
+			cloudPreparationRef.current?.recordActivity();
+		}
+	}, [attachments.length, effort, effortTouched, mode, model, modelTouched]);
 	useEffect(() => {
 		onDirtyChange?.(isDirty);
 	}, [isDirty, onDirtyChange]);
@@ -472,12 +499,21 @@ export function TaskComposer({
 					orgId: cloudOrg.id,
 					projectId,
 					initialPrompt: brief,
-					create: (idempotencyKey) => activePreparation
-						? activePreparation.commit({
-							displayName: brief.trim().slice(0, 80) || selectedAgent || DEFAULT_AGENT_PRIORITY[0],
-							prompt: brief,
-						})
-						: createCloudTask(baseInput, idempotencyKey),
+					create: async (idempotencyKey) => {
+						if (!activePreparation) return createCloudTask(baseInput, idempotencyKey);
+						try {
+							return await activePreparation.commit({
+								displayName: brief.trim().slice(0, 80) || selectedAgent || DEFAULT_AGENT_PRIORITY[0],
+								prompt: brief,
+							});
+						} catch (error) {
+							if (!isCloudSessionPreparationExpired(error)) throw error;
+							void captureRendererEvent("ao.renderer.cloud_preparation_commit_recovered", {
+								project_id: projectId,
+							});
+							return createCloudTask(baseInput, idempotencyKey);
+						}
+					},
 					send: async (sessionId, message, idempotencyKey) => {
 						await cloudClient.sendSessionMessage(
 							cloudOrg.id,

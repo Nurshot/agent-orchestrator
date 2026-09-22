@@ -325,6 +325,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cloud/v1/orgs/{orgId}/sessions/{sessionId}/renew-preparation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+                sessionId: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["renewSessionPreparation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cloud/v1/orgs/{orgId}/sessions/{sessionId}/children": {
         parameters: {
             query?: never;
@@ -1597,6 +1616,19 @@ export interface components {
             sandboxProviderConnectionId?: string;
             provider?: string;
         };
+        SessionPreparationLease: {
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: int64 */
+            leaseSeconds: number;
+        };
+        PrepareSessionResponse: {
+            session: components["schemas"]["Session"];
+            preparation: components["schemas"]["SessionPreparationLease"];
+        };
+        RenewSessionPreparationResponse: {
+            preparation: components["schemas"]["SessionPreparationLease"];
+        };
         CommitSessionPreparationInput: {
             displayName: string;
             prompt: string;
@@ -2590,9 +2622,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        session: components["schemas"]["Session"];
-                    };
+                    "application/json": components["schemas"]["PrepareSessionResponse"];
                 };
             };
             default: components["responses"]["Error"];
@@ -2678,6 +2708,30 @@ export interface operations {
                     "application/json": {
                         session: components["schemas"]["Session"];
                     };
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    renewSessionPreparation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+                sessionId: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Preparation lease renewed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenewSessionPreparationResponse"];
                 };
             };
             default: components["responses"]["Error"];

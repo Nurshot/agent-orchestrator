@@ -21,6 +21,8 @@ import type {
 	CloudCpCreateSessionRequest,
 	CloudCpPrepareSessionRequest,
 	CloudCpCommitSessionPreparationRequest,
+	CloudCpPrepareSessionResponse,
+	CloudCpRenewSessionPreparationResponse,
 	CloudCpErrorEnvelope,
 	CloudCpInvitationsResponse,
 	CloudCpListQuery,
@@ -127,7 +129,12 @@ export interface CloudCpClient {
 		orgId: string,
 		body: CloudCpPrepareSessionRequest,
 		options?: CloudCpMutationOptions,
-	): Promise<CloudCpSessionResponse>;
+	): Promise<CloudCpPrepareSessionResponse>;
+	renewSessionPreparation(
+		orgId: string,
+		sessionId: string,
+		options?: CloudCpRequestOptions,
+	): Promise<CloudCpRenewSessionPreparationResponse>;
 	commitSessionPreparation(
 		orgId: string,
 		sessionId: string,
@@ -406,6 +413,10 @@ export function createCloudCpClient(options: CloudCpClientOptions): CloudCpClien
 				body,
 				signal: o?.signal,
 				idempotencyKey: o?.idempotencyKey ?? newIdempotencyKey(),
+			}),
+		renewSessionPreparation: (orgId, sessionId, o) =>
+			requestJson("POST", `/orgs/${seg(orgId)}/sessions/${seg(sessionId)}/renew-preparation`, {
+				signal: o?.signal,
 			}),
 		commitSessionPreparation: (orgId, sessionId, body, o) =>
 			requestJson("POST", `/orgs/${seg(orgId)}/sessions/${seg(sessionId)}/commit-preparation`, {

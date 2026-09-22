@@ -88,6 +88,11 @@ type commitSessionPreparationRequest struct {
 	Prompt      string `json:"prompt"`
 }
 
+type sessionPreparationLeaseResponse struct {
+	ExpiresAt    time.Time `json:"expiresAt"`
+	LeaseSeconds int64     `json:"leaseSeconds"`
+}
+
 const sessionPreparationTTL = 2 * time.Minute
 
 type sessionResponse struct {
@@ -541,7 +546,19 @@ func (s *Server) createSessionFromRequest(
 		s.writeStoreError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"session": toSessionResponse(session, nil)})
+	response := map[string]any{"session": toSessionResponse(session, nil)}
+	if preparationExpiresAfter > 0 {
+		if session.PreparationExpiresAt == nil {
+			s.logger.Error("create session preparation without expiry", "session_id", session.ID, "request_id", requestID(r))
+			writeError(w, r, http.StatusInternalServerError, "internal_error", "The request could not be completed.")
+			return
+		}
+		response["preparation"] = sessionPreparationLeaseResponse{
+			ExpiresAt:    *session.PreparationExpiresAt,
+			LeaseSeconds: int64(preparationExpiresAfter / time.Second),
+		}
+	}
+	writeJSON(w, http.StatusCreated, response)
 }
 
 func (s *Server) sessionCredentialAvailable(
@@ -602,6 +619,28 @@ func (s *Server) commitSessionPreparation(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"session": toSessionResponse(session, nil)})
+}
+
+func (s *Server) renewSessionPreparation(w http.ResponseWriter, r *http.Request) {
+	orgID := chi.URLParam(r, "orgId")
+	sessionID := chi.URLParam(r, "sessionId")
+	if requireUUID(orgID, "orgId") != nil || requireUUID(sessionID, "sessionId") != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_request", "orgId and sessionId must be UUIDs.")
+		return
+	}
+	expiresAt, err := s.store.RenewSessionPreparation(
+		r.Context(), principalFrom(r), orgID, sessionID, sessionPreparationTTL,
+	)
+	if err != nil {
+		s.writeStoreError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"preparation": sessionPreparationLeaseResponse{
+			ExpiresAt:    expiresAt,
+			LeaseSeconds: int64(sessionPreparationTTL / time.Second),
+		},
+	})
 }
 
 func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {

@@ -11,7 +11,7 @@ import {
 } from "../src/index.js";
 
 describe("CloudClient", () => {
-  it("prepares and commits a session through dedicated lifecycle routes", async () => {
+  it("prepares, renews, and commits a session through dedicated lifecycle routes", async () => {
     const fetchMock = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) =>
         jsonResponse({ session: { id: "session one" } }),
@@ -27,6 +27,7 @@ describe("CloudClient", () => {
       { projectId: "project one", harness: "codex", provider: "nodeops" },
       { idempotencyKey: "prepare-key" },
     );
+    await client.renewSessionPreparation("tenant one", "session one");
     await client.commitSessionPreparation(
       "tenant one",
       "session one",
@@ -38,6 +39,9 @@ describe("CloudClient", () => {
       "https://cloud.example.com/api/cloud/v1/orgs/tenant%20one/session-preparations",
     );
     expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      "https://cloud.example.com/api/cloud/v1/orgs/tenant%20one/sessions/session%20one/renew-preparation",
+    );
+    expect(fetchMock.mock.calls[2]?.[0]).toBe(
       "https://cloud.example.com/api/cloud/v1/orgs/tenant%20one/sessions/session%20one/commit-preparation",
     );
   });

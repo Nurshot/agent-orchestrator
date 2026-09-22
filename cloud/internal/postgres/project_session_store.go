@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/aoagents/agent-orchestrator/backend/pkg/contract"
 	"github.com/aoagents/agent-orchestrator/cloud/internal/domain"
@@ -338,22 +339,25 @@ func (s *Store) CommitSessionPreparation(
 			return err
 		}
 
-		var preparation bool
+		var preparation, terminated, expired bool
+		var desiredState string
 		err = tx.QueryRow(
 			ctx,
-			`SELECT session.is_preparation
+			`SELECT session.is_preparation, session.is_terminated,
+				COALESCE(
+					session.preparation_expires_at <= clock_timestamp()
+					OR sandbox.preparation_expires_at <= clock_timestamp(),
+					true
+				),
+				sandbox.desired_state
 			FROM ao_sessions session
 			JOIN ao_sandboxes sandbox
 			  ON sandbox.org_id = session.org_id AND sandbox.session_id = session.id
 			WHERE session.org_id = $1 AND session.id = $2
-			  AND session.is_terminated = false
-			  AND session.is_preparation = true
-			  AND session.preparation_expires_at > clock_timestamp()
-			  AND sandbox.preparation_expires_at > clock_timestamp()
-			  AND sandbox.desired_state = 'running'
+			  AND session.created_by_user_id = $3
 			FOR UPDATE OF session, sandbox`,
-			orgID, sessionID,
-		).Scan(&preparation)
+			orgID, sessionID, principal.UserID,
+		).Scan(&preparation, &terminated, &expired, &desiredState)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -361,7 +365,13 @@ func (s *Store) CommitSessionPreparation(
 			return err
 		}
 		if !preparation {
-			return ErrInvalid
+			return ErrPreparationCommitted
+		}
+		if expired {
+			return ErrPreparationExpired
+		}
+		if terminated || desiredState != "running" {
+			return ErrPreparationUnavailable
 		}
 
 		if _, err := tx.Exec(
@@ -412,6 +422,78 @@ func (s *Store) CommitSessionPreparation(
 		return getSession(ctx, tx, orgID, sessionID, &session)
 	})
 	return session, err
+}
+
+func (s *Store) RenewSessionPreparation(
+	ctx context.Context,
+	principal domain.Principal,
+	orgID, sessionID string,
+	lease time.Duration,
+) (time.Time, error) {
+	var expiresAt time.Time
+	err := s.withTenant(ctx, principal, orgID, func(tx pgx.Tx) error {
+		var preparation, terminated, expired bool
+		var desiredState string
+		err := tx.QueryRow(
+			ctx,
+			`SELECT session.is_preparation, session.is_terminated,
+				COALESCE(
+					session.preparation_expires_at <= clock_timestamp()
+					OR sandbox.preparation_expires_at <= clock_timestamp(),
+					true
+				),
+				sandbox.desired_state
+			FROM ao_sessions session
+			JOIN ao_sandboxes sandbox
+			  ON sandbox.org_id = session.org_id AND sandbox.session_id = session.id
+			WHERE session.org_id = $1 AND session.id = $2
+			  AND session.created_by_user_id = $3
+			FOR UPDATE OF session, sandbox`,
+			orgID, sessionID, principal.UserID,
+		).Scan(&preparation, &terminated, &expired, &desiredState)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if !preparation {
+			return ErrPreparationCommitted
+		}
+		if expired {
+			return ErrPreparationExpired
+		}
+		if terminated || desiredState != "running" {
+			return ErrPreparationUnavailable
+		}
+		if err := tx.QueryRow(
+			ctx,
+			`SELECT clock_timestamp() + $1::interval`,
+			intervalString(lease),
+		).Scan(&expiresAt); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(
+			ctx,
+			`UPDATE ao_sessions
+			SET preparation_expires_at = $3, updated_at = now()
+			WHERE org_id = $1 AND id = $2`,
+			orgID, sessionID, expiresAt,
+		); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(
+			ctx,
+			`UPDATE ao_sandboxes
+			SET preparation_expires_at = $3, updated_at = now()
+			WHERE org_id = $1 AND session_id = $2`,
+			orgID, sessionID, expiresAt,
+		); err != nil {
+			return err
+		}
+		return nil
+	})
+	return expiresAt, err
 }
 
 // ProjectActiveOrchestrator returns the id and sandbox provider of a project's
@@ -778,7 +860,7 @@ func createSessionTx(
 		FROM generated
 		RETURNING id, org_id, project_id, kind, harness, display_name, branch,
 			mode, denied_commands, activity_state, is_terminated,
-			false, '', '', '', '', '', 0, created_at, updated_at`,
+			false, '', '', '', '', '', 0, preparation_expires_at, created_at, updated_at`,
 		orgID,
 		input.ProjectID,
 		input.Kind,
@@ -1070,6 +1152,7 @@ const sessionSelect = `
 				AND terminal.session_id = session.id
 				AND terminal.kind = 'agent'
 		), 0),
+		session.preparation_expires_at,
 		session.created_at, session.updated_at
 	FROM ao_sessions session
 	LEFT JOIN ao_sandboxes sandbox
@@ -1134,6 +1217,7 @@ func scanSession(row scanner, session *domain.Session) error {
 		&session.RuntimeState,
 		&session.RuntimeError,
 		&session.WorkerEpoch,
+		&session.PreparationExpiresAt,
 		&session.CreatedAt,
 		&session.UpdatedAt,
 	)

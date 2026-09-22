@@ -416,11 +416,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [session]
-                properties:
-                  session:
-                    $ref: "#/components/schemas/Session"
+                $ref: "#/components/schemas/PrepareSessionResponse"
         default:
           $ref: "#/components/responses/Error"
   /api/cloud/v1/orgs/{orgId}/sessions/{sessionId}:
@@ -481,6 +477,22 @@ paths:
                 properties:
                   session:
                     $ref: "#/components/schemas/Session"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/cloud/v1/orgs/{orgId}/sessions/{sessionId}/renew-preparation:
+    parameters:
+      - $ref: "#/components/parameters/OrgId"
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      operationId: renewSessionPreparation
+      tags: [Sessions]
+      responses:
+        "200":
+          description: Preparation lease renewed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RenewSessionPreparationResponse"
         default:
           $ref: "#/components/responses/Error"
   /api/cloud/v1/orgs/{orgId}/sessions/{sessionId}/children:
@@ -2987,6 +2999,34 @@ components:
           format: uuid
         provider:
           type: string
+    SessionPreparationLease:
+      type: object
+      additionalProperties: false
+      required: [expiresAt, leaseSeconds]
+      properties:
+        expiresAt:
+          type: string
+          format: date-time
+        leaseSeconds:
+          type: integer
+          format: int64
+          minimum: 1
+    PrepareSessionResponse:
+      type: object
+      additionalProperties: false
+      required: [session, preparation]
+      properties:
+        session:
+          $ref: "#/components/schemas/Session"
+        preparation:
+          $ref: "#/components/schemas/SessionPreparationLease"
+    RenewSessionPreparationResponse:
+      type: object
+      additionalProperties: false
+      required: [preparation]
+      properties:
+        preparation:
+          $ref: "#/components/schemas/SessionPreparationLease"
     CommitSessionPreparationInput:
       type: object
       additionalProperties: false

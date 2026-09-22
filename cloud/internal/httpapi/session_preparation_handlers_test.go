@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/aoagents/agent-orchestrator/cloud/internal/domain"
+	"github.com/aoagents/agent-orchestrator/cloud/internal/postgres"
 	"github.com/aoagents/agent-orchestrator/cloud/internal/sandbox"
 	"github.com/go-chi/chi/v5"
 )
@@ -19,8 +20,14 @@ type preparationHandlerStore struct {
 	createdInput  domain.CreateSession
 	commitInput   domain.CommitSessionPreparation
 	commitSession string
+	commitError   error
+	renewSession  string
+	renewLease    time.Duration
+	renewExpires  time.Time
+	renewError    error
 	createCalls   int
 	commitCalls   int
+	renewCalls    int
 }
 
 type concurrentPreparationStore struct {
@@ -90,7 +97,24 @@ func (s *preparationHandlerStore) CreateSession(
 ) (domain.Session, error) {
 	s.createCalls++
 	s.createdInput = input
-	return domain.Session{ID: "00000000-0000-0000-0000-0000000000e5", Kind: input.Kind}, nil
+	session := domain.Session{ID: "00000000-0000-0000-0000-0000000000e5", Kind: input.Kind}
+	if input.PreparationExpiresAfter > 0 {
+		expiresAt := time.Date(2026, time.September, 23, 12, 2, 0, 0, time.UTC)
+		session.PreparationExpiresAt = &expiresAt
+	}
+	return session, nil
+}
+
+func (s *preparationHandlerStore) RenewSessionPreparation(
+	_ context.Context,
+	_ domain.Principal,
+	_, sessionID string,
+	lease time.Duration,
+) (time.Time, error) {
+	s.renewCalls++
+	s.renewSession = sessionID
+	s.renewLease = lease
+	return s.renewExpires, s.renewError
 }
 
 func (s *preparationHandlerStore) CommitSessionPreparation(
@@ -102,6 +126,9 @@ func (s *preparationHandlerStore) CommitSessionPreparation(
 	s.commitCalls++
 	s.commitSession = sessionID
 	s.commitInput = input
+	if s.commitError != nil {
+		return domain.Session{}, s.commitError
+	}
 	return domain.Session{ID: sessionID, DisplayName: input.DisplayName, Kind: "worker"}, nil
 }
 
@@ -143,6 +170,15 @@ func TestPrepareSessionCreatesHiddenExpiringWorker(t *testing.T) {
 	}
 	if store.createdInput.PreparationExpiresAfter != sessionPreparationTTL {
 		t.Fatalf("preparation TTL = %v, want %v", store.createdInput.PreparationExpiresAfter, sessionPreparationTTL)
+	}
+	var response struct {
+		Preparation sessionPreparationLeaseResponse `json:"preparation"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Preparation.LeaseSeconds != 120 || response.Preparation.ExpiresAt.IsZero() {
+		t.Fatalf("preparation lease = %+v", response.Preparation)
 	}
 }
 
@@ -223,5 +259,117 @@ func TestCommitSessionPreparationRejectsEmptyPrompt(t *testing.T) {
 	}
 	if store.commitCalls != 0 {
 		t.Fatalf("CommitSessionPreparation calls = %d, want 0", store.commitCalls)
+	}
+}
+
+func TestCommitSessionPreparationReturnsStableStateErrors(t *testing.T) {
+	tests := []struct {
+		name   string
+		err    error
+		status int
+		code   string
+	}{
+		{name: "expired", err: postgres.ErrPreparationExpired, status: http.StatusGone, code: "PREPARATION_EXPIRED"},
+		{name: "committed", err: postgres.ErrPreparationCommitted, status: http.StatusConflict, code: "PREPARATION_COMMITTED"},
+		{name: "unavailable", err: postgres.ErrPreparationUnavailable, status: http.StatusConflict, code: "PREPARATION_UNAVAILABLE"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			store := &preparationHandlerStore{commitError: test.err}
+			srv := newChildServer(store, bothProviderProvisioning(sandbox.ProviderNodeOps), sandbox.ProviderNodeOps)
+			recorder := httptest.NewRecorder()
+			sessionID := "00000000-0000-0000-0000-0000000000e5"
+
+			srv.commitSessionPreparation(recorder, preparationRequest(
+				t,
+				http.MethodPost,
+				"/api/cloud/v1/orgs/"+autolinkOrgID+"/sessions/"+sessionID+"/commit-preparation",
+				`{"displayName":"New task","prompt":"Run checks"}`,
+				sessionID,
+			))
+
+			if recorder.Code != test.status {
+				t.Fatalf("status = %d, want %d; body = %s", recorder.Code, test.status, recorder.Body.String())
+			}
+			var response errorEnvelope
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if response.Code != test.code {
+				t.Fatalf("code = %q, want %q", response.Code, test.code)
+			}
+		})
+	}
+}
+
+func TestRenewSessionPreparationExtendsLease(t *testing.T) {
+	expiresAt := time.Date(2026, time.September, 23, 12, 4, 0, 0, time.UTC)
+	store := &preparationHandlerStore{renewExpires: expiresAt}
+	srv := newChildServer(store, bothProviderProvisioning(sandbox.ProviderNodeOps), sandbox.ProviderNodeOps)
+	recorder := httptest.NewRecorder()
+	sessionID := "00000000-0000-0000-0000-0000000000e5"
+
+	srv.renewSessionPreparation(recorder, preparationRequest(
+		t,
+		http.MethodPost,
+		"/api/cloud/v1/orgs/"+autolinkOrgID+"/sessions/"+sessionID+"/renew-preparation",
+		"",
+		sessionID,
+	))
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", recorder.Code, recorder.Body.String())
+	}
+	if store.renewCalls != 1 || store.renewSession != sessionID || store.renewLease != sessionPreparationTTL {
+		t.Fatalf("renew = (%d, %q, %v)", store.renewCalls, store.renewSession, store.renewLease)
+	}
+	var response struct {
+		Preparation sessionPreparationLeaseResponse `json:"preparation"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !response.Preparation.ExpiresAt.Equal(expiresAt) || response.Preparation.LeaseSeconds != 120 {
+		t.Fatalf("preparation lease = %+v", response.Preparation)
+	}
+}
+
+func TestRenewSessionPreparationReturnsStableStateErrors(t *testing.T) {
+	tests := []struct {
+		name   string
+		err    error
+		status int
+		code   string
+	}{
+		{name: "expired", err: postgres.ErrPreparationExpired, status: http.StatusGone, code: "PREPARATION_EXPIRED"},
+		{name: "committed", err: postgres.ErrPreparationCommitted, status: http.StatusConflict, code: "PREPARATION_COMMITTED"},
+		{name: "unavailable", err: postgres.ErrPreparationUnavailable, status: http.StatusConflict, code: "PREPARATION_UNAVAILABLE"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			store := &preparationHandlerStore{renewError: test.err}
+			srv := newChildServer(store, bothProviderProvisioning(sandbox.ProviderNodeOps), sandbox.ProviderNodeOps)
+			recorder := httptest.NewRecorder()
+			sessionID := "00000000-0000-0000-0000-0000000000e5"
+
+			srv.renewSessionPreparation(recorder, preparationRequest(
+				t,
+				http.MethodPost,
+				"/api/cloud/v1/orgs/"+autolinkOrgID+"/sessions/"+sessionID+"/renew-preparation",
+				"",
+				sessionID,
+			))
+
+			if recorder.Code != test.status {
+				t.Fatalf("status = %d, want %d; body = %s", recorder.Code, test.status, recorder.Body.String())
+			}
+			var response errorEnvelope
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if response.Code != test.code {
+				t.Fatalf("code = %q, want %q", response.Code, test.code)
+			}
+		})
 	}
 }

@@ -80,9 +80,10 @@ type Session struct {
 	// from idle-pause, a restore, or any re-provision), so a client can key its
 	// terminal on it and re-attach to the live agent instead of clinging to the
 	// dead epoch's exited terminal. 0 when no worker has ever connected.
-	WorkerEpoch int64
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	WorkerEpoch          int64
+	PreparationExpiresAt *time.Time `json:"-"`
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 // Status derives the session's display status from runtime and pull request facts.

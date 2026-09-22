@@ -17,8 +17,10 @@ input-enabled terminal crosses the first-frame boundary.
 Opening the Cloud task composer now starts a hidden, promptless cold session.
 Provider allocation, worker connection, and repository preparation advance
 while the user types. Start Task atomically reveals that same session and
-stores the first prompt as one durable turn. Closing the composer requests
-deletion, and a two-minute server expiry reclaims abandoned preparations.
+stores the first prompt as one durable turn. Closing the composer now detaches
+it with a fresh two-minute lease. A compatible reopen in the same renderer
+process reuses the hidden session. Server expiry still reclaims idle, crashed,
+and abandoned preparations.
 
 No warm capacity was used. Every measured session received a fresh worker.
 Browser startup remained lazy: the test first proved that Chromium was absent,
@@ -107,6 +109,45 @@ delivery, and polling fallback. The first uncached relay sample reached agent
 readiness in 18,015 ms. A later cached polling sample reached it in 4,148 ms.
 The lifecycle run then exercised control-plane restart, full-stack restart,
 worker replacement, pause and resume, and persistent workspace recovery.
+
+## Reconnect grace follow-up, 2026-09-23
+
+The hidden preparation now has an explicit renewal contract. Prepare and renew
+responses return the authoritative expiry and fixed 120-second lease. Renewal
+locks the session and sandbox together, applies one database timestamp to both
+rows, and rejects expired, committed, unavailable, foreign-organization, and
+foreign-user preparations with stable responses.
+
+The renderer keeps compatible preparations in a process-scoped registry.
+Closing the composer releases its attachment and performs one best-effort
+renewal without deleting the sandbox. Reopening reuses the same session and
+renews it immediately. Prompt edits, attachment changes, and task-setting
+changes coalesce into at most one renewal every 45 seconds. An untouched open
+composer performs no periodic keepalive. Harness, provider, project, account,
+or organization changes still invalidate and delete the old preparation.
+
+Commit retries ambiguous responses with the same key. An explicit expiry keeps
+the pending prompt intact and falls back to one fresh durable session. Lifecycle
+telemetry records acquisition, reuse, detach, reattach, renewal outcome, expiry,
+and commit recovery without recording draft content.
+
+Observed validation:
+
+- focused renderer and Cloud client checks passed 73 tests;
+- frontend typecheck passed;
+- the Cloud module passed its full test suite, full race suite, vet, and build;
+- the Docker lifecycle passed preparation metadata, renewal, equal session and
+  sandbox deadlines, commit idempotency, post-commit rejection, forced-expiry
+  rejection, provider cleanup, restart, replacement, transport, checkout, and
+  lazy-browser regressions;
+- the prepared worker reached ready in 4,313 ms in that cached-image local run;
+- the broad frontend suite passed 4,848 tests and skipped 7. Its remaining 120
+  failures are environment-only: 102 archive fixtures require a missing `zip`
+  executable, and 18 profile-import cases require rebuilding a native module
+  for the host Node ABI.
+
+The lifecycle run removed its Compose services, volumes, network, workers, and
+scratch state. No warm capacity or implicit browser startup was introduced.
 
 ## Five-run local Docker distribution
 

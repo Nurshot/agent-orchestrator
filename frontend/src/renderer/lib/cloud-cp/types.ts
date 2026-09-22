@@ -189,6 +189,19 @@ export interface CloudCpPrepareSessionRequest {
 	provider?: string;
 }
 
+export interface CloudCpSessionPreparationLease {
+	expiresAt: string;
+	leaseSeconds: number;
+}
+
+export interface CloudCpPrepareSessionResponse extends CloudCpSessionResponse {
+	preparation: CloudCpSessionPreparationLease;
+}
+
+export interface CloudCpRenewSessionPreparationResponse {
+	preparation: CloudCpSessionPreparationLease;
+}
+
 export interface CloudCpCommitSessionPreparationRequest {
 	displayName: string;
 	prompt: string;

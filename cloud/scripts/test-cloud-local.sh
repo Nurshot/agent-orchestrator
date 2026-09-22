@@ -190,6 +190,8 @@ def request(method, path, *, body=None, token=None, idempotency_key=None, expect
         response = urllib.request.urlopen(operation, timeout=10)
     except urllib.error.HTTPError as error:
         detail = error.read().decode(errors="replace")
+        if error.code == expected:
+            return json.loads(detail)
         raise RuntimeError(
             f"{method} {path} returned {error.code}, expected {expected}: {detail}"
         ) from error
@@ -347,7 +349,7 @@ elif mode == "prepare":
     prompt = f"prepared-session-smoke-{time.time_ns()}"
     commit_key = f"commit-preparation-{time.time_ns()}"
     started = time.time()
-    session = request(
+    prepared = request(
         "POST",
         f"/api/cloud/v1/orgs/{org_id}/session-preparations",
         body={
@@ -358,15 +360,35 @@ elif mode == "prepare":
         token=token,
         idempotency_key=f"prepare-session-{time.time_ns()}",
         expected=201,
-    )["session"]
+    )
+    session = prepared["session"]
+    preparation = prepared["preparation"]
+    if preparation["leaseSeconds"] != 120 or not preparation["expiresAt"]:
+        raise RuntimeError(f"invalid preparation lease: {preparation!r}")
     if session["id"] in visible_session_ids(org_id, state["projectId"], token):
         raise RuntimeError("uncommitted preparation appeared in the session list")
     state.update({
         "preparationId": session["id"],
         "preparationPrompt": prompt,
         "preparationCommitKey": commit_key,
+        "preparationExpiresAt": preparation["expiresAt"],
         "preparationStartedAt": started,
     })
+    state_file.write_text(json.dumps(state))
+elif mode == "renew-preparation":
+    state = json.loads(state_file.read_text())
+    renewed = request(
+        "POST",
+        f"/api/cloud/v1/orgs/{state['orgId']}/sessions/{state['preparationId']}/renew-preparation",
+        token=state["token"],
+    )["preparation"]
+    if renewed["leaseSeconds"] != 120:
+        raise RuntimeError(f"invalid renewed lease: {renewed!r}")
+    if renewed["expiresAt"] <= state["preparationExpiresAt"]:
+        raise RuntimeError(
+            f"renewal did not extend expiry: {state['preparationExpiresAt']} -> {renewed['expiresAt']}"
+        )
+    state["preparationExpiresAt"] = renewed["expiresAt"]
     state_file.write_text(json.dumps(state))
 elif mode == "prepare-ready":
     state = json.loads(state_file.read_text())
@@ -429,6 +451,16 @@ elif mode == "delete-preparation":
         token=state["token"],
         expected=202,
     )
+elif mode == "renew-committed-preparation":
+    state = json.loads(state_file.read_text())
+    error = request(
+        "POST",
+        f"/api/cloud/v1/orgs/{state['orgId']}/sessions/{state['preparationId']}/renew-preparation",
+        token=state["token"],
+        expected=409,
+    )
+    if error.get("code") != "PREPARATION_COMMITTED":
+        raise RuntimeError(f"unexpected committed renewal error: {error!r}")
 elif mode == "cancel-preparation":
     state = json.loads(state_file.read_text())
     token = state["token"]
@@ -473,6 +505,16 @@ elif mode == "expire-preparation":
         raise RuntimeError("expiring preparation appeared in the session list")
     state["expiringPreparationId"] = session["id"]
     state_file.write_text(json.dumps(state))
+elif mode == "renew-expired-preparation":
+    state = json.loads(state_file.read_text())
+    error = request(
+        "POST",
+        f"/api/cloud/v1/orgs/{state['orgId']}/sessions/{state['expiringPreparationId']}/renew-preparation",
+        token=state["token"],
+        expected=410,
+    )
+    if error.get("code") != "PREPARATION_EXPIRED":
+        raise RuntimeError(f"unexpected expired renewal error: {error!r}")
 elif mode == "start":
     state = json.loads(state_file.read_text())
     token = state["token"]
@@ -970,7 +1012,16 @@ exercise_api create
 seed_smoke_project
 if [[ "$measure_startup" != true ]]; then
 	exercise_api prepare
+	exercise_api renew-preparation
 	prepared_session="$(state_value preparationId)"
+	wait_for_sql_true "$(org_id)" \
+		"SELECT session.preparation_expires_at = sandbox.preparation_expires_at
+			AND session.preparation_expires_at > now()
+		 FROM ao_sessions session
+		 JOIN ao_sandboxes sandbox
+		   ON sandbox.org_id = session.org_id AND sandbox.session_id = session.id
+		 WHERE session.org_id = '$(org_id)' AND session.id = '${prepared_session}'" \
+		"Renewed preparation expiries did not match."
 	prepared_worker="$(wait_for_worker "$prepared_session")"
 	exercise_api prepare-ready
 	if [[ "$(docker exec "$prepared_worker" git -C /workspace/repository config --get remote.origin.promisor)" != true ]]; then
@@ -982,6 +1033,7 @@ if [[ "$measure_startup" != true ]]; then
 		exit 1
 	fi
 	exercise_api commit-preparation
+	exercise_api renew-committed-preparation
 	wait_for_sql_true "$(org_id)" \
 		"SELECT EXISTS (
 			SELECT 1 FROM ao_worker_requests
@@ -998,6 +1050,7 @@ if [[ "$measure_startup" != true ]]; then
 	exercise_api expire-preparation
 	expiring_session="$(state_value expiringPreparationId)"
 	force_preparation_expiry "$(org_id)" "$expiring_session"
+	exercise_api renew-expired-preparation
 	wait_for_preparation_expired "$(org_id)" "$expiring_session"
 fi
 exercise_api start
