@@ -7,7 +7,8 @@ plane, and disposable project.
 The recording shows the Cloud task composer closing and reopening within the
 grace window. The reopened task field was editable. A database assertion after
 reopen found one active preparation, one sandbox, the same session and sandbox
-ID, and equal preparation expiries.
+ID, and equal preparation expiries. Credential-specific selector labels are
+redacted from the media.
 
 ![Reopened Cloud task composer in the native desktop app.](reconnect-grace.png)
 
