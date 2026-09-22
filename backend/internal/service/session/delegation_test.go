@@ -67,7 +67,7 @@ func TestDelegateTaskSpawnsWorkerAndRefinesTitleThroughBackgroundHarness(t *test
 				t.Fatalf("background calls = %#v, want one", cmd.backgroundCalls)
 			}
 			call := cmd.backgroundCalls[0]
-			if call.id != "mer-9" || call.prompt != brief || call.effort != strings.TrimSpace(tt.effort) || call.systemPrompt != delegatedTaskTitleSystemPrompt {
+			if call.id != "mer-9" || call.prompt != brief || call.systemPrompt != delegatedTaskTitleSystemPrompt {
 				t.Fatalf("background call = %#v", call)
 			}
 			if len(cmd.sent) != 0 || len(cmd.resumed) != 0 || cmd.spawnCalls != 1 {
@@ -104,6 +104,9 @@ func TestDelegatedTaskTitles(t *testing.T) {
 		want string
 	}{
 		{in: "## `Fix renderer.`\nExtra prose", want: "Fix renderer"},
+		{in: "Upgrade to C++", want: "Upgrade to C++"},
+		{in: "Move to F#", want: "Move to F#"},
+		{in: "Fix\x00 renderer", want: "Fix renderer"},
 		{in: strings.Repeat("界", 101), want: strings.Repeat("界", 100)},
 		{in: " -- ... ", want: ""},
 	} {
@@ -203,6 +206,52 @@ func TestDelegateTaskReturnsBeforeBackgroundTitleCompletes(t *testing.T) {
 	case <-finished:
 	case <-time.After(2 * time.Second):
 		t.Fatal("background title request did not finish")
+	}
+}
+
+func TestDelegateTaskSkipsTitleWhenCapacityIsFull(t *testing.T) {
+	st := newFakeStore()
+	st.projects["ao"] = domain.ProjectRecord{ID: "ao"}
+	cmd := &fakeCommander{}
+	slots := make(chan struct{}, 1)
+	slots <- struct{}{}
+
+	out, err := (&Service{store: st, manager: cmd, titleRefinementSlots: slots}).DelegateTask(
+		context.Background(), DelegateTaskInput{ProjectID: "ao", Brief: "Fix it"},
+	)
+	if err != nil || out.WorkerID != "mer-9" || len(cmd.backgroundCalls) != 0 {
+		t.Fatalf("DelegateTask = %#v, %v; background=%#v", out, err, cmd.backgroundCalls)
+	}
+}
+
+func TestKillCancelsBackgroundTitle(t *testing.T) {
+	st := newFakeStore()
+	st.projects["ao"] = domain.ProjectRecord{ID: "ao"}
+	started := make(chan struct{})
+	finished := make(chan struct{})
+	cmd := &fakeCommander{backgroundFunc: func(call backgroundTaskCall) (string, error) {
+		close(started)
+		<-call.ctx.Done()
+		close(finished)
+		return "", call.ctx.Err()
+	}}
+	svc := NewWithDeps(Deps{Manager: cmd, Store: st})
+
+	if _, err := svc.DelegateTask(context.Background(), DelegateTaskInput{ProjectID: "ao", Brief: "Fix it"}); err != nil {
+		t.Fatalf("DelegateTask: %v", err)
+	}
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("background title request did not start")
+	}
+	if _, err := svc.Kill(context.Background(), "mer-9"); err != nil {
+		t.Fatalf("Kill: %v", err)
+	}
+	select {
+	case <-finished:
+	case <-time.After(2 * time.Second):
+		t.Fatal("background title request was not cancelled")
 	}
 }
 

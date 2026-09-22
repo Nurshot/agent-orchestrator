@@ -798,7 +798,9 @@ func (q *Queries) RenameSession(ctx context.Context, arg RenameSessionParams) (i
 const renameSessionIfDisplayName = `-- name: RenameSessionIfDisplayName :execrows
 UPDATE sessions
 SET display_name = ?1, updated_at = ?2
-WHERE id = ?3 AND display_name = ?4
+WHERE id = ?3
+  AND display_name = ?4
+  AND is_terminated = 0
 `
 
 type RenameSessionIfDisplayNameParams struct {

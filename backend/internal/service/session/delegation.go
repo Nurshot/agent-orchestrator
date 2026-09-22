@@ -18,7 +18,9 @@ const (
 	delegatedTaskTitleLimit             = maxDisplayNameLen
 	delegatedTaskUntitledName           = "Untitled task"
 	delegatedTaskTitleRefinementTimeout = time.Minute
-	delegatedTaskTitleSystemPrompt      = "Return only a concise task title of at most 100 characters. Do not use tools, change files, or explain the answer."
+	// ponytail: cosmetic work is dropped at the daemon-wide cap; add a queue only if skipped titles become a product problem.
+	delegatedTaskTitleConcurrency  = 4
+	delegatedTaskTitleSystemPrompt = "Return only a concise task title of at most 100 characters. Do not use tools, change files, or explain the answer."
 )
 
 // DelegateTaskInput describes a task AO should spawn as a worker session. Brief
@@ -97,13 +99,30 @@ func optionalTuningValue(value *string) (string, bool) {
 }
 
 func (s *Service) refineDelegatedTaskTitleInBackground(workerID domain.SessionID, in DelegateTaskInput) {
-	work := func() {
-		base := s.backgroundContext
-		if base == nil {
-			base = context.Background()
+	if s.titleRefinementSlots != nil {
+		select {
+		case s.titleRefinementSlots <- struct{}{}:
+		default:
+			if s.logger != nil {
+				s.logger.Warn("delegated task title refinement skipped: capacity reached", "workerID", workerID)
+			}
+			return
 		}
-		ctx, cancel := context.WithTimeout(base, delegatedTaskTitleRefinementTimeout)
-		defer cancel()
+	}
+	base := s.backgroundContext
+	if base == nil {
+		base = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(base, delegatedTaskTitleRefinementTimeout)
+	s.trackTitleRefinement(workerID, cancel)
+	work := func() {
+		defer func() {
+			cancel()
+			s.untrackTitleRefinement(workerID)
+			if s.titleRefinementSlots != nil {
+				<-s.titleRefinementSlots
+			}
+		}()
 
 		if err := s.refineDelegatedTaskTitle(ctx, workerID, in); err != nil && s.logger != nil {
 			s.logger.Warn("delegated task title refinement failed",
@@ -121,8 +140,7 @@ func (s *Service) refineDelegatedTaskTitleInBackground(workerID domain.SessionID
 }
 
 func (s *Service) refineDelegatedTaskTitle(ctx context.Context, workerID domain.SessionID, in DelegateTaskInput) error {
-	effort, _ := optionalTuningValue(in.Effort)
-	raw, err := s.manager.RunBackgroundTask(ctx, workerID, delegatedTaskTitleSystemPrompt, in.Brief, effort)
+	raw, err := s.manager.RunBackgroundTask(ctx, workerID, delegatedTaskTitleSystemPrompt, in.Brief)
 	if err != nil {
 		return fmt.Errorf("generate title with worker harness: %w", err)
 	}
@@ -151,12 +169,39 @@ func delegatedTaskDisplayName(brief string) string {
 }
 
 func generatedTaskTitle(raw string) string {
+	raw = domain.SanitizeControlChars(raw)
 	firstLine, _, _ := strings.Cut(raw, "\n")
-	title := strings.Trim(firstLine, "#*->+ \"'`“”‘’\t\r.,;:!。")
+	title := strings.TrimLeft(firstLine, "#*->+ \t\r")
+	title = strings.Trim(title, " \"'`“”‘’\t\r.,;:!。")
 	if strings.IndexFunc(title, func(r rune) bool {
 		return unicode.IsLetter(r) || unicode.IsDigit(r)
 	}) < 0 {
 		return ""
 	}
 	return delegatedTaskDisplayName(title)
+}
+
+func (s *Service) trackTitleRefinement(id domain.SessionID, cancel context.CancelFunc) {
+	s.titleRefinementMu.Lock()
+	defer s.titleRefinementMu.Unlock()
+	if s.titleRefinementCancels == nil {
+		s.titleRefinementCancels = map[domain.SessionID]context.CancelFunc{}
+	}
+	s.titleRefinementCancels[id] = cancel
+}
+
+func (s *Service) untrackTitleRefinement(id domain.SessionID) {
+	s.titleRefinementMu.Lock()
+	defer s.titleRefinementMu.Unlock()
+	delete(s.titleRefinementCancels, id)
+}
+
+func (s *Service) cancelTitleRefinement(id domain.SessionID) {
+	s.titleRefinementMu.Lock()
+	cancel := s.titleRefinementCancels[id]
+	delete(s.titleRefinementCancels, id)
+	s.titleRefinementMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 }

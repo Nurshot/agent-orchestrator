@@ -2467,10 +2467,10 @@ type fakeCommander struct {
 }
 
 type backgroundTaskCall struct {
+	ctx          context.Context
 	id           domain.SessionID
 	systemPrompt string
 	prompt       string
-	effort       string
 }
 
 func (f *fakeCommander) Spawn(_ context.Context, cfg ports.SpawnConfig) (domain.SessionRecord, int, int, error) {
@@ -2558,9 +2558,9 @@ func (f *fakeCommander) Send(_ context.Context, id domain.SessionID, message str
 	f.sentMessages = append(f.sentMessages, message)
 	return nil
 }
-func (f *fakeCommander) RunBackgroundTask(_ context.Context, id domain.SessionID, systemPrompt, prompt, effort string) (string, error) {
+func (f *fakeCommander) RunBackgroundTask(ctx context.Context, id domain.SessionID, systemPrompt, prompt string) (string, error) {
 	call := backgroundTaskCall{
-		id: id, systemPrompt: systemPrompt, prompt: prompt, effort: effort,
+		ctx: ctx, id: id, systemPrompt: systemPrompt, prompt: prompt,
 	}
 	f.backgroundCalls = append(f.backgroundCalls, call)
 	if f.backgroundFunc != nil {

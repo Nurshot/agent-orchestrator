@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -229,8 +230,9 @@ func (l *recordingLauncher) AbortChatHandoff(id domain.SessionID) {
 func TestRunBackgroundTaskUsesResolvedWorkerHarnessAndConfig(t *testing.T) {
 	launcher := &recordingLauncher{}
 	m, st, _ := newChatManager(launcher)
+	m.dataDir = t.TempDir()
 	project := st.projects[string(chatTestProject)]
-	project.Config.Env = map[string]string{"PROJECT_TOKEN": "yes"}
+	project.Config.Env = map[string]string{"PROJECT_TOKEN": "secret"}
 	st.projects[string(chatTestProject)] = project
 	rec := domain.SessionRecord{
 		ID:        "mer-1",
@@ -240,12 +242,13 @@ func TestRunBackgroundTaskUsesResolvedWorkerHarnessAndConfig(t *testing.T) {
 		Metadata: domain.SessionMetadata{
 			WorkspacePath: "/ws/mer-1",
 			Model:         "selected-model",
+			Effort:        "low",
 			Permissions:   ports.PermissionModeAcceptEdits,
 		},
 	}
 	st.sessions[rec.ID] = rec
 
-	got, err := m.RunBackgroundTask(context.Background(), rec.ID, "title only", "Fix the renderer", "low")
+	got, err := m.RunBackgroundTask(context.Background(), rec.ID, "title only", "Fix the renderer")
 	if err != nil || got != "Generated title" {
 		t.Fatalf("RunBackgroundTask = %q, %v", got, err)
 	}
@@ -253,15 +256,60 @@ func TestRunBackgroundTaskUsesResolvedWorkerHarnessAndConfig(t *testing.T) {
 		t.Fatalf("background calls = %d, want 1", len(launcher.background))
 	}
 	task := launcher.background[0]
-	if launcher.backgroundHarnesses[0] != rec.Harness || task.WorkspacePath != rec.Metadata.WorkspacePath ||
-		task.Model != rec.Metadata.Model || task.Effort != "low" || task.Permissions != rec.Metadata.Permissions {
+	if launcher.backgroundHarnesses[0] != rec.Harness || task.WorkspacePath == rec.Metadata.WorkspacePath ||
+		task.Model != rec.Metadata.Model || task.Effort != rec.Metadata.Effort || task.Permissions != ports.PermissionModeAcceptEdits {
 		t.Fatalf("background task = %#v", task)
 	}
-	if task.SystemPrompt != "title only" || launcher.backgroundPrompts[0] != "Fix the renderer" || task.Env["PROJECT_TOKEN"] != "yes" {
+	if _, err := os.Stat(task.WorkspacePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("temporary workspace still exists: %v", err)
+	}
+	if task.SystemPrompt != "title only" || launcher.backgroundPrompts[0] != "Fix the renderer" {
 		t.Fatalf("background prompt/env = %#v", task)
+	}
+	if _, ok := task.Env["PROJECT_TOKEN"]; ok {
+		t.Fatalf("background task inherited project secrets: %#v", task.Env)
 	}
 	if _, ok := task.Env[EnvSessionID]; ok {
 		t.Fatalf("background task inherited %s: %#v", EnvSessionID, task.Env)
+	}
+}
+
+func TestBackgroundTaskPermissionsKeepKimiCompatible(t *testing.T) {
+	if got := backgroundTaskPermissions(domain.HarnessKimi); got != ports.PermissionModeDefault {
+		t.Fatalf("Kimi permissions = %q, want default", got)
+	}
+	if got := backgroundTaskPermissions(domain.HarnessCodex); got != ports.PermissionModeAcceptEdits {
+		t.Fatalf("Codex permissions = %q, want accept-edits", got)
+	}
+}
+
+func TestChatSpawnPersistsResolvedEffortForBackgroundTasks(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		override bool
+		want     string
+	}{
+		{name: "project default", want: "high"},
+		{name: "explicit provider default", override: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			launcher := &recordingLauncher{}
+			m, st, _ := newChatManager(launcher)
+			project := st.projects[string(chatTestProject)]
+			project.Config.AgentConfig.Effort = "high"
+			st.projects[string(chatTestProject)] = project
+
+			rec, _, _, err := m.Spawn(context.Background(), ports.SpawnConfig{
+				ProjectID: chatTestProject, Kind: domain.KindWorker, Harness: domain.HarnessCodex,
+				RequestedMode: domain.SessionModeChat, EffortOverride: tt.override,
+			})
+			if err != nil {
+				t.Fatalf("Spawn: %v", err)
+			}
+			if rec.Metadata.Effort != tt.want || launcher.started[0].Effort != tt.want {
+				t.Fatalf("effort metadata/start = %q/%q, want %q", rec.Metadata.Effort, launcher.started[0].Effort, tt.want)
+			}
+		})
 	}
 }
 

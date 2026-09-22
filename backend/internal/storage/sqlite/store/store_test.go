@@ -767,6 +767,13 @@ func TestSessionRenameUpdatesDisplayName(t *testing.T) {
 	if got.DisplayName != "Generated title" {
 		t.Fatalf("conditional rename not persisted: %+v", got)
 	}
+	got.IsTerminated = true
+	if err := s.UpdateSession(ctx, got); err != nil {
+		t.Fatalf("terminate session: %v", err)
+	}
+	if changed, err := s.RenameSessionIfDisplayName(ctx, r.ID, "Generated title", "Too late", renamedAt.Add(2*time.Minute)); err != nil || changed {
+		t.Fatalf("conditional terminated rename: changed=%v err=%v", changed, err)
+	}
 
 	ok, err = s.RenameSession(ctx, "mer-missing", "Missing", renamedAt)
 	if err != nil {

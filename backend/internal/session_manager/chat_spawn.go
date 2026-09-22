@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
 	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
@@ -67,12 +67,12 @@ type ChatStart = ports.ChatControllerStart
 // ChatStarted is the durable result of a launch.
 type ChatStarted = ports.ChatControllerStarted
 
-// RunBackgroundTask executes one short-lived model call with the harness and
-// account already resolved for id. It creates no AO session or terminal.
+// RunBackgroundTask executes one short-lived model call with id's harness and
+// the currently active authenticated account. It creates no AO session or terminal.
 func (m *Manager) RunBackgroundTask(
 	ctx context.Context,
 	id domain.SessionID,
-	systemPrompt, prompt, effort string,
+	systemPrompt, prompt string,
 ) (string, error) {
 	runner, ok := m.chat.(chatBackgroundTaskRunner)
 	if !ok {
@@ -82,11 +82,9 @@ func (m *Manager) RunBackgroundTask(
 	if err != nil {
 		return "", err
 	}
-	project, err := m.loadProject(ctx, rec.ProjectID)
-	if err != nil {
-		return "", err
+	if rec.IsTerminated {
+		return "", fmt.Errorf("session %s is terminated", id)
 	}
-
 	releaseHarness, err := m.beginHarnessUse(rec.Harness)
 	if err != nil {
 		return "", err
@@ -98,10 +96,20 @@ func (m *Manager) RunBackgroundTask(
 	}
 	defer releaseCodex()
 
-	config := applySpawnAgentConfig(effectiveAgentConfig(rec.Harness, rec.Kind, project.Config), ports.AgentConfig{
-		Model: rec.Metadata.Model, Effort: strings.TrimSpace(effort), Permissions: rec.Metadata.Permissions,
-	})
-	env := m.runtimeEnv(rec.ID, rec.ProjectID, rec.IssueID, project.Config.Env)
+	root := filepath.Join(m.dataDir, "background-tasks")
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		return "", fmt.Errorf("create background task root: %w", err)
+	}
+	workspace, err := os.MkdirTemp(root, "title-")
+	if err != nil {
+		return "", fmt.Errorf("create background task workspace: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(workspace) }()
+
+	config := ports.AgentConfig{
+		Model: rec.Metadata.Model, Effort: rec.Metadata.Effort, Permissions: backgroundTaskPermissions(rec.Harness),
+	}
+	env := m.runtimeEnv(rec.ID, rec.ProjectID, rec.IssueID, nil)
 	if m.agents != nil {
 		if agent, found := m.agents.Agent(rec.Harness); found {
 			m.augmentAgentRuntimeEnv(agent, env)
@@ -114,13 +122,22 @@ func (m *Manager) RunBackgroundTask(
 
 	return runner.RunBackgroundTask(ctx, rec.Harness, ports.ChatStartConfig{
 		DataDir:       m.dataDir,
-		WorkspacePath: rec.Metadata.WorkspacePath,
+		WorkspacePath: workspace,
 		Env:           env,
 		Model:         config.Model,
 		Effort:        config.Effort,
 		Permissions:   config.Permissions,
 		SystemPrompt:  systemPrompt,
 	}, prompt)
+}
+
+func backgroundTaskPermissions(harness domain.AgentHarness) ports.PermissionMode {
+	// Kimi ACP exposes only its default mode; every other driver gets AO's
+	// workspace sandbox so title generation cannot inherit a bypass policy.
+	if harness == domain.HarnessKimi {
+		return ports.PermissionModeDefault
+	}
+	return ports.PermissionModeAcceptEdits
 }
 
 // ChatControllerCommit carries the post-commit conversation state back to Chat
@@ -230,6 +247,7 @@ func (m *Manager) launchChatController(ctx context.Context, in chatSpawn) (domai
 				ControllerGeneration:      started.ControllerGeneration,
 				BrowserCapabilityVerifier: in.record.Metadata.BrowserCapabilityVerifier,
 				Model:                     agentConfig.Model,
+				Effort:                    agentConfig.Effort,
 			}
 			committedConversation, commitErr := m.markChatControllerSpawned(
 				ctx, id, metadata, started.Conversation, started.ProviderBoundary,
