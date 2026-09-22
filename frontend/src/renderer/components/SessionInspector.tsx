@@ -27,8 +27,10 @@ import {
 	ArrowUpRight,
 	ChevronDown,
 	ChevronRight,
+	Files as FilesIcon,
 	GitPullRequest,
 	GitMerge,
+	Globe,
 	Info,
 	Play,
 	Trash2,
@@ -58,9 +60,10 @@ import { clearTerminateSessionState, useTerminateSession } from "../hooks/useTer
 import { formatEstimatedCost, type EstimatedCost } from "../lib/format-cost";
 import { prBrowserUrl, prCanMerge, prCardPresentation, prNounKeys, sessionPRDisplaySummaries } from "../lib/pr-display";
 import { formatTokenCount } from "../lib/format-token-count";
-import type { WorkspaceSession, WorkspaceSummary } from "../types/workspace";
+import type { SessionArtifact, WorkspaceSession, WorkspaceSummary } from "../types/workspace";
 import {
 	resolveNextNavigationAfterSessionKill,
+	sessionArtifacts,
 	sortedPRs,
 	STANDALONE_WORKSPACE_ID,
 } from "../types/workspace";
@@ -286,7 +289,14 @@ export const SessionInspector = memo(function SessionInspector({
 					session ? <ReviewsView onOpenReviewFile={onOpenReviewFile} onOpenReviewerTerminal={onOpenReviewerTerminal} session={session} /> : undefined
 				}
 				summaryView={
-					session ? <SummaryView canOpenReviews={reviewsAvailable} onOpenReviews={openReviews} session={session} /> : undefined
+					session ? (
+						<SummaryView
+							canOpenReviews={reviewsAvailable}
+							onOpenReviewFile={onOpenReviewFile}
+							onOpenReviews={openReviews}
+							session={session}
+						/>
+					) : undefined
 				}
 				tabs={tabs}
 			/>
@@ -311,10 +321,12 @@ function normalizeReviewerId(value: string | undefined): string {
 
 const SummaryView = memo(function SummaryView({
 	canOpenReviews,
+	onOpenReviewFile,
 	onOpenReviews,
 	session,
 }: {
 	canOpenReviews: boolean;
+	onOpenReviewFile?: (target: { line?: number; path: string }) => void;
 	onOpenReviews: () => void;
 	session: WorkspaceSession;
 }) {
@@ -329,8 +341,18 @@ const SummaryView = memo(function SummaryView({
 		hasMeaningfulSessionUsage(usageQuery.data);
 	const showUsageError = developerMode && usageQuery.isError;
 	const prSummaries = sessionPRDisplaySummaries(session, query.data);
-	const prSectionTitle = prSummaries.length > 1 ? t("inspector.pullRequests", { count: prSummaries.length }) : t("inspector.pullRequest");
 	const hasPRs = prSummaries.length > 0;
+	// V1 keeps PR presentation unchanged: the artifacts panel only ever takes
+	// the place of the "no PR opened" empty state, never a real PR list.
+	const artifacts = hasPRs ? [] : sessionArtifacts(session);
+	const hasArtifacts = artifacts.length > 0;
+	const prSectionTitle = hasArtifacts
+		? artifacts.length > 1
+			? t("inspector.artifacts", { count: artifacts.length })
+			: t("inspector.artifact")
+		: prSummaries.length > 1
+			? t("inspector.pullRequests", { count: prSummaries.length })
+			: t("inspector.pullRequest");
 	// Cloud orchestrators list the workers they spawned; local orchestrators
 	// have no parent/child model and every other session has no children.
 	const showWorkers =
@@ -359,6 +381,15 @@ const SummaryView = memo(function SummaryView({
 								onOpenReviews={onOpenReviews}
 								pr={pr}
 								sessionId={session.id}
+							/>
+						))
+					) : hasArtifacts ? (
+						artifacts.map((artifact) => (
+							<ArtifactSummaryCard
+								artifact={artifact}
+								key={artifact.path}
+								onOpenReviewFile={onOpenReviewFile}
+								session={session}
 							/>
 						))
 					) : (
@@ -1270,6 +1301,45 @@ function PRSummaryCard({
 			pr={viewModel}
 			pullRequestIcon={<GitPullRequest className="size-icon-sm shrink-0" aria-hidden="true" />}
 		/>
+	);
+}
+
+/**
+ * One row in the Summary panel's Artifacts list. HTML artifacts open in the
+ * existing Browser preview flow (same mechanism as any other AO Browser
+ * link); markdown/file artifacts open through the existing Files inspector
+ * file-open flow, exactly like a workspace file.
+ */
+function ArtifactSummaryCard({
+	artifact,
+	onOpenReviewFile,
+	session,
+}: {
+	artifact: SessionArtifact;
+	onOpenReviewFile?: (target: { line?: number; path: string }) => void;
+	session: WorkspaceSession;
+}) {
+	const openInAOBrowser = useSessionBrowserLink(session);
+	const handleOpen = () => {
+		if (artifact.kind === "html" && artifact.previewUrl) {
+			openInAOBrowser(artifact.previewUrl);
+			return;
+		}
+		onOpenReviewFile?.({ path: artifact.path });
+	};
+	return (
+		<button
+			className="flex w-full min-w-0 items-center gap-2 rounded-md border border-(--color-border-settings-input) px-2.5 py-1.5 text-left text-xs outline-none transition-colors hover:bg-interactive-hover focus-visible:bg-interactive-hover focus-visible:ring-1 focus-visible:ring-ring"
+			onClick={handleOpen}
+			type="button"
+		>
+			{artifact.kind === "html" ? (
+				<Globe aria-hidden="true" className="size-icon-sm shrink-0 text-settings-muted" />
+			) : (
+				<FilesIcon aria-hidden="true" className="size-icon-sm shrink-0 text-settings-muted" />
+			)}
+			<span className="min-w-0 flex-1 truncate">{artifact.name}</span>
+		</button>
 	);
 }
 
