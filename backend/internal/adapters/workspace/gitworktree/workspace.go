@@ -357,9 +357,39 @@ func (w *Workspace) CreateWorkspaceProject(ctx context.Context, cfg ports.Worksp
 			baseRef:      child.BaseRef,
 		})
 	}
-	branch, err := w.workspaceProjectBranch(ctx, repos, firstNonEmpty(cfg.Branch, defaultSessionBranchName(cfg.SessionID)))
-	if err != nil {
-		return ports.WorkspaceProjectInfo{}, err
+	requestedBranch := firstNonEmpty(cfg.Branch, defaultSessionBranchName(cfg.SessionID))
+	existing := make(map[int]struct{}, len(repos))
+	recovering := false
+	for i, repo := range repos {
+		records, err := w.listRecords(ctx, repo.repoPath)
+		if err != nil {
+			return ports.WorkspaceProjectInfo{}, err
+		}
+		record, ok := findWorktree(records, repo.outputPath)
+		if !ok {
+			continue
+		}
+		if record.Branch != requestedBranch {
+			return ports.WorkspaceProjectInfo{}, fmt.Errorf(
+				"gitworktree: managed path %q already contains branch %q, want %q",
+				repo.outputPath, record.Branch, requestedBranch,
+			)
+		}
+		recovering = true
+		missing, err := registeredWorktreeDirMissing(record)
+		if err != nil {
+			return ports.WorkspaceProjectInfo{}, err
+		}
+		if !missing {
+			existing[i] = struct{}{}
+		}
+	}
+	branch := requestedBranch
+	if !recovering {
+		branch, err = w.workspaceProjectBranch(ctx, repos, requestedBranch)
+		if err != nil {
+			return ports.WorkspaceProjectInfo{}, err
+		}
 	}
 	// Resolve every repository base before creating the first worktree. Besides
 	// keeping remote probing within one aggregate budget, this prevents a later
@@ -396,20 +426,30 @@ func (w *Workspace) CreateWorkspaceProject(ctx context.Context, cfg ports.Worksp
 	created := make([]workspaceProjectRepo, 0, len(repos))
 	out := ports.WorkspaceProjectInfo{Worktrees: make([]ports.WorkspaceRepoInfo, 0, len(repos))}
 	for repoIndex, repo := range repos {
-		baseSHA, err := w.createWorkspaceProjectRepo(ctx, repo, branch)
+		baseSHA, err := w.revParse(ctx, repo.repoPath, repo.baseRef)
+		if err == nil {
+			if _, ok := existing[repoIndex]; !ok {
+				baseSHA, err = w.createWorkspaceProjectRepo(ctx, repo, branch)
+				if err == nil {
+					created = append(created, repo)
+				}
+			}
+		}
 		if err != nil {
 			for i := len(created) - 1; i >= 0; i-- {
 				_ = w.forceDestroyPath(ctx, created[i].repoPath, created[i].outputPath)
 			}
 			return ports.WorkspaceProjectInfo{}, err
 		}
-		created = append(created, repo)
 		if repoIndex == 0 {
-			if err := copyWorkspaceAssets(rootRepo, rootPath, cfg.Assets); err != nil {
-				for i := len(created) - 1; i >= 0; i-- {
-					_ = w.forceDestroyPath(ctx, created[i].repoPath, created[i].outputPath)
+			_, rootAlreadyExisted := existing[repoIndex]
+			if !rootAlreadyExisted {
+				if err := copyWorkspaceAssets(rootRepo, rootPath, cfg.Assets); err != nil {
+					for i := len(created) - 1; i >= 0; i-- {
+						_ = w.forceDestroyPath(ctx, created[i].repoPath, created[i].outputPath)
+					}
+					return ports.WorkspaceProjectInfo{}, err
 				}
-				return ports.WorkspaceProjectInfo{}, err
 			}
 		}
 		info := ports.WorkspaceRepoInfo{
@@ -1505,24 +1545,9 @@ func (w *Workspace) createWorkspaceProjectRepo(ctx context.Context, repo workspa
 	if err != nil {
 		return "", err
 	}
-	// Same up-front stale-registration check addWorktree does, so the ordinary
-	// #2775 shape (registration outlived its directory) is handled by the first
-	// add and never reaches the recovery below. Without it every recovery here
-	// had to go through a failed `-b` attempt, which leaves a stray branch ref
-	// behind even when it succeeds.
-	records, err := w.listRecords(ctx, repo.repoPath)
-	if err != nil {
-		return "", err
-	}
-	force, err := staleRegistrationForPath(records, repo.outputPath)
-	if err != nil {
-		return "", err
-	}
-	// Recovery from a registration that only goes stale after that check is
-	// addNewBranchWorktree's job: git's own --force override, not the repo-wide
-	// prune this used to run, which would also drop sibling sessions'
-	// registrations.
-	if err := w.addNewBranchWorktree(ctx, repo.repoPath, branch, repo.outputPath, seedRef, force); err != nil {
+	// addWorktree handles both the ordinary new-branch path and a preparation
+	// recovered after a daemon crash left this branch or registration behind.
+	if _, err := w.addWorktree(ctx, repo.repoPath, repo.outputPath, branch, repo.baseBranch, baseRef, false); err != nil {
 		return "", fmt.Errorf("gitworktree: workspace repo %q worktree add branch %q from %q: %w", repo.name, branch, seedRef, err)
 	}
 	return baseSHA, nil

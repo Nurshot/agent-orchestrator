@@ -17,7 +17,6 @@ import {
 	cacheAgentReadiness,
 	ensureAgentReadiness,
 	useAgentReadinessQuery,
-	useEnsureAgentReadiness,
 } from "../hooks/useAgentReadinessQuery";
 import { type FileAttachmentPayload, useFileAttachments } from "../hooks/useFileAttachments";
 import { useSettings } from "../hooks/useSettings";
@@ -61,6 +60,13 @@ const CHAT_PREFLIGHT_CODES = new Set([
 ]);
 
 const READINESS_RECONCILE_CODES = new Set(["AGENT_BINARY_NOT_FOUND", "CHAT_AUTH_REQUIRED"]);
+
+function cancelTaskPreparation(token: string): void {
+	if (!token) return;
+	void apiClient.DELETE("/api/v1/task-preparations/{token}", {
+		params: { path: { token } },
+	});
+}
 
 class TaskCreateError extends Error {
 	constructor(
@@ -271,9 +277,7 @@ export function TaskComposer({
 				const token = data?.taskPreparation ?? "";
 				if (!token) return;
 				if (disposed) {
-					void apiClient.DELETE("/api/v1/task-preparations/{token}", {
-						params: { path: { token } },
-					});
+					cancelTaskPreparation(token);
 					return;
 				}
 				taskPreparationRef.current = token;
@@ -284,11 +288,7 @@ export function TaskComposer({
 			disposed = true;
 			const token = taskPreparationRef.current;
 			taskPreparationRef.current = "";
-			if (token) {
-				void apiClient.DELETE("/api/v1/task-preparations/{token}", {
-					params: { path: { token } },
-				});
-			}
+			cancelTaskPreparation(token);
 		};
 	}, [projectQuery.data?.id]);
 	const agentsQuery = useAgentReadinessQuery();
@@ -314,12 +314,6 @@ export function TaskComposer({
 	const globalDefaultAgent = projectQuery.data?.agent ?? "";
 	const defaultWorkerAgent = projectWorkerAgent || globalDefaultAgent;
 	const selectedAgent = agent || defaultWorkerAgent;
-	useEnsureAgentReadiness();
-	useEnsureAgentReadiness({
-		agentIds: selectedAgent ? [selectedAgent] : [],
-		enabled: selectedAgent !== "",
-		purpose: "launch",
-	});
 	const defaultWorkerModel =
 		projectConfig?.worker?.agentConfig?.model ?? projectConfig?.agentConfig?.model ?? "";
 	const defaultWorkerMode = projectConfig?.worker?.agentConfig?.mode ?? projectConfig?.agentConfig?.mode ?? "";
@@ -456,6 +450,7 @@ export function TaskComposer({
 		setFallbackAction(undefined);
 		try {
 			const attachmentPayloads = await toSettledPayload();
+			const submittedPreparation = taskPreparationRef.current;
 			const sessionId = await createTask({
 				projectId,
 				brief,
@@ -468,9 +463,16 @@ export function TaskComposer({
 				mode: interfaceMode,
 				approvalMode,
 				attachments: attachmentPayloads.length > 0 ? attachmentPayloads : undefined,
-				taskPreparation: taskPreparationRef.current || undefined,
+				taskPreparation: submittedPreparation || undefined,
 			});
+			const preparationAfterSubmit = taskPreparationRef.current;
 			taskPreparationRef.current = "";
+			// DELETE is intentionally idempotent after a successful claim. It also
+			// reclaims a preparation that resolved after this submission captured its
+			// token, instead of leaving that unused worktree until TTL expiry.
+			for (const token of new Set([submittedPreparation, preparationAfterSubmit])) {
+				cancelTaskPreparation(token);
+			}
 			onCreated(sessionId);
 		} catch (err) {
 			const canBypassApprovals =

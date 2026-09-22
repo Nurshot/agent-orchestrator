@@ -976,13 +976,13 @@ func (s *Service) Send(
 	if err != nil {
 		return domain.ConversationTurn{}, err
 	}
-	controller, err := s.Controller(id)
-	if errors.Is(err, ErrNoController) && record.ProvisionState.IsProvisioning() {
-		// The session is still starting. Queue the message rather than refusing
-		// it: the user is looking at their session and typing into it, and the
-		// controller that arrives next drains the queue in order.
+	if record.ProvisionState.IsProvisioning() {
+		// Controller publication and the first queue drain are separate steps. Keep
+		// every message on the durable queue until provisioning finishes so a new
+		// message cannot overtake the opening prompt in that handoff window.
 		return s.queueWithoutController(ctx, record, msg)
 	}
+	controller, err := s.Controller(id)
 	if err != nil {
 		return domain.ConversationTurn{}, err
 	}

@@ -1553,7 +1553,7 @@ func (c *SessionsController) delegateTask(w http.ResponseWriter, r *http.Request
 		ApprovalMode:    in.ApprovalMode,
 		RequestedMode:   in.Mode,
 		Attachments:     attachments,
-		TaskPreparation: strings.TrimSpace(in.TaskPreparation),
+		TaskPreparation: domain.TaskPreparationToken(strings.TrimSpace(in.TaskPreparation)),
 	})
 	if err != nil {
 		envelope.WriteError(w, r, err)

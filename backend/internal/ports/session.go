@@ -72,7 +72,7 @@ type SpawnConfig struct {
 	// TaskPreparation is the opaque speculative-worktree token returned while
 	// the desktop's New Task dialog is open. It is a hint: an absent or expired
 	// token falls back to ordinary workspace creation.
-	TaskPreparation string
+	TaskPreparation domain.TaskPreparationToken
 }
 
 // SpawnAttachment is a single file attached to a spawn request. Data holds the

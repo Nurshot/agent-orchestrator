@@ -126,7 +126,9 @@ func (m *Manager) completeAsyncChatSpawn(ctx context.Context, in asyncChatSpawn)
 	m.logAsyncChatSpawnStage(id, "workspace_create", stageStarted)
 	stageStarted = time.Now()
 	if err := m.provisionWorkspace(ctx, in.project, ws.Path); err != nil {
-		m.destroySpawnWorkspace(ctx, ws, workspaceProject)
+		if m.destroySpawnWorkspace(ctx, ws, workspaceProject) {
+			m.clearProvisionedWorkspace(ctx, id, ws.Path)
+		}
 		m.failAsyncChatSpawn(ctx, id, wrapSpawnStage(id, ErrWorkspaceProvision, err))
 		return
 	}
@@ -136,7 +138,9 @@ func (m *Manager) completeAsyncChatSpawn(ctx context.Context, in asyncChatSpawn)
 		// The prompt already references these by name (spawnAttachmentRefs); this
 		// is where the bytes land, before the agent can read them.
 		if _, err := m.writeSpawnAttachments(ctx, id, ws.Path, in.cfg.Attachments); err != nil {
-			m.destroySpawnWorkspace(ctx, ws, workspaceProject)
+			if m.destroySpawnWorkspace(ctx, ws, workspaceProject) {
+				m.clearProvisionedWorkspace(ctx, id, ws.Path)
+			}
 			m.failAsyncChatSpawn(ctx, id, wrapSpawnStage(id, ErrSpawnAttachments, err))
 			return
 		}
@@ -167,7 +171,9 @@ func (m *Manager) completeAsyncChatSpawn(ctx context.Context, in asyncChatSpawn)
 
 	record, err := m.getRecord(ctx, id)
 	if err != nil {
-		m.destroySpawnWorkspace(ctx, ws, workspaceProject)
+		if m.destroySpawnWorkspace(ctx, ws, workspaceProject) {
+			m.clearProvisionedWorkspace(ctx, id, ws.Path)
+		}
 		m.failAsyncChatSpawn(ctx, id, err)
 		return
 	}
@@ -190,15 +196,15 @@ func (m *Manager) completeAsyncChatSpawn(ctx context.Context, in asyncChatSpawn)
 	}
 	m.logAsyncChatSpawnStage(id, "controller_start", stageStarted)
 	stageStarted = time.Now()
-	if _, err := m.setProvisionState(ctx, id, domain.SessionProvisionReady, ""); err != nil {
-		m.logger.Error("spawn: publish provisioned session", "sessionID", id, "error", err)
-	}
-	m.logAsyncChatSpawnStage(id, "mark_ready", stageStarted)
-	stageStarted = time.Now()
 	if err := m.chat.DrainChatQueue(ctx, id); err != nil {
 		m.logger.Error("spawn: dispatch queued prompt", "sessionID", id, "error", err)
 	}
 	m.logAsyncChatSpawnStage(id, "queue_drain", stageStarted)
+	stageStarted = time.Now()
+	if _, err := m.setProvisionState(ctx, id, domain.SessionProvisionReady, ""); err != nil {
+		m.logger.Error("spawn: publish provisioned session", "sessionID", id, "error", err)
+	}
+	m.logAsyncChatSpawnStage(id, "mark_ready", stageStarted)
 	m.logAsyncChatSpawnStage(id, "total", totalStarted)
 }
 
@@ -229,20 +235,10 @@ func (m *Manager) setProvisionState(
 	state domain.SessionProvisionState,
 	message string,
 ) (domain.SessionRecord, error) {
-	writer, ok := m.store.(provisionStateStore)
-	if !ok {
-		return m.getRecord(ctx, id)
-	}
-	if _, err := writer.SetSessionProvisionState(ctx, id, state, message, m.clock()); err != nil {
+	if _, err := m.store.SetSessionProvisionState(ctx, id, state, message, m.clock()); err != nil {
 		return domain.SessionRecord{}, err
 	}
 	return m.getRecord(ctx, id)
-}
-
-// provisionStateStore is the narrow optional write boundary for start-up
-// progress. An embedder without it runs synchronous spawns unchanged.
-type provisionStateStore interface {
-	SetSessionProvisionState(ctx context.Context, id domain.SessionID, state domain.SessionProvisionState, message string, now time.Time) (bool, error)
 }
 
 // FailInterruptedProvisioning marks sessions whose background start did not
@@ -280,18 +276,23 @@ func (m *Manager) runInBackground(work func()) {
 // Best effort: the controller commit writes the same facts again, so a failure
 // here costs visibility during the start, never correctness after it.
 func (m *Manager) publishProvisionedWorkspace(ctx context.Context, id domain.SessionID, ws ports.WorkspaceInfo) {
-	writer, ok := m.store.(provisionedWorkspaceStore)
-	if !ok {
-		return
-	}
-	if _, err := writer.SetSessionProvisionedWorkspace(
+	if _, err := m.store.SetSessionProvisionedWorkspace(
 		ctx, id, ws.Branch, ws.Path, ws.RepoPath, m.clock()); err != nil {
 		m.logger.Warn("spawn: publish provisioned workspace", "sessionID", id, "error", err)
 	}
 }
 
-// provisionedWorkspaceStore is the narrow optional write boundary for a
-// worktree that exists before its controller does.
-type provisionedWorkspaceStore interface {
-	SetSessionProvisionedWorkspace(ctx context.Context, id domain.SessionID, branch, workspacePath, workspaceRepoPath string, now time.Time) (bool, error)
+func (m *Manager) clearProvisionedWorkspace(ctx context.Context, id domain.SessionID, workspacePath string) {
+	cleanupCtx, cancel := spawnRollbackContext(ctx)
+	defer cancel()
+	rec, ok, err := m.store.GetSession(cleanupCtx, id)
+	if err != nil || !ok || rec.Metadata.WorkspacePath != workspacePath {
+		return
+	}
+	rec.Metadata.Branch = ""
+	rec.Metadata.WorkspacePath = ""
+	rec.Metadata.WorkspaceRepoPath = ""
+	if err := m.store.UpdateSession(cleanupCtx, rec); err != nil {
+		m.logger.Warn("spawn: clear removed workspace", "sessionID", id, "error", err)
+	}
 }

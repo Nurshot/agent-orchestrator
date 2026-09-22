@@ -776,6 +776,51 @@ func TestWorkspaceIntegrationWorkspaceProjectInfersPerRepoDefaultBranches(t *tes
 	}
 }
 
+func TestWorkspaceIntegrationWorkspaceProjectCreateRecoversExistingPreparation(t *testing.T) {
+	git := requireGit(t)
+	tmp := t.TempDir()
+	rootRepo := setupOriginClone(t, git, filepath.Join(tmp, "root"))
+	childRepo := setupOriginClone(t, git, filepath.Join(tmp, "child"))
+	ws, err := New(Options{
+		Binary: git, ManagedRoot: filepath.Join(tmp, "managed"),
+		RepoResolver: StaticRepoResolver{"proj": rootRepo},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := ports.WorkspaceProjectConfig{
+		ProjectID: "proj", SessionID: "sess", Kind: "worker", Branch: "ao/prepared",
+		RootRepoPath: rootRepo,
+		Repos: []ports.WorkspaceProjectRepoConfig{{
+			Name: "child", RelativePath: "child", RepoPath: childRepo,
+		}},
+	}
+	first, err := ws.CreateWorkspaceProject(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	child := first.Worktrees[1]
+	if err := ws.forceDestroyPath(context.Background(), child.RepoPath, child.Path); err != nil {
+		t.Fatalf("simulate interrupted child creation: %v", err)
+	}
+	second, err := ws.CreateWorkspaceProject(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("recover existing preparation: %v", err)
+	}
+	if second.Root.Path != first.Root.Path || second.Root.Branch != first.Root.Branch {
+		t.Fatalf("recovered root = %+v, want %+v", second.Root, first.Root)
+	}
+	if len(second.Worktrees) != len(first.Worktrees) {
+		t.Fatalf("recovered worktrees = %d, want %d", len(second.Worktrees), len(first.Worktrees))
+	}
+	if _, err := os.Stat(child.Path); err != nil {
+		t.Fatalf("missing child was not recreated: %v", err)
+	}
+	if err := ws.DestroyWorkspaceProject(context.Background(), second); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestWorkspaceIntegrationWorkspaceProjectCopiesAssetsAndCleansSessionCopy(t *testing.T) {
 	git := requireGit(t)
 	tmp := t.TempDir()

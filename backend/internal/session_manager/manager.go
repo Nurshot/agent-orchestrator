@@ -358,6 +358,10 @@ type Store interface {
 	// Kill and successful RestoreAll must remove these rows to prevent
 	// resurrecting sessions the user intentionally terminated.
 	DeleteSessionWorktrees(ctx context.Context, id domain.SessionID) error
+	SetSessionProvisionState(ctx context.Context, id domain.SessionID, state domain.SessionProvisionState, message string, now time.Time) (bool, error)
+	SetSessionProvisionedWorkspace(ctx context.Context, id domain.SessionID, branch, workspacePath, workspaceRepoPath string, now time.Time) (bool, error)
+	PromoteTaskPreparation(ctx context.Context, id domain.SessionID, rec domain.SessionRecord) (bool, error)
+	DeleteTaskPreparation(ctx context.Context, id domain.SessionID) (bool, error)
 }
 
 // conversationSettingsStore is the narrow optional read boundary for deriving
@@ -408,7 +412,7 @@ type Manager struct {
 	reconcileWorkers            int
 	defaultBranchRefreshTimeout time.Duration
 	taskPreparationsMu          sync.Mutex
-	taskPreparations            map[string]*taskPreparation
+	taskPreparations            map[domain.TaskPreparationToken]*taskPreparation
 	taskPreparationTTL          time.Duration
 	// runBackground runs an asynchronous spawn's remaining work. Nil means a
 	// plain goroutine; tests substitute a synchronous runner.
@@ -786,7 +790,7 @@ func New(d Deps) *Manager {
 		clock:                          d.Clock,
 		reconcileWorkers:               d.ReconcileWorkers,
 		defaultBranchRefreshTimeout:    defaultBranchRefreshTimeout,
-		taskPreparations:               make(map[string]*taskPreparation),
+		taskPreparations:               make(map[domain.TaskPreparationToken]*taskPreparation),
 		taskPreparationTTL:             defaultTaskPreparationTTL,
 		openTranscriptFile:             os.Open,
 		lookPath:                       d.LookPath,
@@ -1633,7 +1637,7 @@ func (m *Manager) rollbackSeedSpawnWorkspace(ctx context.Context, rec domain.Ses
 			cancel()
 		}
 		if published {
-			m.markSpawnFailedTerminatedAfterFailure(ctx, rec.ID, false)
+			m.clearProvisionedWorkspace(ctx, rec.ID, ws.Path)
 		} else {
 			m.rollbackSpawnSeedRowAfterFailure(ctx, rec.ID)
 		}
@@ -1642,6 +1646,9 @@ func (m *Manager) rollbackSeedSpawnWorkspace(ctx context.Context, rec domain.Ses
 	cleanupCtx, cancel = spawnRollbackContext(ctx)
 	m.preserveFailedSpawnWorkspace(cleanupCtx, rec.ID, ws, true)
 	cancel()
+	if published {
+		return
+	}
 	m.markSpawnFailedTerminatedAfterFailure(ctx, rec.ID, false)
 }
 

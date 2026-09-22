@@ -32,7 +32,7 @@ type DelegateTaskInput struct {
 	ApprovalMode    domain.PermissionMode
 	RequestedMode   domain.SessionMode
 	Attachments     []ports.SpawnAttachment
-	TaskPreparation string
+	TaskPreparation domain.TaskPreparationToken
 }
 
 // DelegateTaskOutcome identifies the spawned worker. OrchestratorID remains
@@ -44,8 +44,8 @@ type DelegateTaskOutcome struct {
 }
 
 type taskPreparationCommander interface {
-	PrepareTaskWorkspace(context.Context, domain.ProjectRecord) (string, error)
-	CancelTaskPreparation(context.Context, string) error
+	PrepareTaskWorkspace(context.Context, domain.ProjectRecord) (domain.TaskPreparationToken, error)
+	CancelTaskPreparation(context.Context, domain.TaskPreparationToken) error
 }
 
 // PrepareTask starts the reversible worktree-only half of task creation. The
@@ -56,7 +56,8 @@ func (s *Service) PrepareTask(ctx context.Context, projectID domain.ProjectID) (
 		return "", err
 	}
 	if preparer, ok := s.manager.(taskPreparationCommander); ok {
-		return preparer.PrepareTaskWorkspace(ctx, project)
+		token, err := preparer.PrepareTaskWorkspace(ctx, project)
+		return string(token), err
 	}
 	return "", nil
 }
@@ -65,7 +66,7 @@ func (s *Service) PrepareTask(ctx context.Context, projectID domain.ProjectID) (
 // already-claimed tokens are intentionally idempotent.
 func (s *Service) CancelTaskPreparation(ctx context.Context, token string) error {
 	if preparer, ok := s.manager.(taskPreparationCommander); ok {
-		return preparer.CancelTaskPreparation(ctx, token)
+		return preparer.CancelTaskPreparation(ctx, domain.TaskPreparationToken(token))
 	}
 	return nil
 }

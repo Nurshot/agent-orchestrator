@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { agentReadiness } from "../test/agent-readiness-fixtures";
@@ -151,6 +151,46 @@ describe("NewTaskDialog", () => {
 		unmount();
 		expect(deleteMock).toHaveBeenCalledWith("/api/v1/task-preparations/{token}", {
 			params: { path: { token: "prep-token" } },
+		});
+	});
+
+	it("cancels a preparation that resolves while an unprepared task is submitting", async () => {
+		let resolvePreparation!: (value: unknown) => void;
+		let resolveDelegate!: (value: unknown) => void;
+		postMock.mockImplementation((path: string) => {
+			if (path === "/api/v1/projects/{id}/tasks/prepare") {
+				return new Promise((resolve) => {
+					resolvePreparation = resolve;
+				});
+			}
+			if (path === "/api/v1/orchestrators/delegate") {
+				return new Promise((resolve) => {
+					resolveDelegate = resolve;
+				});
+			}
+			return Promise.resolve({ data: agentInventory, error: undefined });
+		});
+		const { onCreated } = renderDialog();
+		const user = userEvent.setup();
+		await waitForAgentCatalog();
+		await user.type(screen.getByLabelText("Task"), "Fix the race");
+		await user.click(screen.getByRole("button", { name: "Start task" }));
+		await waitFor(() => expect(delegateCalls()).toHaveLength(1));
+		expect(requestBody()).not.toHaveProperty("taskPreparation");
+
+		await act(async () => {
+			resolvePreparation({
+				data: { ok: true, taskPreparation: "late-prep" },
+				error: undefined,
+			});
+		});
+		resolveDelegate({
+			data: { ok: true, workerId: "worker-1" },
+			error: undefined,
+		});
+		await waitFor(() => expect(onCreated).toHaveBeenCalledWith("worker-1"));
+		expect(deleteMock).toHaveBeenCalledWith("/api/v1/task-preparations/{token}", {
+			params: { path: { token: "late-prep" } },
 		});
 	});
 

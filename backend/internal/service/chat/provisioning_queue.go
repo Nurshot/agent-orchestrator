@@ -77,13 +77,20 @@ func (s *Service) queueWithoutController(
 		// Same client message id as an earlier delivery: already queued.
 		return domain.ConversationTurn{}, nil
 	}
-	return domain.ConversationTurn{
+	turn := domain.ConversationTurn{
 		ID:                 turnID,
 		ConversationID:     conversation.ID,
 		HandledBySessionID: record.ID,
 		State:              domain.TurnStateQueued,
 		RequestedAt:        now,
-	}, nil
+	}
+	// The controller may have appeared after Send read the provisioning row, or
+	// after a prior drain found the queue empty. Kicking the same serialized drain
+	// here closes both races; NextQueuedTurn still owns ordering.
+	if controller, controllerErr := s.Controller(record.ID); controllerErr == nil {
+		controller.drain(ctx)
+	}
+	return turn, nil
 }
 
 // ensureConversation opens the session's conversation before its controller

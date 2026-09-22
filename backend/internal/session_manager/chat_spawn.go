@@ -198,8 +198,14 @@ func (m *Manager) launchChatController(ctx context.Context, in chatSpawn) (domai
 	if err != nil {
 		if completionErr != nil || controllerCommitted {
 			m.stopChatAfterSpawnFailure(ctx, id)
-			m.rollbackPreparedSpawnWorkspaceAfterFailure(ctx, in.record, in.workspace, in.workspaceProject, true)
-			m.markSpawnFailedTerminatedAfterFailure(ctx, id, false)
+			workspaceDestroyed := m.rollbackPreparedSpawnWorkspaceAfterFailure(ctx, in.record, in.workspace, in.workspaceProject, true)
+			if in.promptQueued {
+				if workspaceDestroyed {
+					m.clearProvisionedWorkspace(ctx, id, in.workspace.Path)
+				}
+			} else {
+				m.markSpawnFailedTerminatedAfterFailure(ctx, id, false)
+			}
 			if completionErr != nil {
 				return domain.SessionRecord{}, wrapSpawnStage(id, ErrSpawnCommit, completionErr)
 			}

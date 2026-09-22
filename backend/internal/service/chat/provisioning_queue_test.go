@@ -154,3 +154,40 @@ func TestFirstControllerAfterQueuedPromptIsNotFencedAsResume(t *testing.T) {
 		t.Fatalf("the opening prompt was settled as orphaned work: %q", snapshot.Turns[0].ErrorMessage)
 	}
 }
+
+func TestControllerPublishedWhileProvisioningCannotOvertakeQueuedPrompt(t *testing.T) {
+	st, provisioningSession := openProvisioningStore(t, domain.SessionProvisionProvisioning)
+	conv := newFakeConversation()
+	svc := chatsvc.New(chatsvc.Options{
+		Store: st, Sessions: st, Reader: fullSnapshotReader(st),
+		Drivers: fakeRegistry{driver: fakeDriver{conv: conv}},
+		Log:     slog.New(slog.DiscardHandler),
+		NewID:   func() string { return fmt.Sprintf("queued-%d", time.Now().UnixNano()) },
+	})
+	ctx := context.Background()
+	t.Cleanup(func() { _ = svc.Stop(context.Background(), provisioningSession) })
+
+	if _, err := svc.Send(ctx, provisioningSession, ports.ChatUserMessage{
+		Text: "opening prompt", Origin: domain.MessageOriginHuman,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Start(ctx, chatsvc.StartConfig{
+		SessionID: provisioningSession, ProjectID: testProject, Kind: domain.KindWorker,
+		Harness: domain.HarnessCodex, WorkspacePath: t.TempDir(),
+		ControllerReady: func(chatsvc.StartResult) (chatsvc.ControllerCommit, error) {
+			return chatsvc.ControllerCommit{}, nil
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := svc.Send(ctx, provisioningSession, ports.ChatUserMessage{
+		Text: "typed during handoff", Origin: domain.MessageOriginHuman,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := conv.sentTexts(); len(got) != 1 || got[0] != "opening prompt" {
+		t.Fatalf("provider received %v, want only the opening prompt first", got)
+	}
+}

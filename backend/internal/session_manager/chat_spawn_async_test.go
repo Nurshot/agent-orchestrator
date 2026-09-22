@@ -157,20 +157,62 @@ func TestSpawnAsyncChat_PublishesTheWorktreeBeforeTheController(t *testing.T) {
 	m.browserCapabilities = browsersvc.NewAuthority()
 	deferred := deferredBackground(m)
 
+	var publishedPath string
+	launcher.beforeStart = func(start ChatStart) {
+		publishedPath = st.sessions[start.SessionID].Metadata.WorkspacePath
+	}
 	rec, _, _, err := m.Spawn(context.Background(), asyncChatSpawnConfig("do the thing"))
 	if err != nil {
 		t.Fatalf("spawn: %v", err)
 	}
 	(*deferred)[0]()
 
-	// The controller never started, so only the early publish can have written
-	// this — exactly the window the desktop was polling through.
-	stored := st.sessions[rec.ID]
-	if stored.Metadata.WorkspacePath == "" {
-		t.Fatal("the worktree exists but the row still reports no workspace")
+	// The controller never started, so only the early publish can have made the
+	// path visible to StartChat — exactly the window the desktop polls through.
+	if publishedPath == "" {
+		t.Fatal("the worktree was not published before controller startup")
 	}
-	if stored.Metadata.Branch == "" {
-		t.Fatal("the row reports a workspace with no branch")
+	stored := st.sessions[rec.ID]
+	if stored.Metadata.WorkspacePath != "" || stored.Metadata.Branch != "" {
+		t.Fatalf("failed session retained removed workspace metadata: %+v", stored.Metadata)
+	}
+	if stored.IsTerminated {
+		t.Fatal("failed asynchronous session was hidden as terminated")
+	}
+}
+
+func TestSpawnAsyncChat_PreparedProvisionFailureClearsRemovedWorkspace(t *testing.T) {
+	launcher := &recordingLauncher{}
+	m, st, _ := newChatManager(launcher)
+	m.browserCapabilities = browsersvc.NewAuthority()
+	ws := m.workspace.(*fakeWorkspace)
+	ws.path = t.TempDir()
+	project := st.projects[string(chatTestProject)]
+	project.Config.PostCreate = []string{"exit 3"}
+	st.projects[string(chatTestProject)] = project
+	m.runBackground = func(work func()) { work() }
+	token, err := m.PrepareTaskWorkspace(context.Background(), project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deferred := deferredBackground(m)
+	cfg := asyncChatSpawnConfig("do the thing")
+	cfg.TaskPreparation = token
+	rec, _, _, err := m.Spawn(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	(*deferred)[0]()
+
+	stored := st.sessions[rec.ID]
+	if stored.ProvisionState != domain.SessionProvisionFailed {
+		t.Fatalf("provision state = %q, want failed", stored.ProvisionState)
+	}
+	if stored.Metadata.WorkspacePath != "" || stored.Metadata.Branch != "" {
+		t.Fatalf("failed prepared session retained removed workspace: %+v", stored.Metadata)
+	}
+	if stored.IsTerminated {
+		t.Fatal("failed prepared session was hidden as terminated")
 	}
 }
 

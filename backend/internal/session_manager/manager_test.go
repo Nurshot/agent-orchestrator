@@ -42,6 +42,7 @@ type fakeStore struct {
 	getProjectErr    error
 	getSessionErr    error
 	updateSessionErr error
+	deletePrepErr    error
 	// agentSwitchStore is wired only by agent-switch tests so fakeLCM can model
 	// Lifecycle Manager's atomic ownership-boundary commands.
 	agentSwitchStore any
@@ -141,6 +142,9 @@ func (f *fakeStore) PromoteTaskPreparation(_ context.Context, id domain.SessionI
 }
 
 func (f *fakeStore) DeleteTaskPreparation(_ context.Context, id domain.SessionID) (bool, error) {
+	if f.deletePrepErr != nil {
+		return false, f.deletePrepErr
+	}
 	rec, ok := f.sessions[id]
 	if !ok || !rec.IsTaskPreparation {
 		return false, nil

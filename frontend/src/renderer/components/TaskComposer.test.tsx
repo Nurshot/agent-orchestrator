@@ -148,31 +148,15 @@ describe("TaskComposer", () => {
 		expect(h.get.mock.calls.some(([path]) => path === "/api/v1/projects/{id}")).toBe(false);
 	});
 
-	it("ensures display readiness for every harness when the composer opens", async () => {
+	it("does not run provider readiness before Start", async () => {
 		render(
 			<Wrap>
 				<TaskComposer projectId="proj-1" onCreated={vi.fn()} />
 			</Wrap>,
 		);
 
-		await waitFor(() => expect(h.ensureReadiness).toHaveBeenCalledWith());
-	});
-
-	it("ensures the selected harness when agent selection changes", async () => {
-		render(
-			<Wrap>
-				<TaskComposer projectId="proj-1" onCreated={vi.fn()} />
-			</Wrap>,
-		);
-
-		fireEvent.click(screen.getByLabelText("Agent"));
-		await waitFor(() =>
-			expect(h.ensureReadiness).toHaveBeenCalledWith({
-				agentIds: ["codex"],
-				enabled: true,
-				purpose: "launch",
-			}),
-		);
+		await waitFor(() => expect(screen.getByLabelText("Task")).toBeInTheDocument());
+		expect(h.ensureReadiness).not.toHaveBeenCalled();
 	});
 
 	it("waits for and caches targeted readiness after a binary launch failure", async () => {

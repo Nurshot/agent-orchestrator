@@ -29,22 +29,15 @@ type taskPreparation struct {
 	workspaceProject *ports.WorkspaceProjectInfo
 	err              error
 	promoted         bool
-}
-
-type taskPreparationStore interface {
-	PromoteTaskPreparation(context.Context, domain.SessionID, domain.SessionRecord) (bool, error)
-	DeleteTaskPreparation(context.Context, domain.SessionID) (bool, error)
-	SetSessionProvisionedWorkspace(context.Context, domain.SessionID, string, string, string, time.Time) (bool, error)
+	cancelled        bool
+	cleaning         bool
 }
 
 // PrepareTaskWorkspace reserves the final session id and starts only the Git
 // worktree work. Provider startup and project post-create commands still wait
 // for an explicit Start Task action.
-func (m *Manager) PrepareTaskWorkspace(ctx context.Context, project domain.ProjectRecord) (string, error) {
+func (m *Manager) PrepareTaskWorkspace(ctx context.Context, project domain.ProjectRecord) (domain.TaskPreparationToken, error) {
 	if project.ID == "" {
-		return "", nil
-	}
-	if _, ok := m.store.(taskPreparationStore); !ok {
 		return "", nil
 	}
 	now := m.clock()
@@ -72,16 +65,10 @@ func (m *Manager) PrepareTaskWorkspace(ctx context.Context, project domain.Proje
 		cleaned: make(chan struct{}),
 		cancel:  cancel,
 	}
-	token := string(rec.ID)
+	token := domain.TaskPreparationToken(rec.ID)
 	m.taskPreparationsMu.Lock()
 	m.taskPreparations[token] = prep
-	prep.timer = time.AfterFunc(m.taskPreparationTTL, func() {
-		cleanupCtx, cleanupCancel := spawnRollbackContext(m.backgroundContext)
-		defer cleanupCancel()
-		if err := m.CancelTaskPreparation(cleanupCtx, token); err != nil {
-			m.logger.Warn("task preparation expiry cleanup failed", "sessionID", rec.ID, "error", err)
-		}
-	})
+	m.scheduleTaskPreparationCleanup(token, prep)
 	m.taskPreparationsMu.Unlock()
 
 	m.runInBackground(func() { m.createTaskPreparation(prepCtx, prep) })
@@ -95,17 +82,12 @@ func (m *Manager) createTaskPreparation(ctx context.Context, prep *taskPreparati
 		Kind:      domain.KindWorker,
 	}, prep.record.ID, prep.branch, baseRefs)
 	if err == nil {
-		writer, ok := m.store.(taskPreparationStore)
-		if !ok {
-			err = errors.New("task preparation store unavailable")
-		} else {
-			var updated bool
-			updated, err = writer.SetSessionProvisionedWorkspace(
-				ctx, prep.record.ID, ws.Branch, ws.Path, ws.RepoPath, m.clock(),
-			)
-			if err == nil && !updated {
-				err = errors.New("preparation row no longer exists")
-			}
+		var updated bool
+		updated, err = m.store.SetSessionProvisionedWorkspace(
+			ctx, prep.record.ID, ws.Branch, ws.Path, ws.RepoPath, m.clock(),
+		)
+		if err == nil && !updated {
+			err = errors.New("preparation row no longer exists")
 		}
 		if err != nil {
 			cleanupCtx, cancel := spawnRollbackContext(ctx)
@@ -124,15 +106,15 @@ func (m *Manager) createTaskPreparation(ctx context.Context, prep *taskPreparati
 // claimTaskPreparation atomically transfers cleanup ownership to Spawn. An
 // absent, expired, or wrong-project token is only a cache miss: Spawn falls
 // back to creating its own worktree.
-func (m *Manager) claimTaskPreparation(token string, projectID domain.ProjectID) *taskPreparation {
-	token = strings.TrimSpace(token)
+func (m *Manager) claimTaskPreparation(token domain.TaskPreparationToken, projectID domain.ProjectID) *taskPreparation {
+	token = domain.TaskPreparationToken(strings.TrimSpace(string(token)))
 	if token == "" {
 		return nil
 	}
 	m.taskPreparationsMu.Lock()
 	defer m.taskPreparationsMu.Unlock()
 	prep := m.taskPreparations[token]
-	if prep == nil || domain.ProjectID(prep.project.ID) != projectID {
+	if prep == nil || prep.cancelled || prep.cleaning || domain.ProjectID(prep.project.ID) != projectID {
 		return nil
 	}
 	delete(m.taskPreparations, token)
@@ -141,11 +123,7 @@ func (m *Manager) claimTaskPreparation(token string, projectID domain.ProjectID)
 }
 
 func (m *Manager) promoteTaskPreparation(ctx context.Context, prep *taskPreparation, rec domain.SessionRecord) (domain.SessionRecord, error) {
-	promoter, ok := m.store.(taskPreparationStore)
-	if !ok {
-		return domain.SessionRecord{}, errors.New("task preparation store unavailable")
-	}
-	updated, err := promoter.PromoteTaskPreparation(ctx, prep.record.ID, rec)
+	updated, err := m.store.PromoteTaskPreparation(ctx, prep.record.ID, rec)
 	if err != nil {
 		return domain.SessionRecord{}, err
 	}
@@ -171,8 +149,8 @@ func (m *Manager) awaitTaskPreparation(ctx context.Context, prep *taskPreparatio
 // CancelTaskPreparation is idempotent. Once Spawn has claimed the token,
 // cancellation is deliberately ignored so closing the modal cannot delete the
 // newly-visible session's worktree.
-func (m *Manager) CancelTaskPreparation(ctx context.Context, token string) error {
-	token = strings.TrimSpace(token)
+func (m *Manager) CancelTaskPreparation(ctx context.Context, token domain.TaskPreparationToken) error {
+	token = domain.TaskPreparationToken(strings.TrimSpace(string(token)))
 	if token == "" {
 		return nil
 	}
@@ -182,15 +160,44 @@ func (m *Manager) CancelTaskPreparation(ctx context.Context, token string) error
 		m.taskPreparationsMu.Unlock()
 		return nil
 	}
-	delete(m.taskPreparations, token)
+	if prep.cleaning {
+		m.taskPreparationsMu.Unlock()
+		return nil
+	}
+	prep.cancelled = true
+	prep.cleaning = true
 	prep.timer.Stop()
 	prep.cancel()
 	m.taskPreparationsMu.Unlock()
-	return m.cleanupTaskPreparation(ctx, prep)
+	err := m.cleanupTaskPreparation(ctx, prep)
+	m.taskPreparationsMu.Lock()
+	prep.cleaning = false
+	if err == nil {
+		if m.taskPreparations[token] == prep {
+			delete(m.taskPreparations, token)
+		}
+		close(prep.cleaned)
+	} else if m.taskPreparations[token] == prep {
+		m.scheduleTaskPreparationCleanup(token, prep)
+	}
+	m.taskPreparationsMu.Unlock()
+	return err
+}
+
+// scheduleTaskPreparationCleanup arms the normal expiry path. Failed cleanup
+// uses the same timer so a transient Git or database error never permanently
+// consumes the only cleanup handle.
+func (m *Manager) scheduleTaskPreparationCleanup(token domain.TaskPreparationToken, prep *taskPreparation) {
+	prep.timer = time.AfterFunc(m.taskPreparationTTL, func() {
+		cleanupCtx, cleanupCancel := spawnRollbackContext(m.backgroundContext)
+		defer cleanupCancel()
+		if err := m.CancelTaskPreparation(cleanupCtx, token); err != nil {
+			m.logger.Warn("task preparation expiry cleanup failed", "sessionID", prep.record.ID, "error", err)
+		}
+	})
 }
 
 func (m *Manager) cleanupTaskPreparation(ctx context.Context, prep *taskPreparation) error {
-	defer close(prep.cleaned)
 	select {
 	case <-prep.done:
 	case <-ctx.Done():
@@ -215,11 +222,7 @@ func (m *Manager) cleanupTaskPreparation(ctx context.Context, prep *taskPreparat
 			m.rollbackSpawnSeedRow(ctx, prep.record.ID)
 		}
 	} else {
-		store, ok := m.store.(taskPreparationStore)
-		if !ok {
-			return errors.New("task preparation store unavailable")
-		}
-		if _, err := store.DeleteTaskPreparation(ctx, prep.record.ID); err != nil {
+		if _, err := m.store.DeleteTaskPreparation(ctx, prep.record.ID); err != nil {
 			return err
 		}
 	}
@@ -285,10 +288,6 @@ func (m *Manager) cleanupTaskPreparationRecord(ctx context.Context, rec domain.S
 			return err
 		}
 	}
-	store, ok := m.store.(taskPreparationStore)
-	if !ok {
-		return errors.New("task preparation store unavailable")
-	}
-	_, err := store.DeleteTaskPreparation(ctx, rec.ID)
+	_, err := m.store.DeleteTaskPreparation(ctx, rec.ID)
 	return err
 }

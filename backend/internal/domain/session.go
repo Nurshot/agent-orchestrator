@@ -214,6 +214,11 @@ type SessionRecord struct {
 // SessionProvisionState is a session's start-up progress.
 type SessionProvisionState string
 
+// TaskPreparationToken identifies one speculative task workspace. It is opaque
+// outside the session manager even though the current implementation reserves a
+// session id as its value.
+type TaskPreparationToken string
+
 // Provision states.
 const (
 	// SessionProvisionProvisioning: the row and its conversation exist; the

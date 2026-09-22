@@ -62,6 +62,37 @@ func TestCancelTaskPreparationRemovesWorkspaceAndRow(t *testing.T) {
 	}
 }
 
+func TestCancelTaskPreparationCanRetryAfterCleanupFailure(t *testing.T) {
+	m, st, _, ws := newManager()
+	m.runBackground = func(work func()) { work() }
+	m.taskPreparationTTL = time.Hour
+	token, err := m.PrepareTaskWorkspace(context.Background(), st.projects["mer"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.deletePrepErr = errors.New("database busy")
+	if err := m.CancelTaskPreparation(context.Background(), token); err == nil {
+		t.Fatal("cancel succeeded despite delete failure")
+	}
+	m.taskPreparationsMu.Lock()
+	_, retained := m.taskPreparations[token]
+	m.taskPreparationsMu.Unlock()
+	if !retained {
+		t.Fatal("failed cleanup consumed its retry handle")
+	}
+
+	st.deletePrepErr = nil
+	if err := m.CancelTaskPreparation(context.Background(), token); err != nil {
+		t.Fatal(err)
+	}
+	if ws.destroyed != 1 {
+		t.Fatalf("workspace destroy calls = %d, want one successful cleanup followed by a row-only retry", ws.destroyed)
+	}
+	if _, ok := st.sessions["mer-1"]; ok {
+		t.Fatal("retried cleanup left preparation row behind")
+	}
+}
+
 func TestClaimedPreparationRollsBackWhenChatQueueFails(t *testing.T) {
 	launcher := &recordingLauncher{queueErr: errors.New("queue unavailable")}
 	m, st, _ := newChatManager(launcher)
