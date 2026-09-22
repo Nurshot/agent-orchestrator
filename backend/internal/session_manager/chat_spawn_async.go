@@ -78,9 +78,6 @@ func (m *Manager) beginAsyncChatSpawn(ctx context.Context, in asyncChatSpawn) (d
 		}
 	}
 	in.record = rec
-	// From here the id is the client's: every later failure must leave a session
-	// it can still open, never a deleted row.
-	m.markSpawnPublished(id)
 	m.runInBackground(func() {
 		// The HTTP request that started this is already answered; its context is
 		// gone. The work continues under the daemon's lifetime instead.
@@ -109,9 +106,6 @@ func (m *Manager) completeAsyncChatSpawn(ctx context.Context, in asyncChatSpawn)
 		ws, workspaceProject, err = m.awaitTaskPreparation(ctx, in.preparation)
 		if err != nil && ctx.Err() != nil {
 			in.preparation.cancel()
-			m.taskPreparationsMu.Lock()
-			delete(m.taskPreparations, in.preparation.token)
-			m.taskPreparationsMu.Unlock()
 			m.failAsyncChatSpawn(ctx, id, wrapSpawnStage(id, ErrWorkspaceCreate, err))
 			return
 		}
@@ -195,7 +189,6 @@ func (m *Manager) completeAsyncChatSpawn(ctx context.Context, in asyncChatSpawn)
 		return
 	}
 	m.logAsyncChatSpawnStage(id, "controller_start", stageStarted)
-	m.clearSpawnPublished(id)
 	stageStarted = time.Now()
 	if _, err := m.setProvisionState(ctx, id, domain.SessionProvisionReady, ""); err != nil {
 		m.logger.Error("spawn: publish provisioned session", "sessionID", id, "error", err)
@@ -222,7 +215,6 @@ func (m *Manager) logAsyncChatSpawnStage(id domain.SessionID, stage string, star
 // read and retry rather than a session that silently disappeared.
 func (m *Manager) failAsyncChatSpawn(ctx context.Context, id domain.SessionID, cause error) {
 	m.logger.Error("spawn: asynchronous chat start failed", "sessionID", id, "error", cause)
-	defer m.clearSpawnPublished(id)
 	cleanupCtx, cancel := spawnRollbackContext(ctx)
 	defer cancel()
 	m.stopChatBestEffort(cleanupCtx, id)
@@ -282,33 +274,6 @@ func (m *Manager) runInBackground(work func()) {
 		return
 	}
 	go work()
-}
-
-// spawnPublished reports whether the API has already handed this session's id to
-// a client, which makes the row something a user can be looking at rather than
-// spawn scratch space. It is intentionally in-memory: a daemon that restarted is
-// not serving anyone the same in-flight spawn, and FailInterruptedProvisioning
-// settles those rows instead.
-func (m *Manager) spawnPublished(id domain.SessionID) bool {
-	m.publishedSpawnMu.Lock()
-	defer m.publishedSpawnMu.Unlock()
-	_, ok := m.publishedSpawns[id]
-	return ok
-}
-
-func (m *Manager) markSpawnPublished(id domain.SessionID) {
-	m.publishedSpawnMu.Lock()
-	defer m.publishedSpawnMu.Unlock()
-	if m.publishedSpawns == nil {
-		m.publishedSpawns = make(map[domain.SessionID]struct{})
-	}
-	m.publishedSpawns[id] = struct{}{}
-}
-
-func (m *Manager) clearSpawnPublished(id domain.SessionID) {
-	m.publishedSpawnMu.Lock()
-	defer m.publishedSpawnMu.Unlock()
-	delete(m.publishedSpawns, id)
 }
 
 // publishProvisionedWorkspace records the worktree on a still-provisioning row.

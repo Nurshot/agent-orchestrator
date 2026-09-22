@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"golang.org/x/sync/singleflight"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/agent/modelcatalog"
 	"github.com/aoagents/agent-orchestrator/backend/internal/agentlaunch"
@@ -408,17 +407,12 @@ type Manager struct {
 	clock                       func() time.Time
 	reconcileWorkers            int
 	defaultBranchRefreshTimeout time.Duration
-	defaultBranchRefreshGroup   singleflight.Group
-	defaultBranchRefreshMu      sync.Mutex
-	defaultBranchRefreshes      map[string]defaultBranchRefresh
 	taskPreparationsMu          sync.Mutex
 	taskPreparations            map[string]*taskPreparation
 	taskPreparationTTL          time.Duration
 	// runBackground runs an asynchronous spawn's remaining work. Nil means a
 	// plain goroutine; tests substitute a synchronous runner.
-	runBackground    func(func())
-	publishedSpawnMu sync.Mutex
-	publishedSpawns  map[domain.SessionID]struct{}
+	runBackground func(func())
 	// openTranscriptFile is os.Open in production. The narrow seam lets tests
 	// deterministically prove that a post-stop transcript read failure falls
 	// back without advertising the provider path.
@@ -714,7 +708,6 @@ const (
 	sendConfirmAttemptDeadline    = 2 * time.Second
 	sendConfirmMaxAttempts        = 3
 	defaultBranchRefreshTimeout   = 5 * time.Second
-	defaultBranchPrefetchLifetime = 5 * time.Minute
 	promptDeliveryDeadlineReserve = 5 * time.Second
 )
 
@@ -793,7 +786,6 @@ func New(d Deps) *Manager {
 		clock:                          d.Clock,
 		reconcileWorkers:               d.ReconcileWorkers,
 		defaultBranchRefreshTimeout:    defaultBranchRefreshTimeout,
-		defaultBranchRefreshes:         make(map[string]defaultBranchRefresh),
 		taskPreparations:               make(map[string]*taskPreparation),
 		taskPreparationTTL:             defaultTaskPreparationTTL,
 		openTranscriptFile:             os.Open,
@@ -1071,7 +1063,7 @@ func (m *Manager) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Sess
 	// Per-project workspace provisioning: symlink shared files, then run any
 	// post-create commands (e.g. `pnpm install`) before the agent launches.
 	if err := m.provisionWorkspace(ctx, project, ws.Path); err != nil {
-		m.rollbackSeedSpawnWorkspace(ctx, rec, ws, workspaceProject, false)
+		m.rollbackSeedSpawnWorkspace(ctx, rec, ws, workspaceProject, false, false)
 		return domain.SessionRecord{}, 0, 0, wrapSpawnStage(id, ErrWorkspaceProvision, err)
 	}
 
@@ -1083,7 +1075,7 @@ func (m *Manager) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Sess
 	if len(cfg.Attachments) > 0 {
 		refs, err := m.writeSpawnAttachments(ctx, id, ws.Path, cfg.Attachments)
 		if err != nil {
-			m.rollbackSeedSpawnWorkspace(ctx, rec, ws, workspaceProject, false)
+			m.rollbackSeedSpawnWorkspace(ctx, rec, ws, workspaceProject, false, false)
 			return domain.SessionRecord{}, 0, 0, wrapSpawnStage(id, ErrSpawnAttachments, err)
 		}
 		// Keep the attachments dir out of git status. Best-effort: the images are
@@ -1116,19 +1108,19 @@ func (m *Manager) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Sess
 
 	agent, ok := m.agents.Agent(cfg.Harness)
 	if !ok {
-		m.rollbackSeedSpawnWorkspace(ctx, rec, ws, workspaceProject, false)
+		m.rollbackSeedSpawnWorkspace(ctx, rec, ws, workspaceProject, false, false)
 		return domain.SessionRecord{}, 0, 0, fmt.Errorf("spawn %s: %w: no agent adapter for harness %q", id, ErrUnknownHarness, cfg.Harness)
 	}
 	var env map[string]string
 	rec, env, err = m.prepareWorkerLaunchEnv(ctx, rec, project.Config.Env)
 	if err != nil {
-		m.rollbackSeedSpawnWorkspace(ctx, rec, ws, workspaceProject, true)
+		m.rollbackSeedSpawnWorkspace(ctx, rec, ws, workspaceProject, true, false)
 		return domain.SessionRecord{}, 0, 0, wrapSpawnStage(id, ErrSpawnBrowser, err)
 	}
 	m.augmentAgentRuntimeEnv(agent, env)
 	pinRuntimePermissionEnv(env, adapterConfig.Permissions)
 	if err := m.prepareWorkspace(ctx, agent, id, ws.Path, systemPrompt, systemPromptFile, adapterConfig, env); err != nil {
-		m.rollbackSeedSpawnWorkspace(ctx, rec, ws, workspaceProject, false)
+		m.rollbackSeedSpawnWorkspace(ctx, rec, ws, workspaceProject, false, false)
 		return domain.SessionRecord{}, 0, 0, wrapSpawnStage(id, ErrSpawnPrepare, err)
 	}
 	launchCfg := ports.LaunchConfig{
@@ -1145,7 +1137,7 @@ func (m *Manager) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Sess
 	}
 	delivery, err := agent.GetPromptDeliveryStrategy(ctx, launchCfg)
 	if err != nil {
-		m.rollbackSeedSpawnWorkspace(ctx, rec, ws, workspaceProject, true)
+		m.rollbackSeedSpawnWorkspace(ctx, rec, ws, workspaceProject, true, false)
 		return domain.SessionRecord{}, 0, 0, wrapSpawnStage(id, ErrSpawnPromptDelivery, err)
 	}
 	if delivery == ports.PromptDeliveryAfterStart {
@@ -1153,7 +1145,7 @@ func (m *Manager) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Sess
 	}
 	argv, err := agent.GetLaunchCommand(ctx, launchCfg)
 	if err != nil {
-		m.rollbackSeedSpawnWorkspace(ctx, rec, ws, workspaceProject, true)
+		m.rollbackSeedSpawnWorkspace(ctx, rec, ws, workspaceProject, true, false)
 		return domain.SessionRecord{}, 0, 0, wrapSpawnStage(id, ErrSpawnLaunchCommand, err)
 	}
 	// Pre-flight: confirm argv[0] actually exists on PATH (or as an absolute
@@ -1161,23 +1153,23 @@ func (m *Manager) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Sess
 	// tmux happily creates a session+pane around a missing command, so an
 	// unresolved binary would leak through as a "live" session that never ran.
 	if err := m.validateAgentBinary(argv); err != nil {
-		m.rollbackSeedSpawnWorkspace(ctx, rec, ws, workspaceProject, true)
+		m.rollbackSeedSpawnWorkspace(ctx, rec, ws, workspaceProject, true, false)
 		return domain.SessionRecord{}, 0, 0, fmt.Errorf("spawn %s: %w", id, err)
 	}
 	m.augmentRuntimePATHForLaunchBinary(ctx, env, argv)
 	argv, launchID, err := m.superviseAgentProcess(agent, id, env, argv)
 	if err != nil {
-		m.rollbackSeedSpawnWorkspace(ctx, rec, ws, workspaceProject, true)
+		m.rollbackSeedSpawnWorkspace(ctx, rec, ws, workspaceProject, true, false)
 		return domain.SessionRecord{}, 0, 0, wrapSpawnStage(id, ErrSpawnSupervisor, err)
 	}
 	if err := m.lcm.PrepareLaunch(id, launchID); err != nil {
-		m.rollbackSeedSpawnWorkspace(ctx, rec, ws, workspaceProject, true)
+		m.rollbackSeedSpawnWorkspace(ctx, rec, ws, workspaceProject, true, false)
 		return domain.SessionRecord{}, 0, 0, wrapSpawnStage(id, ErrSpawnPrepareLaunch, err)
 	}
 	defer m.lcm.CancelLaunch(id, launchID)
 	releaseCodexAdmission, err := m.acquireCodexControllerAdmission(ctx, cfg.Harness)
 	if err != nil {
-		m.rollbackSeedSpawnWorkspace(ctx, rec, ws, workspaceProject, true)
+		m.rollbackSeedSpawnWorkspace(ctx, rec, ws, workspaceProject, true, false)
 		return domain.SessionRecord{}, 0, 0, fmt.Errorf("spawn %s: %w", id, err)
 	}
 	defer releaseCodexAdmission()
@@ -1188,7 +1180,7 @@ func (m *Manager) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Sess
 		Env:           env,
 	})
 	if err != nil {
-		m.rollbackSeedSpawnWorkspace(ctx, rec, ws, workspaceProject, true)
+		m.rollbackSeedSpawnWorkspace(ctx, rec, ws, workspaceProject, true, false)
 		return domain.SessionRecord{}, 0, 0, wrapSpawnStage(id, ErrRuntimeCreate, err)
 	}
 
@@ -1353,55 +1345,8 @@ type defaultBranchRefreshTarget struct {
 	resolved         ports.WorkspaceDefaultBranch
 }
 
-type defaultBranchRefresh struct {
-	baseRefs    map[string]string
-	completedAt time.Time
-}
-
-// PrefetchDefaultBranches starts the same best-effort refresh a spawn needs,
-// but under the daemon lifetime so closing the New Task dialog cannot cancel it.
-func (m *Manager) PrefetchDefaultBranches(project domain.ProjectRecord) {
-	m.runInBackground(func() {
-		m.cachedDefaultBranchRefresh(m.backgroundContext, project)
-	})
-}
-
 func (m *Manager) refreshDefaultBranchesBestEffort(ctx context.Context, project domain.ProjectRecord) map[string]string {
-	baseRefs := m.cachedDefaultBranchRefresh(ctx, project)
-	// A prefetch is for the next task, not a general Git cache. Consume it so a
-	// later task refreshes again instead of silently inheriting an old remote ref.
-	m.defaultBranchRefreshMu.Lock()
-	delete(m.defaultBranchRefreshes, project.ID)
-	m.defaultBranchRefreshMu.Unlock()
-	return baseRefs
-}
-
-func (m *Manager) cachedDefaultBranchRefresh(ctx context.Context, project domain.ProjectRecord) map[string]string {
-	if project.ID == "" {
-		return m.fetchDefaultBranchesBestEffort(ctx, project)
-	}
-	m.defaultBranchRefreshMu.Lock()
-	cached, ok := m.defaultBranchRefreshes[project.ID]
-	m.defaultBranchRefreshMu.Unlock()
-	if ok && m.clock().Sub(cached.completedAt) < defaultBranchPrefetchLifetime {
-		return cached.baseRefs
-	}
-
-	value, _, _ := m.defaultBranchRefreshGroup.Do(project.ID, func() (any, error) {
-		m.defaultBranchRefreshMu.Lock()
-		cached, ok := m.defaultBranchRefreshes[project.ID]
-		m.defaultBranchRefreshMu.Unlock()
-		if ok && m.clock().Sub(cached.completedAt) < defaultBranchPrefetchLifetime {
-			return cached.baseRefs, nil
-		}
-		baseRefs := m.fetchDefaultBranchesBestEffort(ctx, project)
-		m.defaultBranchRefreshMu.Lock()
-		m.defaultBranchRefreshes[project.ID] = defaultBranchRefresh{baseRefs: baseRefs, completedAt: m.clock()}
-		m.defaultBranchRefreshMu.Unlock()
-		return baseRefs, nil
-	})
-	baseRefs, _ := value.(map[string]string)
-	return baseRefs
+	return m.fetchDefaultBranchesBestEffort(ctx, project)
 }
 
 func (m *Manager) fetchDefaultBranchesBestEffort(ctx context.Context, project domain.ProjectRecord) map[string]string {
@@ -1677,7 +1622,7 @@ func (m *Manager) markSpawnFailedTerminatedAfterFailure(ctx context.Context, id 
 	m.markSpawnFailedTerminated(cleanupCtx, id)
 }
 
-func (m *Manager) rollbackSeedSpawnWorkspace(ctx context.Context, rec domain.SessionRecord, ws ports.WorkspaceInfo, workspaceProject *ports.WorkspaceProjectInfo, prepared bool) {
+func (m *Manager) rollbackSeedSpawnWorkspace(ctx context.Context, rec domain.SessionRecord, ws ports.WorkspaceInfo, workspaceProject *ports.WorkspaceProjectInfo, prepared, published bool) {
 	cleanupCtx, cancel := spawnRollbackContext(ctx)
 	workspaceDestroyed := m.destroySpawnWorkspace(cleanupCtx, ws, workspaceProject)
 	cancel()
@@ -1687,7 +1632,11 @@ func (m *Manager) rollbackSeedSpawnWorkspace(ctx context.Context, rec domain.Ses
 			m.cleanupAgentWorkspace(cleanupCtx, rec, ws.Path)
 			cancel()
 		}
-		m.rollbackSpawnSeedRowAfterFailure(ctx, rec.ID)
+		if published {
+			m.markSpawnFailedTerminatedAfterFailure(ctx, rec.ID, false)
+		} else {
+			m.rollbackSpawnSeedRowAfterFailure(ctx, rec.ID)
+		}
 		return
 	}
 	cleanupCtx, cancel = spawnRollbackContext(ctx)
@@ -1900,15 +1849,6 @@ func (m *Manager) markSpawnFailedTerminatedWithoutWorkspace(ctx context.Context,
 // rows still in seed state; if the row has progressed or the delete itself
 // fails, fall back to parking it terminated so a phantom row never looks live.
 func (m *Manager) rollbackSpawnSeedRow(ctx context.Context, id domain.SessionID) {
-	// A published session is one the client already holds an id for and is very
-	// likely looking at. Deleting it — which an empty-brief asynchronous spawn
-	// still qualifies for, since nothing has written a prompt to the row — would
-	// turn its open session into a 404. Terminate it instead, so the failure is
-	// something the user can see.
-	if m.spawnPublished(id) {
-		m.markSpawnFailedTerminated(ctx, id)
-		return
-	}
 	if deleted, err := m.store.DeleteSession(ctx, id); err == nil && deleted {
 		m.cleanupSystemPromptDir(id)
 		m.cleanupAttachments(ctx, id)

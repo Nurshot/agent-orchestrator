@@ -43,18 +43,13 @@ type DelegateTaskOutcome struct {
 	WorkerID       domain.SessionID
 }
 
-type defaultBranchPrefetcher interface {
-	PrefetchDefaultBranches(domain.ProjectRecord)
-}
-
 type taskPreparationCommander interface {
 	PrepareTaskWorkspace(context.Context, domain.ProjectRecord) (string, error)
 	CancelTaskPreparation(context.Context, string) error
 }
 
 // PrepareTask starts the reversible worktree-only half of task creation. The
-// returned token is optional so older embedders retain the existing fetch-only
-// optimization.
+// returned token is optional for embedders without speculative preparation.
 func (s *Service) PrepareTask(ctx context.Context, projectID domain.ProjectID) (string, error) {
 	project, err := s.requireProject(ctx, projectID)
 	if err != nil {
@@ -62,9 +57,6 @@ func (s *Service) PrepareTask(ctx context.Context, projectID domain.ProjectID) (
 	}
 	if preparer, ok := s.manager.(taskPreparationCommander); ok {
 		return preparer.PrepareTaskWorkspace(ctx, project)
-	}
-	if prefetcher, ok := s.manager.(defaultBranchPrefetcher); ok {
-		prefetcher.PrefetchDefaultBranches(project)
 	}
 	return "", nil
 }
@@ -74,19 +66,6 @@ func (s *Service) PrepareTask(ctx context.Context, projectID domain.ProjectID) (
 func (s *Service) CancelTaskPreparation(ctx context.Context, token string) error {
 	if preparer, ok := s.manager.(taskPreparationCommander); ok {
 		return preparer.CancelTaskPreparation(ctx, token)
-	}
-	return nil
-}
-
-// PrefetchDefaultBranches moves the task's best-effort Git refresh ahead of
-// submission. Older focused fakes simply have nothing to warm.
-func (s *Service) PrefetchDefaultBranches(ctx context.Context, projectID domain.ProjectID) error {
-	project, err := s.requireProject(ctx, projectID)
-	if err != nil {
-		return err
-	}
-	if prefetcher, ok := s.manager.(defaultBranchPrefetcher); ok {
-		prefetcher.PrefetchDefaultBranches(project)
 	}
 	return nil
 }

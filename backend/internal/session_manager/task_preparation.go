@@ -5,10 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
-
-	"github.com/google/uuid"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
 	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
@@ -16,28 +13,18 @@ import (
 
 const defaultTaskPreparationTTL = 5 * time.Minute
 
-type taskPreparationState uint8
-
-const (
-	taskPreparationOpen taskPreparationState = iota
-	taskPreparationClaimed
-	taskPreparationCanceled
-)
-
 // taskPreparation is the daemon-owned speculative worktree behind one opaque
 // modal token. The session row reserves the final id and stays hidden until a
 // spawn claims it.
 type taskPreparation struct {
-	token   string
 	record  domain.SessionRecord
 	project domain.ProjectRecord
 	branch  string
 	done    chan struct{}
+	cleaned chan struct{}
 	cancel  context.CancelFunc
 	timer   *time.Timer
 
-	cleanupMu        sync.Mutex
-	state            taskPreparationState
 	workspace        ports.WorkspaceInfo
 	workspaceProject *ports.WorkspaceProjectInfo
 	err              error
@@ -78,26 +65,27 @@ func (m *Manager) PrepareTaskWorkspace(ctx context.Context, project domain.Proje
 
 	prepCtx, cancel := context.WithCancel(m.backgroundContext)
 	prep := &taskPreparation{
-		token:   uuid.NewString(),
 		record:  rec,
 		project: project,
 		branch:  branch,
 		done:    make(chan struct{}),
+		cleaned: make(chan struct{}),
 		cancel:  cancel,
 	}
+	token := string(rec.ID)
 	m.taskPreparationsMu.Lock()
-	m.taskPreparations[prep.token] = prep
+	m.taskPreparations[token] = prep
 	prep.timer = time.AfterFunc(m.taskPreparationTTL, func() {
 		cleanupCtx, cleanupCancel := spawnRollbackContext(m.backgroundContext)
 		defer cleanupCancel()
-		if err := m.CancelTaskPreparation(cleanupCtx, prep.token); err != nil {
+		if err := m.CancelTaskPreparation(cleanupCtx, token); err != nil {
 			m.logger.Warn("task preparation expiry cleanup failed", "sessionID", rec.ID, "error", err)
 		}
 	})
 	m.taskPreparationsMu.Unlock()
 
 	m.runInBackground(func() { m.createTaskPreparation(prepCtx, prep) })
-	return prep.token, nil
+	return token, nil
 }
 
 func (m *Manager) createTaskPreparation(ctx context.Context, prep *taskPreparation) {
@@ -127,12 +115,10 @@ func (m *Manager) createTaskPreparation(ctx context.Context, prep *taskPreparati
 			workspaceProject = nil
 		}
 	}
-	m.taskPreparationsMu.Lock()
 	prep.workspace = ws
 	prep.workspaceProject = workspaceProject
 	prep.err = err
 	close(prep.done)
-	m.taskPreparationsMu.Unlock()
 }
 
 // claimTaskPreparation atomically transfers cleanup ownership to Spawn. An
@@ -146,10 +132,10 @@ func (m *Manager) claimTaskPreparation(token string, projectID domain.ProjectID)
 	m.taskPreparationsMu.Lock()
 	defer m.taskPreparationsMu.Unlock()
 	prep := m.taskPreparations[token]
-	if prep == nil || prep.state != taskPreparationOpen || domain.ProjectID(prep.project.ID) != projectID {
+	if prep == nil || domain.ProjectID(prep.project.ID) != projectID {
 		return nil
 	}
-	prep.state = taskPreparationClaimed
+	delete(m.taskPreparations, token)
 	prep.timer.Stop()
 	return prep
 }
@@ -179,11 +165,7 @@ func (m *Manager) awaitTaskPreparation(ctx context.Context, prep *taskPreparatio
 	case <-ctx.Done():
 		return ports.WorkspaceInfo{}, nil, ctx.Err()
 	}
-	m.taskPreparationsMu.Lock()
-	delete(m.taskPreparations, prep.token)
-	ws, workspaceProject, err := prep.workspace, prep.workspaceProject, prep.err
-	m.taskPreparationsMu.Unlock()
-	return ws, workspaceProject, err
+	return prep.workspace, prep.workspaceProject, prep.err
 }
 
 // CancelTaskPreparation is idempotent. Once Spawn has claimed the token,
@@ -196,11 +178,11 @@ func (m *Manager) CancelTaskPreparation(ctx context.Context, token string) error
 	}
 	m.taskPreparationsMu.Lock()
 	prep := m.taskPreparations[token]
-	if prep == nil || prep.state == taskPreparationClaimed {
+	if prep == nil {
 		m.taskPreparationsMu.Unlock()
 		return nil
 	}
-	prep.state = taskPreparationCanceled
+	delete(m.taskPreparations, token)
 	prep.timer.Stop()
 	prep.cancel()
 	m.taskPreparationsMu.Unlock()
@@ -208,8 +190,7 @@ func (m *Manager) CancelTaskPreparation(ctx context.Context, token string) error
 }
 
 func (m *Manager) cleanupTaskPreparation(ctx context.Context, prep *taskPreparation) error {
-	prep.cleanupMu.Lock()
-	defer prep.cleanupMu.Unlock()
+	defer close(prep.cleaned)
 	select {
 	case <-prep.done:
 	case <-ctx.Done():
@@ -242,9 +223,6 @@ func (m *Manager) cleanupTaskPreparation(ctx context.Context, prep *taskPreparat
 			return err
 		}
 	}
-	m.taskPreparationsMu.Lock()
-	delete(m.taskPreparations, prep.token)
-	m.taskPreparationsMu.Unlock()
 	return nil
 }
 

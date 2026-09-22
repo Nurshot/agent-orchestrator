@@ -509,11 +509,12 @@ func (s *Service) Start(ctx context.Context, cfg StartConfig) (*Controller, erro
 		providerScopeID = cfg.ProviderScopeID
 		providerHandleOwnedByActiveBranch = providerScopeID == activeBranch.ProviderScopeID
 	}
+	queuedBeforeFirstController := queuedAheadOfFirstController(ctx, s.sessions, cfg.SessionID)
 	providerBoundaryID := ""
 	if !providerHandleOwnedByActiveBranch {
 		providerBoundaryID = providerScopeID
 	} else if cfg.ProviderConversationID == "" && cfg.ProviderScopeID == "" &&
-		!queuedAheadOfFirstController(ctx, s.sessions, cfg.SessionID) &&
+		!queuedBeforeFirstController &&
 		(conversation.LatestSequence > 0 || activeBranch.ProviderConversationID != "") {
 		// This conversation already owns provider history, but the caller proved it
 		// cannot resume that provider thread. Reserve the next provider boundary
@@ -701,7 +702,7 @@ func (s *Service) Start(ctx context.Context, cfg StartConfig) (*Controller, erro
 	// it. Settling that would fail the user's opening prompt the moment the agent
 	// it was waiting for finally arrived.
 	if !liveReconnect && cfg.ProviderHandoff == nil &&
-		!queuedAheadOfFirstController(ctx, s.sessions, cfg.SessionID) {
+		!queuedBeforeFirstController {
 		s.settleOrphanedWork(ctx, cfg.SessionID, conversation.ID)
 	}
 	// A fresh generation per launch, so events from the controller this one

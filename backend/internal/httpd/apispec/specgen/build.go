@@ -2523,17 +2523,6 @@ func sessionOperations() []operation {
 			},
 		},
 		{
-			method: http.MethodPost, path: "/api/v1/projects/{id}/git/fetch", id: "prefetchProjectDefaultBranches", tag: "projects",
-			summary:    "Start a best-effort fetch of a project's default branches",
-			pathParams: []any{controllers.ProjectIDParam{}},
-			resps: []respUnit{
-				{http.StatusAccepted, nil},
-				{http.StatusNotFound, envelope.APIError{}},
-				{http.StatusInternalServerError, envelope.APIError{}},
-				{http.StatusNotImplemented, envelope.APIError{}},
-			},
-		},
-		{
 			method: http.MethodPost, path: "/api/v1/projects/{id}/tasks/prepare", id: "prepareTask", tag: "projects",
 			summary:    "Speculatively create the next task's worktree",
 			pathParams: []any{controllers.ProjectIDParam{}},

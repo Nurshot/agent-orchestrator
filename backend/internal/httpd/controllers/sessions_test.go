@@ -41,7 +41,6 @@ type fakeSessionService struct {
 	delegationErr              error
 	preparedProject            domain.ProjectID
 	canceledPreparation        string
-	prefetchedProject          domain.ProjectID
 	cleanupProjects            []domain.ProjectID
 	cleanupResult              []domain.SessionID
 	cleanupSkipped             []sessionsvc.CleanupSkipped
@@ -499,11 +498,6 @@ func (f *fakeSessionService) PrepareTask(_ context.Context, projectID domain.Pro
 
 func (f *fakeSessionService) CancelTaskPreparation(_ context.Context, token string) error {
 	f.canceledPreparation = token
-	return nil
-}
-
-func (f *fakeSessionService) PrefetchDefaultBranches(_ context.Context, projectID domain.ProjectID) error {
-	f.prefetchedProject = projectID
 	return nil
 }
 
@@ -2996,19 +2990,6 @@ func TestSessionsAPI_PreparesAndCancelsTaskWorkspace(t *testing.T) {
 	_, status, _ = doRequest(t, srv, http.MethodDelete, "/api/v1/task-preparations/prep-token", "")
 	if status != http.StatusNoContent || svc.canceledPreparation != "prep-token" {
 		t.Fatalf("cancel = %d, token %q", status, svc.canceledPreparation)
-	}
-}
-
-func TestSessionsAPI_PrefetchesProjectDefaultBranches(t *testing.T) {
-	svc := newFakeSessionService()
-	srv := newSessionTestServer(t, svc)
-
-	_, status, _ := doRequest(t, srv, http.MethodPost, "/api/v1/projects/ao/git/fetch", "")
-	if status != http.StatusAccepted {
-		t.Fatalf("status = %d, want %d", status, http.StatusAccepted)
-	}
-	if svc.prefetchedProject != "ao" {
-		t.Fatalf("prefetched project = %q, want ao", svc.prefetchedProject)
 	}
 }
 

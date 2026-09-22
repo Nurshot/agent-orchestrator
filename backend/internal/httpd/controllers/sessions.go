@@ -102,7 +102,6 @@ type SessionService interface {
 	SetReviewerHarness(ctx context.Context, id domain.SessionID, harness domain.ReviewerHarness, config domain.AgentConfig) (domain.Session, error)
 	SetAutoReview(ctx context.Context, id domain.SessionID, enabled bool) (domain.Session, error)
 	Send(ctx context.Context, id domain.SessionID, message string, attachment *ports.SpawnAttachment) error
-	PrefetchDefaultBranches(ctx context.Context, projectID domain.ProjectID) error
 	DelegateTask(ctx context.Context, in sessionsvc.DelegateTaskInput) (sessionsvc.DelegateTaskOutcome, error)
 	ListPRSummaries(ctx context.Context, id domain.SessionID) ([]sessionsvc.PRSummary, error)
 	ClaimPR(ctx context.Context, id domain.SessionID, ref string, opts sessionsvc.ClaimPROptions) (sessionsvc.ClaimPRResult, error)
@@ -213,7 +212,6 @@ func (c *SessionsController) Register(r chi.Router) {
 	r.Get("/orchestrators", c.listOrchestrators)
 	r.Post("/orchestrators", c.spawnOrchestrator)
 	r.Post("/orchestrators/delegate", c.delegateTask)
-	r.Post("/projects/{id}/git/fetch", c.prefetchDefaultBranches)
 	r.Post("/projects/{id}/tasks/prepare", c.prepareTask)
 	r.Delete("/task-preparations/{token}", c.cancelTaskPreparation)
 	r.Get("/orchestrators/{id}", c.getOrchestrator)
@@ -1593,18 +1591,6 @@ func (c *SessionsController) cancelTaskPreparation(w http.ResponseWriter, r *htt
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func (c *SessionsController) prefetchDefaultBranches(w http.ResponseWriter, r *http.Request) {
-	if c.Svc == nil {
-		apispec.NotImplemented(w, r, "POST", "/api/v1/projects/{id}/git/fetch")
-		return
-	}
-	if err := c.Svc.PrefetchDefaultBranches(r.Context(), projectID(r)); err != nil {
-		envelope.WriteError(w, r, err)
-		return
-	}
-	w.WriteHeader(http.StatusAccepted)
 }
 
 func sanitizedOptionalString(value *string) *string {

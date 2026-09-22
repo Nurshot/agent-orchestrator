@@ -94,12 +94,16 @@ func TestTaskPreparationExpires(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	m.taskPreparationsMu.Lock()
+	prep := m.taskPreparations[token]
+	m.taskPreparationsMu.Unlock()
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
 		m.taskPreparationsMu.Lock()
 		_, active := m.taskPreparations[token]
 		m.taskPreparationsMu.Unlock()
 		if !active {
+			<-prep.cleaned
 			if _, ok := st.sessions["mer-1"]; ok {
 				t.Fatal("expired preparation row still exists")
 			}
