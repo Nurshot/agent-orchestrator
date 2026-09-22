@@ -73,6 +73,10 @@ test("excludes self activity and bots while preserving the time boundaries", () 
 						submittedAt: "2026-09-16T00:00:00.000Z",
 					},
 					{
+						author: { __typename: "User", login: "i-trytoohard", avatarUrl: "https://avatars.example/automation" },
+						submittedAt: "2026-09-16T00:00:00.000Z",
+					},
+					{
 						author: { __typename: "Bot", login: "robot[bot]", avatarUrl: "https://avatars.example/robot" },
 						submittedAt: "2026-09-16T00:00:00.000Z",
 					},
@@ -92,6 +96,10 @@ test("excludes self activity and bots while preserving the time boundaries", () 
 				comments: [
 					{
 						author: { __typename: "User", login: "author", avatarUrl: "https://avatars.example/author" },
+						createdAt: "2026-09-16T00:00:00.000Z",
+					},
+					{
+						author: { __typename: "User", login: "i-trytoohard", avatarUrl: "https://avatars.example/automation" },
 						createdAt: "2026-09-16T00:00:00.000Z",
 					},
 					{

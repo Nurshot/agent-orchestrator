@@ -1,4 +1,5 @@
 const PAGE_SIZE = 100;
+const BOT_LOGINS = new Set(["i-trytoohard"]);
 
 const SEARCH_QUERY = `
   query($searchQuery: String!, $cursor: String) {
@@ -42,7 +43,9 @@ const CONNECTION_QUERY = `
 `;
 
 const isBot = (author) =>
-	author?.__typename === "Bot" || /\[bot\]$/i.test(author?.login ?? "");
+	author?.__typename === "Bot" ||
+	/\[bot\]$/i.test(author?.login ?? "") ||
+	BOT_LOGINS.has(author?.login?.toLowerCase());
 const isWithin = (timestamp, start, end) => {
 	const time = Date.parse(timestamp);
 	return time >= Date.parse(start) && time < Date.parse(end);
