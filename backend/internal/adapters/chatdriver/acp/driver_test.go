@@ -2088,6 +2088,58 @@ func TestACPDriverAppliesModelBeforeModelDependentMode(t *testing.T) {
 	}
 }
 
+func TestACPDriverFallsBackFromModelUnsupportedAutoMode(t *testing.T) {
+	agent := &fakeAgent{
+		newConfig: []acpsdk.SessionConfigOption{
+			selectConfigOption("model", "Model", "model", "sonnet", "sonnet", "haiku"),
+			selectConfigOption("mode", "Mode", "mode", "auto", "auto", "default", "acceptEdits"),
+		},
+		setConfig: []acpsdk.SessionConfigOption{
+			selectConfigOption("model", "Model", "model", "haiku", "sonnet", "haiku"),
+			selectConfigOption("mode", "Mode", "mode", "default", "default", "acceptEdits"),
+		},
+	}
+	driver := New(Config{
+		Harness: domain.HarnessClaudeCode,
+		Probe:   func(context.Context) error { return nil },
+		Launch:  func(context.Context, LaunchConfig) (Launch, error) { return Launch{Command: "fake"}, nil },
+		SessionMode: func(permission ports.PermissionMode) string {
+			if ports.NormalizePermissionMode(permission) == ports.PermissionModeAuto {
+				return "auto"
+			}
+			return ""
+		},
+		SessionOptions: func(settings ports.ChatTurnSettings) []SessionOption {
+			return []SessionOption{{ID: "model", Value: settings.Model}}
+		},
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	driver.useTestProcess(fakeSpawn(agent))
+
+	opened, err := driver.Start(context.Background(), ports.ChatStartConfig{
+		WorkspacePath: t.TempDir(),
+		Model:         "haiku",
+		Permissions:   ports.PermissionModeAuto,
+	})
+	if err != nil {
+		t.Fatalf("Start with model-unsupported Auto mode: %v", err)
+	}
+	defer opened.Close()
+
+	agent.mu.Lock()
+	mode := agent.mode
+	agent.mu.Unlock()
+	if mode != "default" {
+		t.Fatalf("provider mode = %q, want default fallback", mode)
+	}
+	conv := opened.(*conversation)
+	conv.mu.Lock()
+	permissionMode := conv.permissionMode
+	conv.mu.Unlock()
+	if permissionMode != ports.PermissionModeDefault {
+		t.Fatalf("conversation permission mode = %q, want default fallback", permissionMode)
+	}
+}
+
 func TestACPDriverParksAndResolvesStructuredElicitation(t *testing.T) {
 	request := acpsdk.NewUnstableCreateElicitationRequestForm(acpsdk.UnstableElicitationSchema{
 		Type:       acpsdk.UnstableElicitationSchemaTypeObject,

@@ -494,8 +494,21 @@ func (c *conversation) applyTurnSettings(ctx context.Context, settings ports.Cha
 			}
 		}
 	}
+	effectiveApproval := settings.Approval
 	if modeFor != nil {
 		if mode := modeFor(settings.Approval); mode != "" {
+			// Some ACP agents rebuild their permission modes after a model switch.
+			// Claude, for example, removes Auto for Haiku and clamps itself back to
+			// Default. Respect that authoritative catalog instead of immediately
+			// reapplying AO's default Auto choice and aborting session creation.
+			if ports.NormalizePermissionMode(settings.Approval) == ports.PermissionModeAuto {
+				if offered, known := c.configOptionOffers("mode", mode); known && !offered {
+					if fallbackOffered, _ := c.configOptionOffers("mode", "default"); fallbackOffered {
+						mode = "default"
+						effectiveApproval = ports.PermissionModeDefault
+					}
+				}
+			}
 			if _, err := c.conn.SetSessionMode(ctx, acpsdk.SetSessionModeRequest{
 				SessionId: acpsdk.SessionId(sessionID), ModeId: acpsdk.SessionModeId(mode),
 			}); err != nil {
@@ -515,7 +528,7 @@ func (c *conversation) applyTurnSettings(ctx context.Context, settings ports.Cha
 	}
 	if settings.Approval != "" {
 		c.mu.Lock()
-		c.permissionMode = ports.NormalizePermissionMode(settings.Approval)
+		c.permissionMode = ports.NormalizePermissionMode(effectiveApproval)
 		c.mu.Unlock()
 	}
 	return nil
