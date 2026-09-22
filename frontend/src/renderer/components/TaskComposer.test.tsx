@@ -104,20 +104,47 @@ afterEach(() => {
 });
 
 describe("TaskComposer", () => {
-	it("prompts for an agent instead of loading models forever in a standalone task", () => {
+	it("preselects the highest-ranked ready agent for a standalone task", async () => {
+		h.agentCatalog = {
+			agents: [
+				agentReadiness("claude-code", "Claude Code"),
+				agentReadiness("codex", "Codex", { usageCount: 3, lastUsedAt: "2026-09-20T12:00:00Z" }),
+				agentReadiness("cursor", "Cursor", { authentication: "unauthorized" }),
+			],
+		};
+
 		render(
 			<Wrap>
 				<TaskComposer projectId="__standalone__" onCreated={vi.fn()} />
 			</Wrap>,
 		);
 
+		await waitFor(() => expect(screen.getByLabelText("Agent")).toHaveAttribute("data-value", "codex"));
 		expect(screen.queryByRole("status", { name: "Loading models…" })).not.toBeInTheDocument();
+	});
+
+	it("keeps a standalone task unselected when no agent is ready", () => {
+		h.agentCatalog = {
+			agents: [
+				agentReadiness("claude-code", "Claude Code", { installation: "not_installed" }),
+				agentReadiness("codex", "Codex", { authentication: "unauthorized" }),
+			],
+		};
+
+		render(
+			<Wrap>
+				<TaskComposer projectId="__standalone__" onCreated={vi.fn()} />
+			</Wrap>,
+		);
+
+		expect(screen.getByLabelText("Agent")).toHaveAttribute("data-value", "");
 		expect(screen.getByLabelText("Model")).toHaveTextContent("Select agent");
 		expect(screen.getByLabelText("Model")).toHaveAttribute("aria-disabled", "true");
 	});
 
 	it("starts a standalone worker without loading or sending a project", async () => {
 		const onCreated = vi.fn();
+		h.agentCatalog = { agents: [agentReadiness("codex", "Codex")] };
 		h.post.mockResolvedValueOnce({ data: { session: { id: "standalone-1" } } });
 
 		render(
@@ -126,7 +153,7 @@ describe("TaskComposer", () => {
 			</Wrap>,
 		);
 
-		fireEvent.click(screen.getByLabelText("Agent"));
+		await waitFor(() => expect(screen.getByLabelText("Agent")).toHaveAttribute("data-value", "codex"));
 		fireEvent.change(task(), { target: { value: "Research release options" } });
 		fireEvent.click(screen.getByText("Start task"));
 

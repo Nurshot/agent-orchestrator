@@ -25,6 +25,11 @@ import { useCloudCp } from "../hooks/useCloudCp";
 import { useCloudOrg } from "../hooks/useCloudOrg";
 import { useProviderConnections } from "../hooks/useProviderConnections";
 import { cloudAgentInfos } from "../lib/cloud-agents";
+import {
+	buildRankedAgentOptions,
+	DEFAULT_AGENT_PRIORITY_RANK,
+	isReadyAgent,
+} from "../lib/agent-select-options";
 import { useSandboxProviderStore } from "../stores/sandbox-provider-store";
 import { cloudSessionsQueryKey, useCloudProjectsQuery } from "../hooks/useWorkspaceQuery";
 import {
@@ -277,7 +282,18 @@ export function TaskComposer({
 		| undefined;
 	const projectWorkerAgent = projectConfig?.worker?.agent ?? "";
 	const globalDefaultAgent = projectQuery.data?.agent ?? "";
-	const defaultWorkerAgent = projectWorkerAgent || globalDefaultAgent;
+	const agentCatalog = agentsQuery.data;
+	const standaloneDefaultAgent = useMemo(() => {
+		if (!isStandalone || !agentCatalog) return "";
+		return (
+			buildRankedAgentOptions({
+				agents: agentCatalog.agents,
+				priorityRank: DEFAULT_AGENT_PRIORITY_RANK,
+				fallbackAgents: [],
+			}).find(isReadyAgent)?.id ?? ""
+		);
+	}, [agentCatalog, isStandalone]);
+	const defaultWorkerAgent = projectWorkerAgent || globalDefaultAgent || standaloneDefaultAgent;
 	const selectedAgent = agent || defaultWorkerAgent;
 	useEnsureAgentReadiness();
 	useEnsureAgentReadiness({
@@ -292,7 +308,6 @@ export function TaskComposer({
 		projectConfig?.worker?.agentConfig?.effort ?? projectConfig?.agentConfig?.effort ?? "";
 	const projectModelForSelectedAgent = selectedAgent === defaultWorkerAgent ? defaultWorkerModel : "";
 	const projectModeForSelectedAgent = selectedAgent === defaultWorkerAgent ? defaultWorkerMode : "";
-	const agentCatalog = agentsQuery.data;
 	// Cloud projects only support the three control-plane agents (claude-code,
 	// codex, cursor) and have no local "install" step, so their picker is sourced
 	// from the org's provider connections instead of the local daemon readiness
