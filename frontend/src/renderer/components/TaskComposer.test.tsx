@@ -123,6 +123,41 @@ describe("TaskComposer", () => {
 		expect(screen.queryByRole("status", { name: "Loading models…" })).not.toBeInTheDocument();
 	});
 
+	it("preserves an explicitly selected standalone agent when readiness rankings refresh", async () => {
+		h.agentCatalog = {
+			agents: [
+				agentReadiness("codex", "Codex", { usageCount: 3, lastUsedAt: "2026-09-20T12:00:00Z" }),
+				agentReadiness("claude-code", "Claude Code"),
+			],
+		};
+
+		const { rerender } = render(
+			<Wrap>
+				<TaskComposer projectId="__standalone__" onCreated={vi.fn()} />
+			</Wrap>,
+		);
+
+		await waitFor(() => expect(screen.getByLabelText("Agent")).toHaveAttribute("data-value", "codex"));
+		fireEvent.click(screen.getByLabelText("Agent"));
+		expect(screen.getByLabelText("Agent")).toHaveAttribute("data-value", "claude-code");
+
+		h.agentCatalog = {
+			agents: [
+				agentReadiness("claude-code", "Claude Code"),
+				agentReadiness("codex", "Codex", { usageCount: 10, lastUsedAt: "2026-09-21T12:00:00Z" }),
+			],
+		};
+		rerender(
+			<Wrap>
+				<TaskComposer projectId="__standalone__" onCreated={vi.fn()} />
+			</Wrap>,
+		);
+
+		await waitFor(() =>
+			expect(screen.getByLabelText("Agent")).toHaveAttribute("data-value", "claude-code"),
+		);
+	});
+
 	it("keeps a standalone task unselected when no agent is ready", () => {
 		h.agentCatalog = {
 			agents: [
