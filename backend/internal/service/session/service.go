@@ -413,24 +413,38 @@ func (s *Service) emitSpawned(ctx context.Context, rec domain.SessionRecord, dur
 
 // githubActor returns the operator's GitHub login for telemetry, resolving in
 // two tiers. First the authenticated, API-verified identity (a real GET /user
-// behind an env/credential-helper/gh token); when that yields a human login it
-// wins. Otherwise a best-effort, non-authenticated probe of local machine
-// signals (SSH auth greeting, git noreply commit email) covers operators who
-// never configured a token. It returns ("", false) for every failure mode
-// (resolver unset, no token and no local signal, GET /user failure, offline, org
-// or bot account, empty login) so the event stays anonymous. Host is left empty
+// behind an env/gh/credential-helper token); when that yields a human login it
+// wins. The best-effort, non-authenticated probe of local machine signals (SSH
+// auth greeting, git noreply commit email) runs only when NO credential is
+// configured at all, covering operators who never set up a token. A configured
+// token that resolves to an org or bot account, and any transient resolution
+// failure, both stay anonymous rather than substituting a local signal, so the
+// authenticated identity is never overridden. Every other failure mode (resolver
+// unset, no signal, empty login) also stays anonymous. Host is left empty
 // because GitHub identity is not host-scoped.
 func (s *Service) githubActor(ctx context.Context) (string, bool) {
 	if s.githubIdentity == nil {
 		return "", false
 	}
 	identity, err := s.githubIdentity.AuthenticatedIdentityForProvider(ctx, "github", "")
-	if err == nil && identity.Human && identity.Login != "" {
-		return identity.Login, true
+	if err == nil {
+		if identity.Human && identity.Login != "" {
+			return identity.Login, true
+		}
+		// A token is configured but resolves to an org or bot account: respect
+		// that configured identity and stay anonymous rather than substituting
+		// the local SSH-key owner's personal handle.
+		return "", false
 	}
-	// Best-effort fallback for operators with no usable token. The login is not
-	// API-verified (see ports.ScopedBestEffortIdentityResolver); acceptable for
-	// telemetry, never used for access or attribution.
+	// Only fall back when there is genuinely no credential configured. A
+	// transient GET /user failure (token present) must not be attributed to
+	// whatever account happens to own the local SSH key or git email.
+	if !errors.Is(err, ports.ErrSCMNoCredentials) {
+		return "", false
+	}
+	// Best-effort fallback for operators with no configured credential. The login
+	// is not API-verified (see ports.ScopedBestEffortIdentityResolver); acceptable
+	// for telemetry, never used for access or attribution.
 	if be, ok := s.githubIdentity.(ports.ScopedBestEffortIdentityResolver); ok {
 		if login, beErr := be.BestEffortLoginForProvider(ctx, "github", ""); beErr == nil {
 			if login = strings.TrimSpace(login); login != "" {

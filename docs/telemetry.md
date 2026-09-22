@@ -184,11 +184,14 @@ username:
    `gh auth token`, AO calls the GitHub API for the signed-in account. This tier
    only sends the handle when the account is a personal (human) account; it never
    sends an organization or a bot account.
-2. Best-effort, local signals. When no token is available, AO reads the username
-   from GitHub's SSH authentication greeting (a non-interactive `ssh -T
-   git@github.com`, which mutates nothing and prompts for nothing) and, failing
-   that, from a GitHub noreply address configured as your git commit email. These
-   are read locally and are not API-verified, so the account type is not checked.
+2. Best-effort, local signals. Only when no credential is configured at all, AO
+   reads the username from GitHub's SSH authentication greeting (a
+   non-interactive `ssh -T git@github.com`, which mutates nothing and prompts for
+   nothing) and, failing that, from a GitHub noreply address configured as your
+   git commit email. These are read locally and are not API-verified, so the
+   account type is not checked. A configured token that resolves to an
+   organization or bot account, and any transient lookup failure, both stay
+   anonymous rather than falling back to a local signal.
 
 All probes are silent, run non-interactively with short timeouts, and are cached
 so a session start is not delayed by repeated lookups. When none of them yield a

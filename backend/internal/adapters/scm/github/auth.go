@@ -261,14 +261,21 @@ func (s *CredentialHelperTokenSource) host() string {
 	return defaultCredentialHost
 }
 
+// credentialFillTimeout bounds `git credential fill` so a slow or GUI-backed
+// helper cannot stall the caller (this runs on the session-spawn path).
+const credentialFillTimeout = 4 * time.Second
+
 // gitCredentialFill runs `git credential fill` for an HTTPS host and returns the
-// stored token (the password field), or an error when nothing is stored.
+// stored token (the password field), or an error when nothing is stored. It
+// never blocks on a prompt: GIT_TERMINAL_PROMPT=0 disables git's terminal
+// prompt and GCM_INTERACTIVE=never disables git-credential-manager's GUI, so a
+// machine with no cached credential errors out instead of popping a dialog.
 func gitCredentialFill(ctx context.Context, host string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, credentialFillTimeout)
+	defer cancel()
 	cmd := aoprocess.CommandContext(ctx, "git", "credential", "fill")
 	cmd.Stdin = strings.NewReader("protocol=https\nhost=" + host + "\n\n")
-	// GIT_TERMINAL_PROMPT=0 turns a missing credential into an error instead of
-	// an interactive prompt that would hang the daemon.
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=never")
 	out, err := cmd.Output()
 	if err != nil {
 		return "", err

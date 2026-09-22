@@ -16,6 +16,14 @@ import (
 // connection cannot stall the caller (the probe runs on the session-spawn path).
 const sshProbeTimeout = 4 * time.Second
 
+// defaultBestEffortTTL caches a best-effort resolution (success or empty) long
+// enough that a token-less machine probes at most once an hour, keeping the
+// synchronous SSH round trip off all but the occasional session spawn. It is
+// deliberately longer than the token cache: the local SSH key and git email
+// rarely change, and a stale empty result only delays picking up a newly
+// configured signal by up to an hour.
+const defaultBestEffortTTL = time.Hour
+
 // errNoBestEffortLogin is returned by a probe that found no usable login.
 var errNoBestEffortLogin = errors.New("github scm: no best-effort login")
 
@@ -50,7 +58,7 @@ type BestEffortLoginResolver struct {
 	// gitNoreplyLogin; tests inject a fake so git is never invoked.
 	Email func(ctx context.Context) (string, error)
 	// TTL is how long a resolution (success or empty) is memoized. Zero means
-	// defaultGHTokenCacheTTL.
+	// defaultBestEffortTTL.
 	TTL time.Duration
 	// Clock allows tests to drive expiration. Zero means time.Now.
 	Clock func() time.Time
@@ -110,7 +118,7 @@ func (r *BestEffortLoginResolver) ttl() time.Duration {
 	if r.TTL > 0 {
 		return r.TTL
 	}
-	return defaultGHTokenCacheTTL
+	return defaultBestEffortTTL
 }
 
 // sshGreetingLogin opens a non-interactive SSH connection to github.com and

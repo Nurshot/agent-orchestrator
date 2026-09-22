@@ -125,6 +125,12 @@ func (p *Provider) AuthenticatedIdentity(ctx context.Context) (ports.SCMIdentity
 	}
 	resp, err := p.client.doREST(ctx, http.MethodGet, "/user", nil, nil)
 	if err != nil {
+		// Distinguish "no credential configured at all" from transient or
+		// non-human outcomes so callers can decide whether a best-effort,
+		// non-authenticated fallback is warranted.
+		if errors.Is(err, ErrNoToken) {
+			return ports.SCMIdentity{}, fmt.Errorf("%w: %w", ports.ErrSCMNoCredentials, err)
+		}
 		return ports.SCMIdentity{}, err
 	}
 	var user struct {

@@ -90,31 +90,45 @@ func TestGithubActorFallsBackToBestEffort(t *testing.T) {
 		}
 	})
 
-	t.Run("best-effort used when authoritative fails", func(t *testing.T) {
-		r := &bestEffortResolver{identityErr: errors.New("no token"), bestEffort: "Pulkit7070"}
+	t.Run("best-effort used when no credential is configured", func(t *testing.T) {
+		r := &bestEffortResolver{identityErr: ports.ErrSCMNoCredentials, bestEffort: "Pulkit7070"}
 		login, ok := (&Service{githubIdentity: r}).githubActor(context.Background())
 		if !ok || login != "Pulkit7070" {
 			t.Fatalf("githubActor = (%q, %v), want (Pulkit7070, true)", login, ok)
 		}
 	})
 
-	t.Run("best-effort used when authoritative is non-human", func(t *testing.T) {
+	t.Run("non-human token stays anonymous without best-effort", func(t *testing.T) {
 		r := &bestEffortResolver{identity: ports.SCMIdentity{Login: "acme-org", Human: false}, bestEffort: "Pulkit7070"}
 		login, ok := (&Service{githubIdentity: r}).githubActor(context.Background())
-		if !ok || login != "Pulkit7070" {
-			t.Fatalf("githubActor = (%q, %v), want (Pulkit7070, true)", login, ok)
+		if ok || login != "" {
+			t.Fatalf("githubActor = (%q, %v), want empty anonymous (respect configured token)", login, ok)
+		}
+		if r.beCalls != 0 {
+			t.Fatalf("best-effort called %d times; want 0 when a token resolves to a non-human account", r.beCalls)
 		}
 	})
 
-	t.Run("anonymous when both tiers empty", func(t *testing.T) {
-		r := &bestEffortResolver{identityErr: errors.New("no token"), bestEffort: ""}
+	t.Run("transient error stays anonymous without best-effort", func(t *testing.T) {
+		r := &bestEffortResolver{identityErr: errors.New("GET /user: 503"), bestEffort: "Pulkit7070"}
+		login, ok := (&Service{githubIdentity: r}).githubActor(context.Background())
+		if ok || login != "" {
+			t.Fatalf("githubActor = (%q, %v), want empty anonymous (do not guess on transient failure)", login, ok)
+		}
+		if r.beCalls != 0 {
+			t.Fatalf("best-effort called %d times; want 0 on a transient (non-no-credentials) error", r.beCalls)
+		}
+	})
+
+	t.Run("anonymous when no credential and no local signal", func(t *testing.T) {
+		r := &bestEffortResolver{identityErr: ports.ErrSCMNoCredentials, bestEffort: ""}
 		if login, ok := (&Service{githubIdentity: r}).githubActor(context.Background()); ok || login != "" {
 			t.Fatalf("githubActor = (%q, %v), want empty anonymous", login, ok)
 		}
 	})
 
 	t.Run("anonymous when best-effort errors", func(t *testing.T) {
-		r := &bestEffortResolver{identityErr: errors.New("no token"), bestEffortErr: errors.New("ssh failed")}
+		r := &bestEffortResolver{identityErr: ports.ErrSCMNoCredentials, bestEffortErr: errors.New("ssh failed")}
 		if login, ok := (&Service{githubIdentity: r}).githubActor(context.Background()); ok || login != "" {
 			t.Fatalf("githubActor = (%q, %v), want empty anonymous", login, ok)
 		}
