@@ -88,6 +88,27 @@ func TestSessionPersistsReviewerHarness(t *testing.T) {
 	}
 }
 
+func TestSessionPersistsResolvedEffort(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	seedProject(t, s, "mer")
+	created, err := s.CreateSession(ctx, sampleRecord("mer"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	created.Metadata.Effort = "high"
+	if err := s.UpdateSession(ctx, created); err != nil {
+		t.Fatal(err)
+	}
+	got, ok, err := s.GetSession(ctx, created.ID)
+	if err != nil || !ok {
+		t.Fatalf("get session = %v, %v", ok, err)
+	}
+	if got.Metadata.Effort != "high" {
+		t.Fatalf("effort = %q, want high", got.Metadata.Effort)
+	}
+}
+
 func TestSessionPersistsDiffBaseMetadata(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

@@ -44,7 +44,7 @@ func TestRunBackgroundTaskUsesNativeDriverAndTerminatesIt(t *testing.T) {
 	if err != nil || title != "Fix renderer" {
 		t.Fatalf("RunBackgroundTask = %q, %v", title, err)
 	}
-	if started.SessionID != "background-task-id" || started.ProviderScopeID != "scope-id" || !started.ProviderIDsScoped {
+	if started.SessionID != "background-task-id" || started.ProviderScopeID != "scope-id" || !started.ProviderIDsScoped || !started.Ephemeral {
 		t.Fatalf("start identity = %#v", started)
 	}
 	if started.Model != "small" || started.Effort != "low" || started.Env["CODEX_HOME"] != "/account" {

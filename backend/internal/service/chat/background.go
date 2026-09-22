@@ -27,6 +27,7 @@ func (s *Service) RunBackgroundTask(ctx context.Context, harness domain.AgentHar
 	cfg.SessionID = domain.SessionID("background-" + s.newID())
 	cfg.ProviderScopeID = s.newID()
 	cfg.ProviderIDsScoped = true
+	cfg.Ephemeral = true
 	conversation, err := driver.Start(ctx, cfg)
 	if err != nil {
 		return "", fmt.Errorf("start background %s task: %w", harness, err)
