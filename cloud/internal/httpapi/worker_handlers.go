@@ -249,6 +249,13 @@ func launchContextFrom(launch domain.WorkerLaunch) (worker.LaunchContext, error)
 		AgentRules:        agentRules,
 		OrchestratorRules: orchestratorRules,
 	})
+	var extraRepos []worker.RepoRef
+	if len(launch.ExtraRepos) > 0 {
+		extraRepos = make([]worker.RepoRef, 0, len(launch.ExtraRepos))
+		for _, repo := range launch.ExtraRepos {
+			extraRepos = append(extraRepos, worker.RepoRef{URL: repo.URL, Branch: repo.Branch})
+		}
+	}
 	return worker.LaunchContext{
 		SessionID:       launch.SessionID,
 		ProjectID:       launch.ProjectID,
@@ -263,6 +270,7 @@ func launchContextFrom(launch domain.WorkerLaunch) (worker.LaunchContext, error)
 		DeniedCommands:  launch.DeniedCommands,
 		RepositoryURL:   launch.RepositoryURL,
 		DefaultBranch:   launch.DefaultBranch,
+		ExtraRepos:      extraRepos,
 		SystemPrompt:    systemPrompt,
 	}, nil
 }

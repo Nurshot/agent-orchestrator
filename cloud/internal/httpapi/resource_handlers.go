@@ -14,7 +14,9 @@ import (
 
 	"github.com/aoagents/agent-orchestrator/backend/pkg/contract"
 	"github.com/aoagents/agent-orchestrator/cloud/internal/domain"
+	"github.com/aoagents/agent-orchestrator/cloud/internal/sandbox"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 // projectOrchestratorStore finds a project's single active orchestrator so a
@@ -62,6 +64,33 @@ type createSessionRequest struct {
 	// is optional: an empty value uses the control plane default. When set it
 	// must be one of the providers the deployment offers (see /me).
 	Provider string `json:"provider,omitempty"`
+	// Coder carries optional per-session Coder choices (template picker + its
+	// curated form: size, startup script, extra repos). Ignored unless the
+	// resolved provider is coder; absent/empty means the default template with
+	// its default parameters (unchanged behavior).
+	Coder *createSessionCoderOptions `json:"coder,omitempty"`
+}
+
+type createSessionCoderOptions struct {
+	// TemplateID is a Coder template UUID from GET /orgs/{orgId}/sandbox/coder/templates.
+	// Empty = the deployment default template ("Default" in the picker).
+	TemplateID string `json:"templateId,omitempty"`
+	// Size is a t-shirt size ("small"/"medium"/"large") the template maps to a VM
+	// SKU. Only meaningful with a non-default template that declares a `size`
+	// parameter.
+	Size string `json:"size,omitempty"`
+	// StartupScript is an optional shell snippet the template runs after checkout
+	// (dev-env bring-up). Only meaningful with a template that declares a
+	// `startup_script` parameter.
+	StartupScript string `json:"startupScript,omitempty"`
+	// ExtraRepos are additional repositories the worker clones alongside the
+	// project's primary repo (multi-repo dev kit).
+	ExtraRepos []createSessionRepo `json:"extraRepos,omitempty"`
+}
+
+type createSessionRepo struct {
+	URL    string `json:"url"`
+	Branch string `json:"branch,omitempty"`
 }
 
 type sessionResponse struct {
@@ -452,10 +481,28 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
+	// Per-session Coder options (template picker + its curated form) apply only
+	// when the resolved provider is coder; other providers ignore them. An empty
+	// template keeps today's default-template behavior.
+	effectiveProvider := request.Provider
+	if effectiveProvider == "" {
+		effectiveProvider = s.sandboxProvider
+	}
+	var coderOpts *sandbox.CoderSessionOptions
+	var extraRepos []domain.RepoRef
+	if effectiveProvider == sandbox.ProviderCoder && request.Coder != nil {
+		opts, repos, verr := parseCoderSessionOptions(request.Coder)
+		if verr != nil {
+			writeError(w, r, http.StatusUnprocessableEntity, "invalid_request", verr.Error())
+			return
+		}
+		coderOpts = opts
+		extraRepos = repos
+	}
 	// The plan is resolved once, here, and stamped onto the sandbox row. The
 	// reconciler reads it back from the row rather than from configuration, so
 	// a later config change cannot disturb a session already in flight.
-	plan, err := s.provisioning.SessionPlanForProvider(request.Harness, request.Provider)
+	plan, err := s.provisioning.SessionPlanForProviderWithCoder(request.Harness, request.Provider, coderOpts)
 	if err != nil {
 		s.logger.Error("resolve sandbox provisioning plan", "error", err, "request_id", requestID(r))
 		writeError(
@@ -484,6 +531,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 			BootstrapContext:    plan.BootstrapContext,
 			Release:             s.release,
 			ParentSessionID:     parentSessionID,
+			ExtraRepos:          extraRepos,
 		},
 	)
 	if err != nil {
@@ -686,6 +734,65 @@ func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
 var githubPathRegex = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
 
 // parseGitHubRepo validates and extracts the owner and repo from a GitHub URL.
+const (
+	maxCoderExtraRepos    = 10
+	maxCoderStartupScript = 64 * 1024
+)
+
+var coderSizes = map[string]bool{"small": true, "medium": true, "large": true}
+
+// parseCoderSessionOptions validates the client's Coder picker choices and
+// splits them into (a) the provisioning options (template/size/startup, stamped
+// into the sandbox plan) and (b) the extra repositories (persisted on the
+// session for the worker to clone alongside the primary repo). It is only
+// called when the resolved provider is coder.
+func parseCoderSessionOptions(in *createSessionCoderOptions) (*sandbox.CoderSessionOptions, []domain.RepoRef, error) {
+	opts := &sandbox.CoderSessionOptions{}
+	if id := strings.TrimSpace(in.TemplateID); id != "" {
+		if _, err := uuid.Parse(id); err != nil {
+			return nil, nil, fmt.Errorf("coder template ID must be a UUID")
+		}
+		opts.TemplateID = id
+	}
+	if size := strings.ToLower(strings.TrimSpace(in.Size)); size != "" {
+		if !coderSizes[size] {
+			return nil, nil, fmt.Errorf("coder size must be one of small, medium, large")
+		}
+		opts.Size = size
+	}
+	if len(in.StartupScript) > maxCoderStartupScript {
+		return nil, nil, fmt.Errorf("coder startup script must be at most 64 KiB")
+	}
+	opts.StartupScript = in.StartupScript
+	// Size/startup only take effect on a chosen (non-default) template, because
+	// the default template does not declare those parameters.
+	if opts.TemplateID == "" && (opts.Size != "" || strings.TrimSpace(opts.StartupScript) != "") {
+		return nil, nil, fmt.Errorf("coder size and startup script require choosing a template")
+	}
+	if len(in.ExtraRepos) > maxCoderExtraRepos {
+		return nil, nil, fmt.Errorf("at most %d extra repositories are allowed", maxCoderExtraRepos)
+	}
+	repos := make([]domain.RepoRef, 0, len(in.ExtraRepos))
+	for _, repo := range in.ExtraRepos {
+		raw := strings.TrimSpace(repo.URL)
+		if raw == "" {
+			continue
+		}
+		owner, name, ok := parseGitHubRepo(raw)
+		if !ok {
+			return nil, nil, fmt.Errorf("extra repository %q must be an https github.com URL", raw)
+		}
+		repos = append(repos, domain.RepoRef{
+			URL:    fmt.Sprintf("https://github.com/%s/%s", owner, name),
+			Branch: strings.TrimSpace(repo.Branch),
+		})
+	}
+	if len(repos) == 0 {
+		repos = nil
+	}
+	return opts, repos, nil
+}
+
 func parseGitHubRepo(repoURL string) (owner, repo string, ok bool) {
 	parsed, err := url.ParseRequestURI(repoURL)
 	if err != nil || parsed.Scheme != "https" {

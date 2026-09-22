@@ -125,6 +125,17 @@ type CreateSession struct {
 	// orchestrator, a standalone worker, or a worker created for a project that
 	// has no active orchestrator.
 	ParentSessionID string
+	// ExtraRepos are additional repositories the worker clones alongside the
+	// project's primary repo (multi-repo dev kit). Empty for the common
+	// single-repo session, which is unchanged.
+	ExtraRepos []RepoRef
+}
+
+// RepoRef is one additional repository (beyond the project's primary repo) to
+// clone into a session's workspace, optionally at a specific branch.
+type RepoRef struct {
+	URL    string `json:"url"`
+	Branch string `json:"branch,omitempty"`
 }
 
 type ClientEvent struct {

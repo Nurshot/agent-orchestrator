@@ -307,6 +307,14 @@ func prepareWorkspace(
 		); err != nil {
 			return fmt.Errorf("configure repository tooling: %w", err)
 		}
+		// Multi-repo dev kit: clone any additional repositories alongside the
+		// primary checkout. Non-fatal by design — an extra repo that cannot be
+		// cloned (e.g. it is outside the session credential's GitHub App
+		// installation) must never stop the session from starting on its primary
+		// repo. Extra repos reuse the session's checkout-grant token, so they work
+		// for repositories the installation can access; arbitrary private
+		// third-party repos need per-repo grants (a follow-up).
+		cloneExtraRepos(ctx, logger, checkoutGrant.Token, bootstrap.Launch.ExtraRepos, dataDir)
 	}
 	if err := worker.EnsureWorkspaceReviewBase(
 		ctx, worker.ExecGitRunner{}, workspace, bootstrap.Launch.DefaultBranch,
@@ -314,6 +322,70 @@ func prepareWorkspace(
 		return fmt.Errorf("record workspace review base: %w", err)
 	}
 	return nil
+}
+
+// cloneExtraRepos clones each additional dev-kit repository into a worker-owned
+// directory beside the primary checkout. It is best-effort: every failure is
+// logged and skipped so the session always starts on its primary repo. Repos
+// land under <dataDir>/repos/<name>; surfacing them to the agent's workspace is
+// a follow-up that needs per-provider path validation.
+func cloneExtraRepos(ctx context.Context, logger *slog.Logger, token string, repos []worker.RepoRef, dataDir string) {
+	if len(repos) == 0 {
+		return
+	}
+	root := filepath.Join(dataDir, "repos")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		logger.Warn("multi-repo: cannot create extra-repos directory", "error", err)
+		return
+	}
+	for _, repo := range repos {
+		dest := filepath.Join(root, extraRepoDirName(repo.URL))
+		args := []string{"clone", "--origin", "origin", "--no-tags"}
+		if strings.TrimSpace(repo.Branch) != "" {
+			args = append(args, "--branch", repo.Branch)
+		}
+		args = append(args, "--", authenticatedCloneURL(repo.URL, token), dest)
+		if _, err := (worker.ExecGitRunner{}).Run(ctx, root, nil, args...); err != nil {
+			logger.Warn("multi-repo: extra repo clone failed (non-fatal)", "repo", repo.URL, "error", err)
+			continue
+		}
+		logger.Info("multi-repo: cloned extra repo", "repo", repo.URL, "path", dest)
+	}
+}
+
+// authenticatedCloneURL injects the session's GitHub App installation token into
+// an https github.com clone URL, mirroring the primary checkout's auth.
+func authenticatedCloneURL(repoURL, token string) string {
+	if strings.TrimSpace(token) == "" {
+		return repoURL
+	}
+	parsed, err := url.Parse(repoURL)
+	if err != nil {
+		return repoURL
+	}
+	parsed.User = url.UserPassword("x-access-token", token)
+	return parsed.String()
+}
+
+// extraRepoDirName derives a safe local directory name from a repo URL.
+func extraRepoDirName(repoURL string) string {
+	trimmed := strings.TrimSuffix(strings.Trim(repoURL, "/"), ".git")
+	name := trimmed
+	if idx := strings.LastIndex(trimmed, "/"); idx >= 0 {
+		name = trimmed[idx+1:]
+	}
+	name = strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
+			return r
+		default:
+			return '-'
+		}
+	}, name)
+	if name == "" || name == "." || name == ".." {
+		return "repo"
+	}
+	return name
 }
 
 func startInteractiveAgent(

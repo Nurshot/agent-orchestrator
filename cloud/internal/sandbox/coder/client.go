@@ -162,6 +162,43 @@ func (c *Client) ForSandbox(record domain.Sandbox) (sandbox.Provider, error) {
 	return &sessionClient, nil
 }
 
+// Template is a non-secret summary of a Coder template a client may pick from.
+type Template struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	DisplayName string `json:"displayName"`
+	Description string `json:"description"`
+	Icon        string `json:"icon"`
+}
+
+// ListTemplates returns the templates the configured Coder user can see, for a
+// client-facing template picker. It is read-only and does not affect the
+// deployment's default template (which still governs any session that does not
+// explicitly choose one).
+func (c *Client) ListTemplates(ctx context.Context) ([]Template, error) {
+	var raw []struct {
+		ID          string `json:"id"`
+		Name        string `json:"name"`
+		DisplayName string `json:"display_name"`
+		Description string `json:"description"`
+		Icon        string `json:"icon"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/api/v2/templates", nil, &raw); err != nil {
+		return nil, fmt.Errorf("coder: list templates: %w", err)
+	}
+	templates := make([]Template, 0, len(raw))
+	for _, t := range raw {
+		templates = append(templates, Template{
+			ID:          t.ID,
+			Name:        t.Name,
+			DisplayName: t.DisplayName,
+			Description: t.Description,
+			Icon:        t.Icon,
+		})
+	}
+	return templates, nil
+}
+
 type workspace struct {
 	ID          string          `json:"id"`
 	Name        string          `json:"name"`

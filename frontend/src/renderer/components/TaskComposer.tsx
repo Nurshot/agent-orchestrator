@@ -11,6 +11,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
 import { RequiredAgentField } from "./CreateProjectAgentSheet";
+import { CoderTemplatePicker } from "./CoderTemplatePicker";
+import { buildCoderRequestOptions, useCoderSessionOptionsStore } from "../stores/coder-session-options-store";
 import type { components } from "../../api/schema";
 import { apiClient, apiErrorCode, apiErrorMessage } from "../lib/api-client";
 import { captureRendererEvent } from "../lib/telemetry";
@@ -162,6 +164,13 @@ export function TaskComposer({
 		async (input: CreateTaskInput): Promise<string> => {
 			void captureRendererEvent("ao.renderer.task_create_requested", { project_id: input.projectId });
 			if (!cloudOrg?.id) throw new Error(t("newTask.unableToStart"));
+			// Coder template/size/startup/extra-repo choices apply only when coder is
+			// the selected provider; omitted otherwise, and "Default" yields no
+			// options at all — an unchanged request.
+			const coder =
+				selectedProvider === "coder"
+					? buildCoderRequestOptions(useCoderSessionOptionsStore.getState())
+					: undefined;
 			try {
 				const { session } = await cloudClient.createSession(cloudOrg.id, {
 					projectId: input.projectId,
@@ -170,6 +179,7 @@ export function TaskComposer({
 					displayName: input.brief.trim().slice(0, 100) || (input.agent ?? "claude-code"),
 					prompt: input.brief,
 					...(selectedProvider ? { provider: selectedProvider } : {}),
+					...(coder ? { coder } : {}),
 				});
 				// The control plane provisions the sandbox asynchronously; surface the
 				// new session on the board immediately.
@@ -547,8 +557,15 @@ export function TaskComposer({
 		}
 	};
 
+	const showCoderPicker = isCloudProject && selectedProvider === "coder";
 	return (
-		<TaskComposerView
+		<div className="flex flex-col gap-3">
+			{showCoderPicker ? (
+				<div className="rounded-md border border-border bg-muted/20 px-3 py-3">
+					<CoderTemplatePicker orgId={cloudOrg?.id} />
+				</div>
+			) : null}
+			<TaskComposerView
 			autoFocusPrompt={autoFocusTitle}
 			canSubmit={canSubmit}
 			context={executionContext}
@@ -645,6 +662,7 @@ export function TaskComposer({
 			renderModelControl={(control) => <TaskModelPicker {...control} onRefresh={refreshSelectedModels} />}
 			showEffort={!requiresTuiFallback && effortOptions.length > 0}
 		/>
+		</div>
 	);
 }
 

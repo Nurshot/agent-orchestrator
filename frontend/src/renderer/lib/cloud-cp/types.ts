@@ -180,6 +180,40 @@ export interface CloudCpCreateSessionRequest {
 	 * from `/me`.
 	 */
 	provider?: string;
+	/**
+	 * Per-session Coder choices (template picker + its curated form). Ignored
+	 * unless the resolved provider is coder; omitted uses the default template.
+	 */
+	coder?: CloudCpCreateSessionCoder;
+}
+
+export interface CloudCpCreateSessionCoder {
+	/** Coder template UUID from GET /orgs/{orgId}/sandbox/coder/templates. Omit for the default template. */
+	templateId?: string;
+	/** t-shirt size the template maps to a VM SKU. Only with a non-default template. */
+	size?: "small" | "medium" | "large";
+	/** Optional shell snippet the template runs after checkout. Only with a non-default template. */
+	startupScript?: string;
+	/** Additional repositories the worker clones alongside the primary repo. */
+	extraRepos?: CloudCpSessionRepo[];
+}
+
+export interface CloudCpSessionRepo {
+	url: string;
+	branch?: string;
+}
+
+/** GET /orgs/{orgId}/sandbox/coder/templates */
+export interface CloudCpCoderTemplate {
+	id: string;
+	name: string;
+	displayName: string;
+	description: string;
+	icon: string;
+}
+
+export interface CloudCpCoderTemplatesResponse {
+	templates: CloudCpCoderTemplate[];
 }
 
 export interface CloudCpSession {

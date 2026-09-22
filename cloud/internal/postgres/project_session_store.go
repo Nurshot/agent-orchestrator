@@ -651,15 +651,25 @@ func createSessionTx(
 		return domain.Session{}, ErrSandboxQuotaExceeded
 	}
 
+	extraReposJSON := []byte("[]")
+	if len(input.ExtraRepos) > 0 {
+		encoded, marshalErr := json.Marshal(input.ExtraRepos)
+		if marshalErr != nil {
+			return domain.Session{}, marshalErr
+		}
+		extraReposJSON = encoded
+	}
 	err = scanSession(tx.QueryRow(
 		ctx,
 		`WITH generated AS (SELECT gen_random_uuid() AS id)
 		INSERT INTO ao_sessions (
 			id, org_id, project_id, kind, harness, display_name, branch,
-			prompt, mode, denied_commands, parent_session_id, created_by_user_id
+			prompt, mode, denied_commands, parent_session_id, created_by_user_id,
+			extra_repos
 		)
 		SELECT id, $1, $2, $3, $4, $5, 'ao/' || left(id::text, 8),
-			$6, $7, $8, NULLIF($9, '')::uuid, NULLIF($10, '')::uuid
+			$6, $7, $8, NULLIF($9, '')::uuid, NULLIF($10, '')::uuid,
+			$11::jsonb
 		FROM generated
 		RETURNING id, org_id, project_id, kind, harness, display_name, branch,
 			mode, denied_commands, activity_state, is_terminated,
@@ -674,6 +684,7 @@ func createSessionTx(
 		input.DeniedCommands,
 		parentSessionID,
 		actorUserID,
+		string(extraReposJSON),
 	), &session)
 	if err != nil {
 		return domain.Session{}, normalizeConstraintError(err)
