@@ -72,7 +72,28 @@ function toPullRequestFacts(pr: components["schemas"]["SessionPRFacts"]): PullRe
 	};
 }
 
-function toSessionArtifact(artifact: components["schemas"]["SessionArtifact"]): SessionArtifact {
+// Session Artifacts V1 (#4514): the backend slice (#4804/#4805) that adds
+// `artifactFiles`/`outputType` to ControllersSessionView hasn't merged yet, so
+// `components["schemas"]["ControllersSessionView"]` (generated from the live
+// backend openapi.yaml, verified by the api-drift CI check) doesn't carry them.
+// Typed here as an additive augmentation of the wire shape instead of hand-
+// editing the generated schema.ts. Both fields are absent at runtime until the
+// backend lands, which the optional types below already account for; delete
+// this augmentation once schema.ts is regenerated with the real fields.
+type PendingSessionArtifactWire = {
+	kind: "html" | "markdown" | "file";
+	name: string;
+	path: string;
+	previewUrl?: string;
+	size: number;
+	updatedAt: string;
+};
+type SessionViewWithPendingArtifacts = components["schemas"]["ControllersSessionView"] & {
+	artifactFiles?: PendingSessionArtifactWire[];
+	outputType?: "none" | "pr" | "artifact";
+};
+
+function toSessionArtifact(artifact: PendingSessionArtifactWire): SessionArtifact {
 	return {
 		kind: artifact.kind,
 		name: artifact.name,
@@ -87,6 +108,7 @@ function toWorkspaceSession(
 	session: components["schemas"]["ControllersSessionView"],
 	project: Pick<WorkspaceSummary, "id" | "name">,
 ): WorkspaceSession {
+	const pendingArtifacts = session as SessionViewWithPendingArtifacts;
 	const statusReadiness = session.statusReadiness ?? "ready";
 	const status =
 		statusReadiness === "ready" ? toSessionStatus(session.status, session.isTerminated) : "unknown";
@@ -138,8 +160,8 @@ function toWorkspaceSession(
 		isPinned: session.isPinned ?? false,
 		pinnedAt: session.pinnedAt ?? undefined,
 		prs: (session.prs ?? []).map(toPullRequestFacts),
-		outputType: session.outputType,
-		artifactFiles: session.artifactFiles?.map(toSessionArtifact),
+		outputType: pendingArtifacts.outputType,
+		artifactFiles: pendingArtifacts.artifactFiles?.map(toSessionArtifact),
 	};
 }
 
@@ -162,6 +184,7 @@ function toLocalWorkspaceSession(
 	workspaceId: string,
 	workspaceName: string,
 ): WorkspaceSession {
+	const pendingArtifacts = session as SessionViewWithPendingArtifacts;
 	const status = toSessionStatus(session.status, session.isTerminated);
 	const scmStatus = session.scmStatus ? toSessionStatus(session.scmStatus) : undefined;
 	const kanbanColumn = toKanbanColumn(session.kanbanColumn, status);
@@ -207,8 +230,8 @@ function toLocalWorkspaceSession(
 		isPinned: session.isPinned ?? false,
 		pinnedAt: session.pinnedAt ?? undefined,
 		prs: (session.prs ?? []).map(toPullRequestFacts),
-		outputType: session.outputType,
-		artifactFiles: session.artifactFiles?.map(toSessionArtifact),
+		outputType: pendingArtifacts.outputType,
+		artifactFiles: pendingArtifacts.artifactFiles?.map(toSessionArtifact),
 	};
 }
 
