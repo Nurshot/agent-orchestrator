@@ -951,20 +951,21 @@ func (s *Service) completionHTML(success, closeImmediately bool) []byte {
 	message := "Return to AO and try connecting GitHub again."
 	statusClass := "error"
 	statusIcon := "!"
-	buttonLabel := "Close window"
 	autoClose := ""
 	if success {
 		title = "GitHub connected"
-		message = "Repository access is ready. Return to AO to continue."
+		message = "You can close this tab and return to AO."
 		statusClass = "success"
 		statusIcon = "✓"
-		// Keep the popup alive long enough for the opener to advance the
-		// account-authorization step into GitHub App installation. The final
-		// step closes it immediately once the installation is visible.
+		// Best-effort auto-close: browsers only honor window.close() for
+		// script-opened windows, and this tab was opened by a normal
+		// navigation, so the message above is the reliable instruction and
+		// there is no button to lean on. The immediate variant backs the final
+		// installation step; the delayed one gives the opener a moment first.
 		if closeImmediately {
 			autoClose = "window.close();"
 		} else {
-			autoClose = "window.setTimeout(function(){window.close()},10000);"
+			autoClose = "window.setTimeout(function(){window.close()},4000);"
 		}
 	}
 	return []byte(fmt.Sprintf(
@@ -988,14 +989,7 @@ main{min-height:100vh;display:grid;place-items:center;padding:32px}
 .status.error{border-color:rgba(212,84,79,.42);background:rgba(212,84,79,.09);color:#e16a65}
 h1{margin:0;font-size:24px;line-height:1.25;letter-spacing:0;font-weight:650}
 p{margin:10px 0 0;color:#9ba1aa;font-size:14px;line-height:1.6}
-.footer{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:30px;padding-top:22px;border-top:1px solid #292c32}
-.action{display:inline-flex;height:38px;align-items:center;justify-content:center;border:1px solid #d8dbe1;border-radius:6px;background:#e8eaf0;color:#17191d;padding:0 16px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
-.action:hover{background:#fff;border-color:#fff}
-.action:focus-visible{outline:2px solid #4d8dff;outline-offset:2px}
-.hint{display:flex;align-items:center;gap:7px;color:#777d87;font-size:12px}
-.hint::before{content:"";width:6px;height:6px;border-radius:50%%;background:#4ade80;box-shadow:0 0 0 3px rgba(74,222,128,.1)}
-.status.error~.footer .hint::before{background:#e16a65;box-shadow:0 0 0 3px rgba(225,106,101,.1)}
-@media(max-width:520px){main{place-items:start;padding:20px}.content{padding:24px}.footer{align-items:flex-start;flex-direction:column-reverse}}
+@media(max-width:520px){main{place-items:start;padding:20px}.content{padding:24px}}
 </style>
 </head>
 <body>
@@ -1005,10 +999,6 @@ p{margin:10px 0 0;color:#9ba1aa;font-size:14px;line-height:1.6}
 <div class="status %s" aria-hidden="true">%s</div>
 <h1 id="title">%s</h1>
 <p>%s</p>
-<div class="footer">
-<div class="hint">This window may close automatically.</div>
-<button class="action" type="button" onclick="window.close()">%s</button>
-</div>
 </section>
 </main>
 <script>%s</script>
@@ -1019,7 +1009,6 @@ p{margin:10px 0 0;color:#9ba1aa;font-size:14px;line-height:1.6}
 		statusIcon,
 		title,
 		message,
-		buttonLabel,
 		autoClose,
 	))
 }
