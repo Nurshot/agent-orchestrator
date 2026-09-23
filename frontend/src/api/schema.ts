@@ -1995,6 +1995,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sessions/{sessionId}/reapply-edits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Put a session's saved unfinished edits back onto its worktree */
+        post: operations["reapplySessionEdits"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sessions/{sessionId}/restore": {
         parameters: {
             query?: never;
@@ -3082,6 +3099,7 @@ export interface components {
             /** @enum {string} */
             displayStatus: "Working" | "Blocked" | "Exited" | "No signal" | "Awaiting PR" | "Fixing CI failures" | "Addressing comments" | "Needs review" | "Review scheduled" | "Reviewing" | "Review pending" | "Draft" | "CI failing" | "Commented" | "Changes requested" | "Needs human review" | "Mergeable" | "Approved" | "Merged" | "Closed without merge" | "Terminated";
             harness?: string;
+            hasPreservedEdits?: boolean;
             id: string;
             isPinned: boolean;
             isTerminated: boolean;
@@ -3617,6 +3635,8 @@ export interface components {
         KillSessionResponse: {
             freed?: boolean;
             ok: boolean;
+            preserved?: boolean;
+            saveFailed?: boolean;
             sessionId: string;
         };
         LinkPreviewResponse: {
@@ -3937,6 +3957,11 @@ export interface components {
         };
         PutGitHubPATRequest: {
             pat: string;
+        };
+        ReapplyEditsResponse: {
+            conflicts?: boolean;
+            ok: boolean;
+            sessionId: string;
         };
         RegisterPushDeviceRequest: {
             /** @description Human-friendly device label. */
@@ -12042,6 +12067,56 @@ export interface operations {
             };
             /** @description Not Implemented */
             501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    reapplySessionEdits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Session identifier, e.g. project-1. */
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReapplyEditsResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
