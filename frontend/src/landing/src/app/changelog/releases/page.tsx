@@ -2,7 +2,6 @@ import { COMPANY } from "@ao/shared/constants";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { GridCross } from "@/app/blog/components/GridCross";
 import { getStableReleaseEntries } from "@/lib/changelog-releases";
 import { formatChangelogDate } from "@/lib/changelog-utils";
 
@@ -18,10 +17,8 @@ export default async function ReleaseArchivePage() {
 
 	return (
 		<main className="relative min-h-screen">
-			<header className="relative border-b border-border">
+			<header className="relative">
 				<div className="relative mx-auto max-w-4xl px-6 pb-12 pt-16 md:pb-16 md:pt-24">
-					<GridCross className="top-0 left-0" />
-					<GridCross className="top-0 right-0" />
 					<Link
 						href="/changelog"
 						className="inline-flex items-center gap-1.5 text-sm font-mono text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/70 transition-colors"
@@ -37,14 +34,12 @@ export default async function ReleaseArchivePage() {
 						keeps the product story concise; this archive keeps the complete release
 						history close by.
 					</p>
-					<GridCross className="bottom-0 left-0" />
-					<GridCross className="bottom-0 right-0" />
 				</div>
 			</header>
 
-			<section className="relative mx-auto max-w-4xl px-6 py-14 md:py-20">
+			<section className="relative mx-auto max-w-4xl px-6 pb-24 pt-8 md:pt-12">
 				{releases.length === 0 ? (
-					<div className="border border-border bg-muted/20 p-6">
+					<div className="py-6">
 						<p className="text-foreground">The release archive is temporarily unavailable.</p>
 						<a
 							href={`${COMPANY.GITHUB_URL}/releases`}
@@ -55,11 +50,11 @@ export default async function ReleaseArchivePage() {
 						</a>
 					</div>
 				) : (
-					<div className="border-t border-border">
+					<div className="space-y-2">
 						{releases.map((release) => (
 							<article
 								key={release.slug}
-								className="grid gap-3 border-b border-border py-6 sm:grid-cols-[1fr_auto_auto] sm:items-center sm:gap-8"
+								className="grid gap-3 py-5 sm:grid-cols-[1fr_auto_auto] sm:items-center sm:gap-8"
 							>
 								<div>
 									<h2 className="text-lg font-medium text-foreground">

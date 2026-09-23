@@ -16,7 +16,9 @@ test("every changelog feed entry uses the weekly UI contract", async () => {
 	}
 
 	const $ = load(await response.text());
-	const articles = $("section[aria-label='Weekly product updates'] > article").toArray();
+	const feed = $("section[aria-label='Weekly product updates']");
+	assert.ok(hasClasses(feed.parent(), ["max-w-4xl"]), "the changelog content is not max-w-4xl");
+	const articles = feed.children("article").toArray();
 	assert.ok(articles.length > 0, "the changelog feed rendered no entries");
 
 	const failures = [];
@@ -40,7 +42,7 @@ test("every changelog feed entry uses the weekly UI contract", async () => {
 		if (seenIds.has(id)) issues.push("duplicate article id");
 		seenIds.add(id);
 		if (!id.startsWith("changelog-")) issues.push("missing stable changelog id");
-		if (!hasClasses(article, ["relative", "border-b", "pb-16"])) {
+		if (!hasClasses(article, ["relative"]) || article.hasClass("border-b")) {
 			issues.push("article layout classes differ");
 		}
 		if (!hasClasses(title, ["text-2xl", "md:text-3xl", "font-medium", "mb-4"])) {
@@ -63,6 +65,12 @@ test("every changelog feed entry uses the weekly UI contract", async () => {
 			issues.push(`expected 1-4 major features, found ${majorHeadings.length}`);
 		}
 		if (body.find("img").length > 1) issues.push("more than one product image");
+		for (const prLink of body.find("a[href*='/pull/']").toArray()) {
+			const link = $(prLink);
+			if (!link.hasClass("underline") || /(?:^|\s)bg-/.test(link.attr("class") ?? "")) {
+				issues.push("pull request link is not plain underlined text");
+			}
+		}
 		if (!body.find("a[href='/docs']").length) issues.push("missing documentation link");
 		if (!body.find("a[href*='github.com/Untrivial-ai/agent-orchestrator/releases']").length) {
 			issues.push("missing release archive link");

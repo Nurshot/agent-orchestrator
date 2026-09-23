@@ -2,7 +2,6 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { GridCross } from "@/app/blog/components/GridCross";
 import {
   getAllChangelogSlugs,
   getChangelogEntry,
@@ -63,22 +62,10 @@ export default async function ChangelogEntryPage({
   const backHref = entry.source === "release" ? "/changelog/releases" : "/changelog";
   const backLabel = entry.source === "release" ? "Release archive" : "Changelog";
 
-  return (
-    <main className="relative min-h-screen">
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundImage: `
-            linear-gradient(to right, transparent 0%, transparent calc(50% - 384px), rgba(255,255,255,0.06) calc(50% - 384px), rgba(255,255,255,0.06) calc(50% - 383px), transparent calc(50% - 383px), transparent calc(50% + 383px), rgba(255,255,255,0.06) calc(50% + 383px), rgba(255,255,255,0.06) calc(50% + 384px), transparent calc(50% + 384px))
-          `,
-        }}
-      />
-
-      <header className="relative border-b border-border">
-        <div className="max-w-3xl mx-auto px-6 pt-16 pb-10 md:pt-20 md:pb-12 relative">
-          <GridCross className="top-0 left-0" />
-          <GridCross className="top-0 right-0" />
-
+	return (
+		<main className="relative min-h-screen">
+			<header className="relative">
+				<div className="relative mx-auto max-w-4xl px-6 pb-8 pt-16 md:pt-20">
           <Link
             href={backHref}
             className="inline-flex items-center gap-1.5 text-sm font-mono text-muted-foreground hover:text-foreground transition-colors tracking-[0.5px]"
@@ -87,22 +74,20 @@ export default async function ChangelogEntryPage({
             {backLabel}
           </Link>
 
-          <GridCross className="bottom-0 left-0" />
-          <GridCross className="bottom-0 right-0" />
-        </div>
-      </header>
+				</div>
+			</header>
 
-      <div className="relative max-w-3xl mx-auto px-6 py-16">
+			<div className="relative mx-auto max-w-4xl px-6 pb-24 pt-8">
         <ChangelogEntry entry={entry} />
         {entry.source !== "release" && (olderEntry || newerEntry) && (
           <nav
             aria-label="Changelog navigation"
-            className="mt-12 grid gap-px border border-border bg-border sm:grid-cols-2"
+						className="mt-16 grid gap-8 sm:grid-cols-2"
           >
             {olderEntry ? (
               <Link
                 href={olderEntry.url}
-                className="group bg-background p-5 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-500/70 transition-colors"
+								className="group py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/70"
               >
                 <span className="text-xs font-mono uppercase tracking-[0.14em] text-muted-foreground">
                   Older update
@@ -113,12 +98,12 @@ export default async function ChangelogEntryPage({
                 </span>
               </Link>
             ) : (
-              <span className="hidden bg-background sm:block" />
+							<span className="hidden sm:block" />
             )}
             {newerEntry && (
               <Link
                 href={newerEntry.url}
-                className="group bg-background p-5 text-right hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-500/70 transition-colors"
+								className="group py-2 text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/70"
               >
                 <span className="text-xs font-mono uppercase tracking-[0.14em] text-muted-foreground">
                   Newer update

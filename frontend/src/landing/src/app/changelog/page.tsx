@@ -3,7 +3,6 @@ import { ArrowRight, ExternalLink, Rss } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { FaGithub } from "react-icons/fa";
-import { GridCross } from "@/app/blog/components/GridCross";
 import { getWeeklyUpdates } from "@/lib/changelog";
 import { ChangelogEntry } from "./components/ChangelogEntry";
 
@@ -38,20 +37,8 @@ export default function ChangelogPage() {
 
   return (
     <main className="relative min-h-screen">
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundImage: `
-            linear-gradient(to right, transparent 0%, transparent calc(50% - 384px), rgba(255,255,255,0.06) calc(50% - 384px), rgba(255,255,255,0.06) calc(50% - 383px), transparent calc(50% - 383px), transparent calc(50% + 383px), rgba(255,255,255,0.06) calc(50% + 383px), rgba(255,255,255,0.06) calc(50% + 384px), transparent calc(50% + 384px))
-          `,
-        }}
-      />
-
-      <header className="relative border-b border-border">
-        <div className="max-w-3xl mx-auto px-6 pt-16 pb-12 md:pt-24 md:pb-16 relative">
-          <GridCross className="top-0 left-0" />
-          <GridCross className="top-0 right-0" />
-
+      <header className="relative">
+        <div className="relative mx-auto max-w-4xl px-6 pb-10 pt-16 md:pb-14 md:pt-24">
           <span className="text-sm font-mono text-muted-foreground tracking-[0.5px]">
             Changelog
           </span>
@@ -91,16 +78,14 @@ export default function ChangelogPage() {
             </a>
           </div>
 
-          <GridCross className="bottom-0 left-0" />
-          <GridCross className="bottom-0 right-0" />
         </div>
       </header>
 
-      <div className="relative max-w-3xl mx-auto px-6 py-14 md:py-20">
+      <div className="relative mx-auto max-w-4xl px-6 pb-24 pt-8 md:pt-12">
         {entries.length === 0 ? (
           <p className="text-muted-foreground">No updates yet.</p>
         ) : (
-          <section aria-label="Weekly product updates" className="space-y-16 md:space-y-24">
+          <section aria-label="Weekly product updates" className="space-y-20 md:space-y-28">
             {entries.map((entry) => (
               <ChangelogEntry key={entry.url} entry={entry} />
             ))}
