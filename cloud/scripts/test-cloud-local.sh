@@ -336,8 +336,8 @@ if mode == "create":
             "secret": "ao-cloud-smoke-development-only",
         },
         token=token,
-    )["providerConnection"]
-    state_file.write_text(json.dumps({
+	)["providerConnection"]
+	state_file.write_text(json.dumps({
         "token": token,
         "orgId": org_id,
         "harness": connection["provider"],
@@ -348,9 +348,9 @@ elif mode == "prepare":
     org_id = state["orgId"]
     prompt = f"prepared-session-smoke-{time.time_ns()}"
     commit_key = f"commit-preparation-{time.time_ns()}"
-    started = time.time()
-    prepared = request(
-        "POST",
+	started = time.time()
+	prepared = request(
+		"POST",
         f"/api/cloud/v1/orgs/{org_id}/session-preparations",
         body={
             "projectId": state["projectId"],
@@ -535,7 +535,7 @@ elif mode == "start":
         idempotency_key=f"session-{time.time_ns()}",
         expected=201,
     )["session"]
-    milestones = {
+	milestones = {
         "sessionAcceptedMs": round((time.monotonic() - startup_started) * 1000)
     }
     early_message_key = f"early-message-{time.time_ns()}"
@@ -603,9 +603,9 @@ elif mode == "start":
     )
     if ".ao-cloud-smoke-api" not in {item.get("path") for item in listing["items"]}:
         raise RuntimeError(f"workspace listing omitted the written file: {listing!r}")
-    wait_for_agent_terminal_ticket(org_id, session["id"], token)
-    state.update({"sessionId": session["id"], "timing": milestones})
-    state_file.write_text(json.dumps(state))
+	wait_for_agent_terminal_ticket(org_id, session["id"], token)
+	state.update({"sessionId": session["id"], "timing": milestones})
+	state_file.write_text(json.dumps(state))
 elif mode == "verify":
     state = json.loads(state_file.read_text())
     token = state["token"]
@@ -789,6 +789,127 @@ assert_workspace_marker() {
 		echo "Worker workspace marker did not survive container replacement." >&2
 		return 1
 	fi
+}
+
+wait_for_git_workspace() {
+	local container_id="$1" attempts=30
+	while ((attempts > 0)); do
+		if docker exec "$container_id" git -C /workspace/repository rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+			return 0
+		fi
+		attempts=$((attempts - 1))
+		sleep 1
+	done
+	echo "Worker Git workspace did not become ready." >&2
+	return 1
+}
+
+prepare_workspace_review_fixture() {
+	local container_id="$1"
+	docker exec "$container_id" bash -c '
+		set -euo pipefail
+		cd /workspace/repository
+		git config user.email smoke@ao.local
+		git config user.name "AO Cloud Smoke"
+		printf "unchanged\n" > review-unchanged.txt
+		printf "base committed\n" > review-committed.txt
+		printf "base staged\n" > review-staged.txt
+		printf "base unstaged\n" > review-unstaged.txt
+		git add review-unchanged.txt review-committed.txt review-staged.txt review-unstaged.txt
+		git commit -m "test: establish review baseline" >/dev/null
+		git update-ref refs/ao/diff-base HEAD
+		printf "committed change\n" > review-committed.txt
+		git add review-committed.txt
+		git commit -m "test: committed review change" >/dev/null
+		printf "staged change\n" > review-staged.txt
+		git add review-staged.txt
+		printf "unstaged change\n" > review-unstaged.txt
+		printf "untracked change\n" > review-untracked.txt
+	'
+}
+
+exercise_workspace_diff_api() {
+	python3 - "$AO_CLOUD_PORT" "$state_file" <<'PY'
+import json
+import pathlib
+import sys
+import urllib.error
+import urllib.request
+
+port, state_path = sys.argv[1:]
+state = json.loads(pathlib.Path(state_path).read_text())
+base_url = f"http://127.0.0.1:{port}"
+prefix = f"/api/cloud/v1/orgs/{state['orgId']}/sessions/{state['sessionId']}"
+headers = {"Accept": "application/json", "Authorization": f"Bearer {state['token']}"}
+
+def request(method, path, body=None):
+    request_headers = dict(headers)
+    data = None
+    if body is not None:
+        request_headers["Content-Type"] = "application/json"
+        data = json.dumps(body).encode()
+    operation = urllib.request.Request(base_url + path, data=data, headers=request_headers, method=method)
+    try:
+        with urllib.request.urlopen(operation, timeout=10) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as error:
+        raise RuntimeError(f"{method} {path} returned {error.code}: {error.read().decode(errors='replace')}") from error
+
+workspace_file = request("PUT", prefix + "/workspace/file", {"path": ".ao-cloud-smoke-api", "content": "durable-worker-transport\n"})
+if workspace_file.get("content") != "durable-worker-transport\n":
+    raise RuntimeError(f"workspace write returned unexpected content: {workspace_file!r}")
+read_back = request("GET", prefix + "/workspace/file?path=.ao-cloud-smoke-api")
+if read_back != workspace_file:
+    raise RuntimeError(f"workspace read did not match the durable write: {read_back!r}")
+listing = request("GET", prefix + "/workspace/files?limit=100")
+if ".ao-cloud-smoke-api" not in {item.get("path") for item in listing["items"]}:
+    raise RuntimeError(f"workspace listing omitted the written file: {listing!r}")
+diff = request("GET", prefix + "/workspace/diff")
+summary = next((item for item in diff.get("files", []) if item.get("path") == ".ao-cloud-smoke-api"), None)
+if summary != {"path": ".ao-cloud-smoke-api", "status": "untracked", "additions": 1, "deletions": 0, "binary": False}:
+    raise RuntimeError(f"workspace diff summary returned unexpected file: {summary!r}")
+detail = request("GET", prefix + "/workspace/file/diff?path=.ao-cloud-smoke-api")
+if detail.get("status") != "untracked" or detail.get("content") != "durable-worker-transport\n" or "new file mode 100644" not in detail.get("diff", "") or detail.get("diffTruncated"):
+    raise RuntimeError(f"workspace diff-file returned unexpected detail: {detail!r}")
+
+review = request("GET", prefix + "/workspace/review")
+expected = {
+    "committed": "review-committed.txt",
+    "staged": "review-staged.txt",
+    "unstaged": "review-unstaged.txt",
+    "untracked": "review-untracked.txt",
+}
+for section, path in expected.items():
+    if path not in {item.get("path") for item in review["sections"][section]}:
+        raise RuntimeError(f"workspace review omitted {path} from {section}: {review!r}")
+if "review-unchanged.txt" not in {item.get("path") for item in review["files"]}:
+    raise RuntimeError(f"workspace review omitted unchanged tracked file: {review!r}")
+
+tree = request("GET", prefix + "/workspace/tree")
+if "review-unchanged.txt" not in {item.get("path") for item in tree["entries"]}:
+    raise RuntimeError(f"workspace tree omitted unchanged tracked file: {tree!r}")
+search = request("GET", prefix + "/workspace/search?query=review-unstaged")
+if "review-unstaged.txt" not in {item.get("path") for item in search["results"]}:
+    raise RuntimeError(f"workspace search omitted matching path: {search!r}")
+
+diffs = request("POST", prefix + "/workspace/review/diffs", {
+    "scope": "staged", "paths": ["review-staged.txt"], "contextLines": 3,
+    "ignoreWhitespace": False, "workspaceVersion": review["workspaceVersion"],
+})
+if "staged change" not in "".join(group.get("patch", "") for group in diffs["groups"]):
+    raise RuntimeError(f"scoped workspace diff omitted staged content: {diffs!r}")
+revision = request("GET", prefix + "/workspace/review/revision?path=review-staged.txt&scope=staged&side=after")
+if revision.get("content") != "staged change\n":
+    raise RuntimeError(f"workspace revision returned unexpected content: {revision!r}")
+
+editable = request("GET", prefix + "/workspace/review/file?path=review-unstaged.txt&scope=unstaged")
+written = request("PUT", prefix + "/workspace/review/file", {
+    "path": "review-unstaged.txt", "content": "updated through review API\n",
+    "expectedFileFingerprint": editable["fileFingerprint"],
+})
+if written.get("content") != "updated through review API\n" or written.get("fileFingerprint") == editable["fileFingerprint"]:
+    raise RuntimeError(f"fingerprint-checked workspace write failed: {written!r}")
+PY
 }
 
 exercise_browser_proxy() {
@@ -1065,6 +1186,9 @@ if [[ "$measure_startup" == true ]]; then
 	record_startup_result "$browser_ready_ms"
 	exit 0
 fi
+wait_for_git_workspace "$first_worker"
+prepare_workspace_review_fixture "$first_worker"
+exercise_workspace_diff_api
 docker exec "$first_worker" ao list >/dev/null
 # ao-worker boot must materialize the cloud using-ao skill where the standing
 # prompts point the agent.
