@@ -219,6 +219,11 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 			writeError(w, r, http.StatusUnprocessableEntity, "validation_error", verr.Error())
 			return
 		}
+		// Defense in depth behind the picker's own gating: never persist a rich
+		// parameter the chosen template does not declare, since Coder would reject
+		// every session build for the project. Best-effort — if the template's
+		// parameters cannot be read, store the config as-is rather than block.
+		coderConfig = s.sanitizeCoderConfig(r.Context(), coderConfig, requestID(r))
 		config, err = domain.MergeProjectCoderConfig(config, coderConfig)
 		if err != nil {
 			writeError(w, r, http.StatusUnprocessableEntity, "validation_error", "Project coder configuration is invalid.")
@@ -763,6 +768,44 @@ var coderSizes = map[string]bool{"small": true, "medium": true, "large": true}
 // setup (template + size/startup + extra repos) into a domain.ProjectCoderConfig
 // stored on the project. Size and startup require a chosen (non-default)
 // template, since the default template does not declare those rich parameters.
+// sanitizeCoderConfig drops size/startup from a coder project config when the
+// chosen template does not declare the matching coder_parameter. It is
+// best-effort: the default template (empty ID), a missing template lister, an
+// unreadable template list, or an unknown template all leave the config
+// untouched, so a transient Coder read never blocks creating a project.
+func (s *Server) sanitizeCoderConfig(ctx context.Context, cfg domain.ProjectCoderConfig, reqID string) domain.ProjectCoderConfig {
+	if cfg.TemplateID == "" || s.coderTemplates == nil {
+		return cfg
+	}
+	if cfg.Size == "" && strings.TrimSpace(cfg.StartupScript) == "" {
+		return cfg
+	}
+	templates, err := s.coderTemplates.ListTemplates(ctx)
+	if err != nil {
+		s.logger.Warn("sanitize coder config: list templates", "error", err, "request_id", reqID)
+		return cfg
+	}
+	var params []string
+	found := false
+	for _, t := range templates {
+		if t.ID == cfg.TemplateID {
+			params = t.Parameters
+			found = true
+			break
+		}
+	}
+	if !found {
+		return cfg
+	}
+	if cfg.Size != "" && !slices.Contains(params, "size") {
+		cfg.Size = ""
+	}
+	if strings.TrimSpace(cfg.StartupScript) != "" && !slices.Contains(params, "startup_script") {
+		cfg.StartupScript = ""
+	}
+	return cfg
+}
+
 func parseCoderConfigInput(in *coderConfigInput) (domain.ProjectCoderConfig, error) {
 	cfg := domain.ProjectCoderConfig{}
 	if id := strings.TrimSpace(in.TemplateID); id != "" {

@@ -18,11 +18,12 @@ type CoderTemplateLister interface {
 }
 
 type coderTemplateResponse struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	DisplayName string `json:"displayName"`
-	Description string `json:"description"`
-	Icon        string `json:"icon"`
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	DisplayName string   `json:"displayName"`
+	Description string   `json:"description"`
+	Icon        string   `json:"icon"`
+	Parameters  []string `json:"parameters"`
 }
 
 // listCoderTemplates returns the Coder templates the picker offers for a new
@@ -47,12 +48,17 @@ func (s *Server) listCoderTemplates(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for _, t := range raw {
+			params := t.Parameters
+			if params == nil {
+				params = []string{}
+			}
 			templates = append(templates, coderTemplateResponse{
 				ID:          t.ID,
 				Name:        t.Name,
 				DisplayName: t.DisplayName,
 				Description: t.Description,
 				Icon:        t.Icon,
+				Parameters:  params,
 			})
 		}
 	}

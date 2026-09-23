@@ -211,6 +211,10 @@ export interface CloudCpCoderTemplate {
 	displayName: string;
 	description: string;
 	icon: string;
+	// The per-workspace coder_parameter names this template declares (e.g.
+	// "size", "startup_script"). The picker only offers a control when its
+	// parameter is present, so a template that declares none shows no form.
+	parameters: string[];
 }
 
 export interface CloudCpCoderTemplatesResponse {
