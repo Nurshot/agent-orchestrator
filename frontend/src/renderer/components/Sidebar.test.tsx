@@ -2167,12 +2167,13 @@ describe("Sidebar", () => {
 
 		await user.click(screen.getByRole("button", { name: "Projects" }));
 		expect(screen.getByRole("button", { name: "Projects" })).toHaveAttribute("aria-expanded", "false");
-		expect(screen.getByTestId("sidebar-projects-scroller").closest('[aria-hidden="true"]')).toBeInTheDocument();
+		expect(screen.queryByTestId("sidebar-projects-scroller")).not.toBeInTheDocument();
+		expect(screen.queryByText("Project One")).not.toBeInTheDocument();
 
 		await user.click(screen.getByRole("button", { name: "Projects" }));
 		expect(screen.getByRole("button", { name: "Projects" })).toHaveAttribute("aria-expanded", "true");
 		expect(screen.getByText("Project One")).toBeInTheDocument();
-		expect(screen.getByTestId("sidebar-projects-scroller").closest('[aria-hidden="true"]')).toBeNull();
+		expect(screen.getByTestId("sidebar-projects-scroller")).toBeInTheDocument();
 		expect(screen.queryByRole("button", { name: /Show (more|fewer) projects/ })).not.toBeInTheDocument();
 	});
 
