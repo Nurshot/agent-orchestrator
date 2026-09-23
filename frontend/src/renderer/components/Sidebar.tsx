@@ -1779,7 +1779,7 @@ function ScratchpadSection({
 			/>
 			<AnimatedSectionBody open={open && listedSessions.length > 0} className="min-h-0 flex-1">
 				<SidebarSectionScroller
-					className={`${SECTION_SCROLLER_CLASS} min-h-0 flex-1`}
+					className={`${SECTION_SCROLLER_CLASS} h-full min-h-0 flex-1`}
 					testId="sidebar-scratchpad-scroller"
 					wrapperClassName="flex-1"
 				>
