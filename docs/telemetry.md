@@ -26,8 +26,8 @@ AO sends structured events in a few broad categories:
   it to understand which organizations and developers get the most value from
   AO, so we can prioritize improvements and reach out for feedback
 - The GitHub username of the account signed in to AO's GitHub integration, sent
-  on session-start events so we can see which developers are most active and reach
-  out for feedback. It is part of product telemetry with no separate control. See
+  on session-start events and once when you connect GitHub inside AO, so we can
+  see which developers are most active and reach out for feedback. It is part of product telemetry with no separate control. See
   "Sharing your GitHub handle" below for exactly what is sent and when
 - Reliability data, such as an error type and context, a crash message and
   stack trace after path redaction, an HTTP status, or an agent waiting for
@@ -93,9 +93,10 @@ that waitlist as described in the [privacy policy](https://orchestrator.inc/priv
   loops.
 - Session recording is disabled in the desktop and mobile apps. AO does not
   automatically record screens, clicks, or touches.
-- Person profiles are off for every event except the session-start event that
-  carries your GitHub handle. That one event sets a person property so activity
-  can be grouped by GitHub username; every other event stays anonymous.
+- Person profiles are off for every event except the ones that carry your
+  GitHub handle (session start and GitHub connect). Those set a person property
+  so activity can be grouped by GitHub username; every other event stays
+  anonymous.
 
 Separately from remote telemetry, the daemon can keep a local copy of
 operational events in AO's SQLite database. While local telemetry is active, AO
@@ -171,7 +172,14 @@ contract.
 ## Sharing your GitHub handle
 
 AO resolves the GitHub account associated with your machine and includes that
-username on session-start events. It is sent both as the event property
+username on two events:
+
+- `ao.github.connected`, sent once when you finish connecting GitHub inside AO,
+  so a user who sets AO up but has not started a session yet is still counted.
+  It is not sent if you were already signed in before AO started.
+- `ao.session.spawned`, sent on every session start, which covers everyone else.
+
+It is sent both as the event property
 `github_actor` and as a PostHog person property on AO's shared installation
 person, which lets us group product activity by GitHub username and reach out to
 active users for feedback.
@@ -197,7 +205,7 @@ All probes are silent, run non-interactively with short timeouts, and are cached
 so a session start is not delayed by repeated lookups. When none of them yield a
 username, AO sends nothing and the event stays anonymous. The handle is part of
 product telemetry and has no separate switch: turning telemetry off (see below)
-stops it, because the session-start event that carries it is then never sent.
+stops it, because the events that carry it are then never sent.
 Anything already stored in PostHog from earlier events is not deleted
 retroactively.
 

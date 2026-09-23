@@ -543,6 +543,7 @@ func Run() error {
 
 	hostCommands := systemexec.New(cfg.DataDir)
 	systemChecks := systemcheck.NewWithCommandRunner(agentSvc, hostCommands, hostCommands)
+	systemChecks.SetGitHubConnectedNotifier(sessionSvc)
 	systemInstall := systeminstall.NewWithDeps(hostCommands, hostCommands, systeminstall.Deps{
 		JobStore: store,
 		Verifier: systeminstall.NewVerifier(agents, hostCommands),

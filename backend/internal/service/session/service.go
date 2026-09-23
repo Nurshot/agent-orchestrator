@@ -411,6 +411,41 @@ func (s *Service) emitSpawned(ctx context.Context, rec domain.SessionRecord, dur
 	})
 }
 
+// GitHubConnected emits ao.github.connected with the operator's handle right
+// after they connect GitHub inside AO, so users who never start a session are
+// still identified. The lookup can reach the GitHub API, so it runs on the
+// daemon's background context rather than the triggering request, which has
+// usually returned by the time it finishes. A login that does not resolve
+// sends nothing.
+func (s *Service) GitHubConnected(ctx context.Context) {
+	if s.telemetry == nil || s.githubIdentity == nil {
+		return
+	}
+	s.emitGitHubConnectedInBackground(reqid.FromContext(ctx))
+}
+
+func (s *Service) emitGitHubConnectedInBackground(requestID string) {
+	work := func() {
+		actor, ok := s.githubActor(s.backgroundContext)
+		if !ok {
+			return
+		}
+		s.telemetry.Emit(context.Background(), ports.TelemetryEvent{
+			Name:       "ao.github.connected",
+			Source:     "session_service",
+			OccurredAt: s.now(),
+			Level:      ports.TelemetryLevelInfo,
+			RequestID:  requestID,
+			Payload:    map[string]any{"github_actor": actor},
+		})
+	}
+	if s.runBackground != nil {
+		s.runBackground(work)
+		return
+	}
+	go work()
+}
+
 // githubActor returns the operator's GitHub login for telemetry, resolving in
 // two tiers. First the authenticated, API-verified identity (a real GET /user
 // behind an env/gh/credential-helper token); when that yields a human login it

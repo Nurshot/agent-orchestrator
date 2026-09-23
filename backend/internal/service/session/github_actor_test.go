@@ -134,3 +134,47 @@ func TestGithubActorFallsBackToBestEffort(t *testing.T) {
 		}
 	})
 }
+
+func TestGitHubConnectedEmitsHandle(t *testing.T) {
+	sink := &fakeTelemetrySink{}
+	svc := NewWithDeps(Deps{
+		Telemetry:      sink,
+		GithubIdentity: &fakeIdentityResolver{identity: ports.SCMIdentity{Login: "octocat", Human: true}},
+	})
+	svc.runBackground = runInline
+
+	svc.GitHubConnected(context.Background())
+
+	if len(sink.events) != 1 {
+		t.Fatalf("emitted %d events, want 1", len(sink.events))
+	}
+	ev := sink.events[0]
+	if ev.Name != "ao.github.connected" {
+		t.Fatalf("event name = %q, want ao.github.connected", ev.Name)
+	}
+	if ev.Payload["github_actor"] != "octocat" {
+		t.Fatalf("payload = %#v, want github_actor octocat", ev.Payload)
+	}
+}
+
+// A connect that does not resolve to a human login has nothing worth sending,
+// so no event is emitted rather than an empty one.
+func TestGitHubConnectedSendsNothingWithoutHandle(t *testing.T) {
+	for name, identity := range map[string]ports.ScopedIdentityResolver{
+		"lookup fails": &fakeIdentityResolver{err: errors.New("GET /user failed")},
+		"org account":  &fakeIdentityResolver{identity: ports.SCMIdentity{Login: "acme-org"}},
+		"no resolver":  nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			sink := &fakeTelemetrySink{}
+			svc := NewWithDeps(Deps{Telemetry: sink, GithubIdentity: identity})
+			svc.runBackground = runInline
+
+			svc.GitHubConnected(context.Background())
+
+			if len(sink.events) != 0 {
+				t.Fatalf("emitted %#v, want nothing", sink.events)
+			}
+		})
+	}
+}
