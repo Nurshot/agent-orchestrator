@@ -67,7 +67,6 @@ AO_DATA_DIR=/tmp/ao-lab-data ./node_modules/.bin/electron-forge start
 - `docs/README.md` — docs index.
 - `docs/documentation-map.md` — which artifacts are the machine-readable contract layer (`openapi.yaml`, `AGENTS.md`, `skills/`, sqlc `gen/`), what each is source of truth for, and how CI keeps them from drifting.
 - `docs/architecture.md` — backend mental model, package layout, lifecycle/session/service boundaries, and load-bearing rules.
-- `docs/disk-storage.md` — `~/.ao` byte map, safe-to-delete vs must-keep paths, and disk cleanup order (measure first).
 - `docs/STATUS.md` — what is shipped on `main` today and what is still in flight.
 - `docs/cli/README.md` — intended CLI shape: thin Cobra client over daemon HTTP, never direct storage/runtime access.
 - `CLAUDE.md` — compatibility pointer for Claude Code; it directs agents back to `AGENTS.md`.
@@ -109,7 +108,7 @@ For code entry points:
 - The CLI is a thin client. Do not port old in-process TypeScript CLI behavior that bypasses daemon HTTP routes.
 - Do not store derived/display session status. Status is derived from durable facts (`activity_state`, `is_terminated`, PR/check/comment facts) at service read time.
 - Do not treat failed/unknown runtime probes as proof a session is dead.
-- Do not force-delete a dirty registered worktree unless that session's uncommitted work is already stored in a durable local snapshot. If the snapshot cannot be stored, the folder stays.
+- Do not force-delete dirty registered worktrees.
 - Do not modify already-merged SQLite migrations. Add a new migration instead.
 - Do not hand-edit `backend/internal/storage/sqlite/gen/*`; change `backend/internal/storage/sqlite/queries/*` or migrations and run `npm run sqlc`.
 - SQLite change events come from DB triggers into `change_log`; do not add parallel manual CDC emission from store methods unless the architecture changes explicitly.

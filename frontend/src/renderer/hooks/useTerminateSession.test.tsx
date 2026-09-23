@@ -22,7 +22,6 @@ vi.mock("./useCloudCp", () => ({
 
 vi.mock("../lib/telemetry", () => ({ captureRendererEvent: vi.fn() }));
 
-import { appI18n } from "../i18n";
 import { useUiStore } from "../stores/ui-store";
 import { useTerminateSession } from "./useTerminateSession";
 import { workspaceQueryKey } from "./useWorkspaceQuery";
@@ -87,7 +86,9 @@ describe("useTerminateSession", () => {
 
 		await act(async () => result.current.mutateAsync(localSession));
 
-		expect(useUiStore.getState().globalToasts.map((toast) => toast.title)).toContain(appI18n.t("shell.archiveSaved"));
+		expect(useUiStore.getState().globalToasts.map((toast) => toast.title)).toContain(
+			"Unfinished edits were saved on this machine, apart from the branch. They come back only when you ask.",
+		);
 	});
 
 	it("says when the folder stayed because the save failed", async () => {
@@ -97,7 +98,9 @@ describe("useTerminateSession", () => {
 
 		await act(async () => result.current.mutateAsync(localSession));
 
-		expect(useUiStore.getState().globalToasts.map((toast) => toast.title)).toContain(appI18n.t("shell.archiveKept"));
+		expect(useUiStore.getState().globalToasts.map((toast) => toast.title)).toContain(
+			"The worktree folder was kept because those edits could not be saved.",
+		);
 	});
 
 	it("routes local sessions to the local daemon", async () => {

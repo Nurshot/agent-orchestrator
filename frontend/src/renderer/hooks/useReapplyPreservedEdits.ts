@@ -1,7 +1,6 @@
 import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiClient, apiErrorMessage } from "../lib/api-client";
-import { appI18n } from "../i18n";
 import { useUiStore } from "../stores/ui-store";
 import { workspaceQueryKey } from "./useWorkspaceQuery";
 
@@ -21,7 +20,9 @@ export function useReapplyPreservedEdits() {
 				return { ok: false as const, message };
 			}
 			await queryClient.invalidateQueries({ queryKey: workspaceQueryKey });
-			const message = data?.conflicts ? appI18n.t("shell.editsConflict") : appI18n.t("shell.editsBack");
+			const message = data?.conflicts
+				? "Some edits conflict. What fits is in the worktree."
+				: "Saved edits are back in the worktree.";
 			useUiStore.getState().showGlobalToast(message);
 			return { ok: true as const, conflicts: data?.conflicts === true, message };
 		},

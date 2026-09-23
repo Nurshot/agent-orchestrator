@@ -24,7 +24,6 @@ in CI. Fix the prose.
 | [CONTRIBUTING.md](../CONTRIBUTING.md)                       | How to pick up work, claim issues, and open PRs.                             |
 | [docs/README.md](README.md)                                 | Index of the repository's architecture and reference docs.                   |
 | [docs/architecture.md](architecture.md)                     | Backend mental model, lifecycle, persistence/CDC, status derivation.         |
-| [docs/disk-storage.md](disk-storage.md)                     | `~/.ao` layout, rebuildable vs must-keep paths, and disk cleanup order.      |
 | [docs/backend-code-structure.md](backend-code-structure.md) | Package ownership rules for the Go backend.                                  |
 | [docs/development.md](development.md)                       | Prerequisites, build, test, and troubleshooting for local development.       |
 | [docs/STATUS.md](STATUS.md)                                 | What ships on `main` today and what is in flight.                            |

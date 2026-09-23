@@ -1067,7 +1067,7 @@ These rules are **load-bearing** — changing them breaks fundamental architectu
 
 1. **Never store display status** — Status is derived from durable facts at read time
 2. **Never treat failed probes as death** — A failed probe is a fact, not a termination signal
-3. **Do not force-delete a dirty worktree unless its uncommitted work is already in a durable local snapshot** — User data safety over cleanup convenience. If the snapshot cannot be stored, the folder stays.
+3. **Never force-delete dirty worktrees** — User data safety over cleanup convenience
 4. **All app state under ~/.ao** — No OS-default app-data locations
 5. **Daemon binds to 127.0.0.1 only** — No network exposure, ever
 6. **CLI is thin** — All logic lives in the daemon, CLI is just an HTTP client

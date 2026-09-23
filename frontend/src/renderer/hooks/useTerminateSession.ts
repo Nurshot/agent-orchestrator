@@ -146,9 +146,15 @@ export function useTerminateSession(options: TerminateSessionOptions = {}) {
 		onSuccess: async (data, session) => {
 			void captureRendererEvent("ao.renderer.session_kill_succeeded", { project_id: session.workspaceId });
 			if (!session.cloud && data?.saveFailed) {
-				useUiStore.getState().showGlobalToast(appI18n.t("shell.archiveKept"), undefined, "error");
+				useUiStore.getState().showGlobalToast(
+					"The worktree folder was kept because those edits could not be saved.",
+					undefined,
+					"error",
+				);
 			} else if (!session.cloud && data?.preserved) {
-				useUiStore.getState().showGlobalToast(appI18n.t("shell.archiveSaved"));
+				useUiStore.getState().showGlobalToast(
+					"Unfinished edits were saved on this machine, apart from the branch. They come back only when you ask.",
+				);
 			}
 			// Reinforce before refresh; keep the optimistic id until this refetch finishes.
 			queryClient.setQueryData<WorkspaceSummary[]>(workspaceQueryKey, (workspaces) =>
