@@ -7,16 +7,14 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
-
 	agentregistry "github.com/aoagents/agent-orchestrator/backend/internal/adapters/agent/registry"
 	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
 )
 
 // countingDiscoverer records whether AO actually executed an agent's CLI.
 type countingDiscoverer struct {
-	runs        atomic.Int32
-	runsCommand bool
+	runs           atomic.Int32
+	canPromptLogin bool
 }
 
 func (d *countingDiscoverer) Discover(context.Context, ports.AgentModelDiscoveryRequest) (ports.AgentModelCatalog, error) {
@@ -32,12 +30,12 @@ func (d *countingDiscoverer) Manual(agentID string) ports.AgentModelCatalog {
 	return ports.AgentModelCatalog{AgentID: agentID, Source: "manual"}
 }
 
-// runsCommand mirrors whether this agent's discovery executes the agent. The
-// gate only applies when it does.
-func (d *countingDiscoverer) RunsAgentCommand(string) bool { return d.runsCommand }
+// canPromptLogin mirrors whether this agent's discovery can start a sign-in.
+// The gate only applies when it can.
+func (d *countingDiscoverer) DiscoveryCanPromptLogin(string) bool { return d.canPromptLogin }
 
 func authGateService(status ports.AgentAuthStatus, authErr error) (*Service, *countingDiscoverer) {
-	discoverer := &countingDiscoverer{runsCommand: true}
+	discoverer := &countingDiscoverer{canPromptLogin: true}
 	stub := &readinessTestAgent{
 		resolve: func(context.Context) (string, error) { return "kiro-cli", nil },
 		auth:    func(context.Context) (ports.AgentAuthStatus, error) { return status, authErr },
@@ -59,17 +57,6 @@ func (a *envAwareAgent) AuthStatusInEnv(ctx context.Context, env map[string]stri
 		return ports.AgentAuthStatusAuthorized, nil
 	}
 	return a.AuthStatus(ctx)
-}
-
-// staticProjects serves one project whose config carries the env overlay that
-// discovery — and therefore the auth gate — must run under.
-type staticProjects struct {
-	id  string
-	env map[string]string
-}
-
-func (p staticProjects) GetProject(context.Context, string) (domain.ProjectRecord, bool, error) {
-	return domain.ProjectRecord{ID: p.id, Path: "/tmp/project", Config: domain.ProjectConfig{Env: p.env}}, true, nil
 }
 
 // Discovery executes the agent's own CLI, and Kiro's discovery command is its
@@ -136,13 +123,18 @@ func TestUnknownAuthStatusStillRunsDiscovery(t *testing.T) {
 	}
 }
 
-// Discovery deliberately runs with the project-scoped environment, so the gate
-// must ask about that same environment. Asking about the daemon's own instead
-// reports a project-authenticated Kiro as signed out and suppresses a discovery
-// run that would have worked.
+// The gate must answer for the environment the discovery command would run in,
+// not the daemon's own: an adapter can take its credential from that overlay,
+// as Kiro does with KIRO_API_KEY, and asking about the wrong one reports a
+// signed-in agent as signed out.
+//
+// #5051 made catalogs global, so the service no longer builds request.Env from
+// project config and no production caller currently supplies one. These drive
+// discoverModels directly rather than through Models(), so they pin the
+// contract for whoever reintroduces a scoped environment.
 // https://github.com/Untrivial-ai/agent-orchestrator/pull/5321#discussion_r3999115728
-func TestProjectScopedCredentialIsHonoredBeforeBlocking(t *testing.T) {
-	discoverer := &countingDiscoverer{runsCommand: true}
+func TestGateAsksAboutTheEnvironmentDiscoveryWouldUse(t *testing.T) {
+	discoverer := &countingDiscoverer{canPromptLogin: true}
 	stub := &envAwareAgent{readinessTestAgent: &readinessTestAgent{
 		resolve: func(context.Context) (string, error) { return "kiro-cli", nil },
 		// The daemon's own environment has no key, so this is what a
@@ -151,41 +143,43 @@ func TestProjectScopedCredentialIsHonoredBeforeBlocking(t *testing.T) {
 			return ports.AgentAuthStatusUnauthorized, nil
 		},
 	}}
-	agents := []agentregistry.HarnessAgent{readinessHarness("kiro", "Kiro", stub)}
-	projects := staticProjects{id: "p1", env: map[string]string{"KIRO_API_KEY": "project-scoped-key"}}
-	svc := newService(agents, nil, projects, discoverer)
+	item := readinessHarness("kiro", "Kiro", stub)
+	svc := newService([]agentregistry.HarnessAgent{item}, nil, nil, discoverer)
 
-	catalog, err := svc.Models(context.Background(), "kiro", "p1", false)
-	if err != nil {
+	request := ports.AgentModelDiscoveryRequest{
+		AgentID: "kiro",
+		Binary:  "kiro-cli",
+		Env:     map[string]string{"KIRO_API_KEY": "scoped-key"},
+	}
+	if _, err := svc.discoverModels(context.Background(), item, "kiro", request); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got := discoverer.runs.Load(); got != 1 {
-		t.Fatalf("discovery ran %d times with a project-scoped credential, want 1", got)
+		t.Fatalf("discovery ran %d times with a scoped credential, want 1", got)
 	}
-	if len(catalog.Models) != 1 {
-		t.Fatalf("models = %d, want the discovered catalog", len(catalog.Models))
-	}
-	if stub.sawEnv["KIRO_API_KEY"] != "project-scoped-key" {
-		t.Fatalf("auth check saw env %#v, want the project overlay discovery runs under", stub.sawEnv)
+	if stub.sawEnv["KIRO_API_KEY"] != "scoped-key" {
+		t.Fatalf("auth check saw env %#v, want the overlay discovery runs under", stub.sawEnv)
 	}
 }
 
-// Still block when the project environment carries no credential either: the
-// overlay must not become a blanket excuse to skip the gate.
-func TestProjectEnvWithoutCredentialStillBlocks(t *testing.T) {
-	discoverer := &countingDiscoverer{runsCommand: true}
+// An overlay must not become a blanket excuse to skip the gate.
+func TestScopedEnvWithoutCredentialStillBlocks(t *testing.T) {
+	discoverer := &countingDiscoverer{canPromptLogin: true}
 	stub := &envAwareAgent{readinessTestAgent: &readinessTestAgent{
 		resolve: func(context.Context) (string, error) { return "kiro-cli", nil },
 		auth: func(context.Context) (ports.AgentAuthStatus, error) {
 			return ports.AgentAuthStatusUnauthorized, nil
 		},
 	}}
-	agents := []agentregistry.HarnessAgent{readinessHarness("kiro", "Kiro", stub)}
-	projects := staticProjects{id: "p1", env: map[string]string{"UNRELATED": "1"}}
-	svc := newService(agents, nil, projects, discoverer)
+	item := readinessHarness("kiro", "Kiro", stub)
+	svc := newService([]agentregistry.HarnessAgent{item}, nil, nil, discoverer)
 
-	if _, err := svc.Models(context.Background(), "kiro", "p1", false); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	request := ports.AgentModelDiscoveryRequest{
+		AgentID: "kiro", Binary: "kiro-cli",
+		Env: map[string]string{"UNRELATED": "1"},
+	}
+	if _, err := svc.discoverModels(context.Background(), item, "kiro", request); err == nil {
+		t.Fatal("want the gate to block a signed-out agent")
 	}
 	if got := discoverer.runs.Load(); got != 0 {
 		t.Fatalf("discovery ran %d times for a signed-out agent, want 0", got)
@@ -195,18 +189,21 @@ func TestProjectEnvWithoutCredentialStillBlocks(t *testing.T) {
 // An adapter that can only answer for the daemon's environment must not block a
 // run whose environment it never saw.
 func TestEnvUnawareAdapterDoesNotBlockUnderAnOverlay(t *testing.T) {
-	discoverer := &countingDiscoverer{runsCommand: true}
+	discoverer := &countingDiscoverer{canPromptLogin: true}
 	stub := &readinessTestAgent{
 		resolve: func(context.Context) (string, error) { return "kiro-cli", nil },
 		auth: func(context.Context) (ports.AgentAuthStatus, error) {
 			return ports.AgentAuthStatusUnauthorized, nil
 		},
 	}
-	agents := []agentregistry.HarnessAgent{readinessHarness("kiro", "Kiro", stub)}
-	projects := staticProjects{id: "p1", env: map[string]string{"SOMETHING": "1"}}
-	svc := newService(agents, nil, projects, discoverer)
+	item := readinessHarness("kiro", "Kiro", stub)
+	svc := newService([]agentregistry.HarnessAgent{item}, nil, nil, discoverer)
 
-	if _, err := svc.Models(context.Background(), "kiro", "p1", false); err != nil {
+	request := ports.AgentModelDiscoveryRequest{
+		AgentID: "kiro", Binary: "kiro-cli",
+		Env: map[string]string{"SOMETHING": "1"},
+	}
+	if _, err := svc.discoverModels(context.Background(), item, "kiro", request); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got := discoverer.runs.Load(); got != 1 {
@@ -219,7 +216,7 @@ func TestEnvUnawareAdapterDoesNotBlockUnderAnOverlay(t *testing.T) {
 // the model picker from every signed-out Claude Code user to prevent a risk
 // that does not exist for them.
 func TestStaticCatalogIsNotGatedOnAuth(t *testing.T) {
-	discoverer := &countingDiscoverer{runsCommand: false}
+	discoverer := &countingDiscoverer{canPromptLogin: false}
 	stub := &readinessTestAgent{
 		resolve: func(context.Context) (string, error) { return "claude", nil },
 		auth: func(context.Context) (ports.AgentAuthStatus, error) {

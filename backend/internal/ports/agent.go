@@ -285,12 +285,15 @@ type AgentModelDiscoverer interface {
 	// stay cheap enough to compute before deciding to skip discovery.
 	CatalogFingerprint(ctx context.Context, request AgentModelDiscoveryRequest) string
 	Manual(agentID string) AgentModelCatalog
-	// RunsAgentCommand reports whether discovering this agent's catalog executes
-	// the agent itself. Static and config-derived catalogs do not, so a caller
-	// that declines discovery because of what running the agent might do has no
-	// reason to withhold those — and withholding them would remove a model list
-	// that was never at risk.
-	RunsAgentCommand(agentID string) bool
+	// DiscoveryCanPromptLogin reports whether this agent's model discovery can
+	// start an interactive sign-in.
+	//
+	// It is deliberately narrow. Catalog discovery is expected to run for
+	// installed agents whatever their auth status, so the only reason to withhold
+	// it is a command that can take over the user's browser. Report true only for
+	// an agent observed to do that, never on the assumption that running a CLI
+	// might.
+	DiscoveryCanPromptLogin(agentID string) bool
 }
 
 // AgentExitDetectionMode describes how AO learns that an agent CLI process

@@ -137,23 +137,20 @@ type Discoverer struct {
 	ClineOptions ClineConfigOptionListFunc
 }
 
-// RunsAgentCommand reports whether Discover executes the agent for this id.
+// DiscoveryCanPromptLogin reports whether discovering this agent's catalog can
+// start an interactive sign-in.
 //
-// Claude Code and Muse return a static catalog and Discover never spawns for
-// them. Codex answers through its app-server, which does start the agent. The
-// command-backed adapters run their CLI by definition. Config-derived catalogs
-// only read files, so they are not reported here: under-reporting merely leaves
-// today's behavior in place, while over-reporting would let a caller suppress a
-// catalog that costs nothing to produce.
-func (Discoverer) RunsAgentCommand(agentID string) bool {
-	switch agentID {
-	case "claude-code", "muse":
-		return false
-	case "codex":
-		return true
-	}
-	_, ok := commandSpecs[agentID]
-	return ok
+// Kiro's discovery command is its chat entrypoint — `chat --list-models` — and
+// with no token it opens a browser OAuth page rather than failing, which is
+// verified behavior against kiro-cli 2.21.0 and the reason this predicate
+// exists (issue #5307).
+//
+// Nothing else is listed. Other command-backed adapters run a CLI too, but
+// running a CLI is not the hazard; hijacking the browser is, and no other
+// adapter has been observed doing it. Listing one on suspicion would suppress a
+// catalog AO is otherwise expected to prefetch for any installed agent.
+func (Discoverer) DiscoveryCanPromptLogin(agentID string) bool {
+	return agentID == "kiro"
 }
 
 // CodexModelListFunc obtains Codex's account-scoped app-server catalog without
