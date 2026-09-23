@@ -390,7 +390,7 @@ describe("HarnessSettingsSection", () => {
 		});
 		renderSection();
 		const row = (await screen.findByText("Claude Code")).closest('[data-agent="claude-code"]') as HTMLElement;
-		expect(within(row).getByRole("button", { name: "Login" })).toBeInTheDocument();
+		expect(await within(row).findByRole("button", { name: "Login" })).toBeInTheDocument();
 		expect(within(row).queryByRole("button", { name: "Installed" })).not.toBeInTheDocument();
 		expect(screen.queryByRole("button", { name: "Refresh harness status" })).not.toBeInTheDocument();
 		expect(within(row).queryByRole("button", { name: "Check login" })).not.toBeInTheDocument();
@@ -410,8 +410,60 @@ describe("HarnessSettingsSection", () => {
 
 		renderSection();
 		const row = (await screen.findByText("Codex")).closest('[data-agent="codex"]') as HTMLElement;
-		expect(within(row).getByText("Unknown")).toBeInTheDocument();
+		expect(await within(row).findByText("Installation status unknown")).toBeInTheDocument();
 		expect(within(row).queryByRole("button", { name: "Install" })).not.toBeInTheDocument();
+	});
+
+	it("falls back to installer plans when readiness cannot be loaded", async () => {
+		vi.mocked(apiClient.GET).mockImplementation(async (path) => {
+			if (path === "/api/v1/agents/readiness") return { error: { message: "readiness unavailable" } } as never;
+			if (path === "/api/v1/agents/installers") return { data: plans } as never;
+			if (path === "/api/v1/agents/install-jobs") return { data: { jobs: [] } } as never;
+			if (path === "/api/v1/agents/auth-plans") return { data: { plans: [] } } as never;
+			return { data: undefined } as never;
+		});
+
+		renderSection();
+		const row = (await screen.findByText("Codex")).closest('[data-agent="codex"]') as HTMLElement;
+		// The readiness query retries once before surfacing its error.
+		expect(await within(row).findByRole("button", { name: "Install" }, { timeout: 5_000 })).toBeInTheDocument();
+		expect(within(row).queryByText("Installation status unknown")).not.toBeInTheDocument();
+	});
+
+	it("falls back to ensuring readiness when the page-open refresh fails", async () => {
+		vi.mocked(apiClient.POST).mockImplementation(async (path) => {
+			if (path === "/api/v1/agents/refresh") return { error: { message: "refresh failed" } } as never;
+			if (path === "/api/v1/agents/readiness/ensure") return { data: catalog } as never;
+			return { data: undefined } as never;
+		});
+
+		renderSection();
+		await waitFor(() => expect(apiClient.POST).toHaveBeenCalledWith(
+			"/api/v1/agents/readiness/ensure",
+			{ body: { agentIds: [], purpose: "display" } },
+		));
+	});
+
+	it("re-fetches readiness when both the page-open refresh and ensure fail", async () => {
+		vi.mocked(apiClient.POST).mockImplementation(async (path) => {
+			if (path === "/api/v1/agents/refresh") throw new Error("network down");
+			if (path === "/api/v1/agents/readiness/ensure") throw new Error("network down");
+			return { data: undefined } as never;
+		});
+		let readinessFetches = 0;
+		vi.mocked(apiClient.GET).mockImplementation(async (path) => {
+			if (path === "/api/v1/agents/readiness") {
+				readinessFetches += 1;
+				return { data: catalog } as never;
+			}
+			if (path === "/api/v1/agents/installers") return { data: plans } as never;
+			if (path === "/api/v1/agents/install-jobs") return { data: { jobs: [] } } as never;
+			return { data: undefined } as never;
+		});
+
+		renderSection();
+		await screen.findByText("Codex");
+		await waitFor(() => expect(readinessFetches).toBeGreaterThanOrEqual(2));
 	});
 
 	it("sorts harnesses by authentication state while preserving catalog order within each group", async () => {

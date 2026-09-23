@@ -193,17 +193,32 @@ export function HarnessSettingsSection({
 
 	useEffect(() => {
 		let active = true;
+		const invalidateHarnessQueries = () => Promise.all([
+			queryClient.invalidateQueries({ queryKey: agentReadinessQueryKey }),
+			queryClient.invalidateQueries({ queryKey: installerQueryKey }),
+			queryClient.invalidateQueries({ queryKey: installJobsQueryKey }),
+			queryClient.invalidateQueries({ queryKey: agentAuthPlansQueryKey }),
+		]);
+		// Page-open refresh stays silent, but a failed refresh must not leave
+		// stale or unknown readiness in place: fall back to ensure, and re-fetch
+		// the readiness snapshot if that fails too.
+		const recoverReadiness = async () => {
+			try {
+				const readiness = await ensureAgentReadiness([], "display");
+				if (active) cacheAgentReadiness(queryClient, readiness);
+			} catch {
+				if (active) await queryClient.invalidateQueries({ queryKey: agentReadinessQueryKey });
+			}
+		};
 		void apiClient.POST("/api/v1/agents/refresh").then(async ({ error }) => {
-			if (!active || error) return;
-			await Promise.all([
-				queryClient.invalidateQueries({ queryKey: agentReadinessQueryKey }),
-				queryClient.invalidateQueries({ queryKey: installerQueryKey }),
-				queryClient.invalidateQueries({ queryKey: installJobsQueryKey }),
-				queryClient.invalidateQueries({ queryKey: agentAuthPlansQueryKey }),
-			]);
+			if (!active) return;
+			if (error) {
+				await recoverReadiness();
+				return;
+			}
+			await invalidateHarnessQueries();
 		}).catch(() => {
-			// The last successful snapshot remains useful; page-open refresh is
-			// deliberately silent and launch performs its own readiness checks.
+			if (active) void recoverReadiness();
 		});
 		return () => { active = false; };
 	}, [queryClient]);
@@ -470,8 +485,12 @@ export function HarnessSettingsSection({
 					const failed = job?.status === "failed" || job?.status === "unsupported" || job?.status === "interrupted" || Boolean(actionError);
 					const active = isActive(job);
 						const readinessAgent = readinessAgents.get(agentId);
-						const installationKnown = readinessAgent?.installation.state !== undefined
-							&& readinessAgent.installation.state !== "unknown";
+						// Hold back install actions only while readiness is still loading or
+						// the daemon reports the installation as not yet observed. A failed
+						// readiness fetch or an agent missing from the snapshot falls back to
+						// the installer plan so install controls stay usable.
+						const installationPending = !agents.error
+							&& (agents.isPending || readinessAgent?.installation.state === "unknown");
 						const authPlan = agentAuthPlans.get(agentId);
 						const isSetupAction = authPlan?.action === "setup";
 						const authState = authStates[agentId];
@@ -539,7 +558,7 @@ export function HarnessSettingsSection({
 							<div className="min-w-0 flex-1">
 								<p className="truncate text-sm font-medium text-settings-label" id={`harness-agent-${agentId}`}>{agentLabel(agentId)}</p>
 								<p className={cn("truncate text-xs text-settings-muted", rowHasError && "text-error")} title={authState?.error ?? actionError ?? job?.error ?? authPlan?.reason ?? plan?.reason}>
-									{isInstalled ? authSummary : !installationKnown ? t("settings.harness.loginUnknown") : actionError ?? (job?.status === "interrupted" ? t("settings.harness.interrupted") : failed ? (job?.error ?? t("settings.harness.installFailed")) : plan?.available ? t("settings.harness.availableWith", { method: availableMethodsLabel }) : (plan?.reason ?? t("settings.harness.manualRequired")))}
+									{isInstalled ? authSummary : installationPending ? t("settings.harness.installationUnknown") : actionError ?? (job?.status === "interrupted" ? t("settings.harness.interrupted") : failed ? (job?.error ?? t("settings.harness.installFailed")) : plan?.available ? t("settings.harness.availableWith", { method: availableMethodsLabel }) : (plan?.reason ?? t("settings.harness.manualRequired")))}
 								</p>
 							</div>
 
@@ -565,7 +584,7 @@ export function HarnessSettingsSection({
 									<Button size="sm" variant="outline" disabled={pending} onClick={() => void verifyInstall(agentId)}>{t("settings.harness.verifyAgain")}</Button>
 									{selectedMethodId ? <Button className={MENU_TRIGGER_CHROME} size="sm" variant="ghost" onClick={() => void startInstall(agentId, selectedMethodId)} disabled={pending}>{t("settings.harness.retry")}</Button> : null}
 								</div>
-							) : !installationKnown ? null : availableMethods.length > 0 ? (
+							) : installationPending ? null : availableMethods.length > 0 ? (
 				<div className="flex items-stretch overflow-hidden rounded-md bg-[var(--color-bg-settings-trigger)]">
 									<Button
 										data-harness-primary-action=""

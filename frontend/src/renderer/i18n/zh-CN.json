@@ -1858,6 +1858,7 @@
 	"settings.harness.installMethod": "Installation method",
 	"settings.harness.installFailed": "Installation failed.",
 	"settings.harness.installed": "Installed",
+	"settings.harness.installationUnknown": "安装状态未知",
 	"settings.harness.authorized": "Authorized",
 	"settings.harness.installedVia": "Installed via {{method}}",
 	"settings.harness.installing": "Installing…",
