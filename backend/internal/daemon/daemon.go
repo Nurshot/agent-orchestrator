@@ -53,6 +53,8 @@ import (
 	browsersvc "github.com/aoagents/agent-orchestrator/backend/internal/service/browser"
 	chatsvc "github.com/aoagents/agent-orchestrator/backend/internal/service/chat"
 	devimportsvc "github.com/aoagents/agent-orchestrator/backend/internal/service/devimport"
+	fsbrowsersvc "github.com/aoagents/agent-orchestrator/backend/internal/service/fsbrowser"
+	"github.com/aoagents/agent-orchestrator/backend/internal/service/githubpat"
 	importsvc "github.com/aoagents/agent-orchestrator/backend/internal/service/importer"
 	linkpreviewsvc "github.com/aoagents/agent-orchestrator/backend/internal/service/linkpreview"
 	notificationsvc "github.com/aoagents/agent-orchestrator/backend/internal/service/notification"
@@ -66,6 +68,11 @@ import (
 	"github.com/aoagents/agent-orchestrator/backend/internal/storage/sqlite"
 	"github.com/aoagents/agent-orchestrator/backend/internal/terminal"
 )
+
+// usageReconcileTick is the safety-net interval for the usage pipeline
+// reconcile: hookless resume transcripts and silently lost fsnotify watches
+// are healed on this cadence even when no event or hook fires.
+const usageReconcileTick = 3 * time.Minute
 
 // sentryEnvironment maps the daemon's app version to a Sentry environment so a
 // nightly/edge build's issues do not mix with stable release health.
@@ -538,7 +545,7 @@ func Run() error {
 	lcStack.LCM.SetSessionInputLease(sessMgr)
 	lcStack.LCM.SetSessionOperationGate(sessMgr)
 	termMgr.SetSessionInputLease(sessMgr)
-	projectSvc := projectsvc.NewWithDeps(projectsvc.Deps{Store: store, Sessions: sessionSvc, DefaultHarness: domain.AgentHarness(cfg.Agent), Telemetry: telemetrySink, Logger: log})
+	projectSvc := projectsvc.NewWithDeps(projectsvc.Deps{Store: store, Sessions: sessionSvc, DefaultHarness: domain.AgentHarness(cfg.Agent), Telemetry: telemetrySink, Logger: log, OnModelScopeChanged: agentSvc.InvalidateProjectModelCatalogs})
 	lcStack.trackerDone = startTrackerIntake(ctx, store, sessionSvc, tracker, log)
 
 	hostCommands := systemexec.New(cfg.DataDir)
@@ -647,6 +654,24 @@ func Run() error {
 			},
 			ReconcilePath: usageCollector.ReconcilePath,
 		})
+		// Safety-net reconcile tick. The pipeline is event-driven otherwise:
+		// a silently lost fsnotify watch or a resume transcript that arrived
+		// without a hook would otherwise never be re-checked. NotifySourcesChanged
+		// fans into the coordinator's refresh, which reconciles sources (registering
+		// continuation transcripts) and rebuilds the watch set. Survives
+		// coordinator restarts because the pipeline forwards to the live instance.
+		go func() {
+			ticker := time.NewTicker(usageReconcileTick)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					usagePipeline.NotifySourcesChanged()
+				}
+			}
+		}()
 		lcStack.LCM.SetUsageFinalizer(usageCollector)
 	}
 	lcStack.scmDone = startSCMObserver(ctx, store, lcStack.LCM, cfg.GitLab, log)
@@ -685,6 +710,12 @@ func Run() error {
 			log.Error("cdc pipeline shutdown", "err", cdcErr)
 		}
 		return fmt.Errorf("reconcile sessions on boot: %w", reconcileErr)
+	}
+	// Reviewer-owned Chat controllers are durable independently of the worker's
+	// currently selected reviewer. Recover them through the required review
+	// service contract before accepting new automatic review work.
+	if reconcileErr := reviewSvc.RecoverChatReviewers(ctx); reconcileErr != nil {
+		log.Warn("reviewer chat recovery deferred", "err", reconcileErr)
 	}
 	agentSvc.WarmCodexAccounts()
 	autoReview := autoreview.New(store, reviewSvc, autoreview.Config{Logger: log})
@@ -790,8 +821,10 @@ func Run() error {
 		DeviceRoster:       deviceRoster,
 		DeviceLive:         presenceTracker,
 		Import:             importsvc.New(importsvc.Deps{Store: store}),
+		Directories:        fsbrowsersvc.New(),
 		ShellTerminals:     shellTermSvc,
 		AgentAuth:          agentAuthSvc,
+		GitHub:             githubpat.New(cfg.DataDir),
 		Conversations:      chatSvc,
 		Settings:           settingsSvc,
 		CDC:                store,
