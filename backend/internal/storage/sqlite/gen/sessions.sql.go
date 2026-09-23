@@ -1186,6 +1186,33 @@ func (q *Queries) SetSessionTerminateOnPRMerge(ctx context.Context, arg SetSessi
 	return result.RowsAffected()
 }
 
+const setTaskPreparationBase = `-- name: SetTaskPreparationBase :execrows
+UPDATE sessions SET
+    diff_base_sha = ?1,
+    diff_base_ref = ?2
+WHERE id = ?3
+  AND is_task_preparation = 1
+  AND provision_state = 'provisioning'
+  AND is_terminated = 0
+`
+
+type SetTaskPreparationBaseParams struct {
+	DiffBaseSha string
+	DiffBaseRef string
+	ID          domain.SessionID
+}
+
+// Only the still-hidden reservation may receive its immutable branch base.
+// The preparation worker can finish after promotion, so a full row update
+// here would overwrite the visible session's harness and display fields.
+func (q *Queries) SetTaskPreparationBase(ctx context.Context, arg SetTaskPreparationBaseParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setTaskPreparationBase, arg.DiffBaseSha, arg.DiffBaseRef, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const updateBrowserCapabilityVerifier = `-- name: UpdateBrowserCapabilityVerifier :execrows
 UPDATE sessions SET
     browser_capability_verifier = ?1
@@ -1248,8 +1275,7 @@ UPDATE sessions SET
     preview_url = ?, preview_revision = ?, terminate_on_pr_merge = ?,
     cleanup_generation = ?, browser_capability_verifier = ?,
     provider_conversation_id = ?, controller_generation = ?, model = ?, updated_at = ?,
-    is_pinned = ?, pinned_at = ?, auto_inject_review = ?, auto_inject_ci = ?,
-    provision_state = ?, provision_error = ?
+    is_pinned = ?, pinned_at = ?, auto_inject_review = ?, auto_inject_ci = ?
 WHERE id = ?
 `
 
@@ -1300,8 +1326,6 @@ type UpdateSessionParams struct {
 	PinnedAt                         sql.NullTime
 	AutoInjectReview                 bool
 	AutoInjectCI                     bool
-	ProvisionState                   domain.SessionProvisionState
-	ProvisionError                   string
 	ID                               domain.SessionID
 }
 
@@ -1353,8 +1377,6 @@ func (q *Queries) UpdateSession(ctx context.Context, arg UpdateSessionParams) er
 		arg.PinnedAt,
 		arg.AutoInjectReview,
 		arg.AutoInjectCI,
-		arg.ProvisionState,
-		arg.ProvisionError,
 		arg.ID,
 	)
 	return err

@@ -73,6 +73,21 @@ func (s *Store) SetSessionProvisionedWorkspace(
 	return rows > 0, nil
 }
 
+// SetTaskPreparationBase records the immutable base only while the row is hidden.
+func (s *Store) SetTaskPreparationBase(ctx context.Context, id domain.SessionID, baseSHA, baseRef string) (bool, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	rows, err := s.qw.SetTaskPreparationBase(ctx, gen.SetTaskPreparationBaseParams{
+		DiffBaseSha: baseSHA,
+		DiffBaseRef: baseRef,
+		ID:          id,
+	})
+	if err != nil {
+		return false, fmt.Errorf("record task preparation base for %s: %w", id, err)
+	}
+	return rows > 0, nil
+}
+
 // SetSessionProvisionState publishes an asynchronous Chat spawn's progress. It
 // writes only these two fields: the background start races the controller
 // commit, which owns the rest of the row.
@@ -156,8 +171,9 @@ WHERE session_id = ?
 	return rows > 0, nil
 }
 
-// UpdateSession writes the full mutable state of an existing session. The
-// id/project/num/created_at are immutable and not touched here.
+// UpdateSession writes the general mutable state of an existing session. The
+// provisioning state is owned by SetSessionProvisionState so stale lifecycle
+// snapshots cannot overwrite asynchronous start progress.
 func (s *Store) UpdateSession(ctx context.Context, rec domain.SessionRecord) error {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
@@ -763,8 +779,6 @@ func recordToUpdate(rec domain.SessionRecord) gen.UpdateSessionParams {
 		ControllerGeneration:             rec.Metadata.ControllerGeneration,
 		Model:                            rec.Metadata.Model,
 		UpdatedAt:                        rec.UpdatedAt,
-		ProvisionState:                   rec.ProvisionState.WithDefault(),
-		ProvisionError:                   rec.ProvisionError,
 	}
 }
 

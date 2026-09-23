@@ -116,6 +116,17 @@ func (f *fakeStore) SetSessionProvisionedWorkspace(_ context.Context, id domain.
 	return true, nil
 }
 
+func (f *fakeStore) SetTaskPreparationBase(_ context.Context, id domain.SessionID, baseSHA, baseRef string) (bool, error) {
+	rec, ok := f.sessions[id]
+	if !ok || !rec.IsTaskPreparation || rec.IsTerminated || rec.ProvisionState != domain.SessionProvisionProvisioning {
+		return false, nil
+	}
+	rec.Metadata.DiffBaseSHA = baseSHA
+	rec.Metadata.DiffBaseRef = baseRef
+	f.sessions[id] = rec
+	return true, nil
+}
+
 func (f *fakeStore) SetSessionProvisionState(_ context.Context, id domain.SessionID, state domain.SessionProvisionState, message string, now time.Time) (bool, error) {
 	rec, ok := f.sessions[id]
 	if !ok {
@@ -150,6 +161,7 @@ func (f *fakeStore) DeleteTaskPreparation(_ context.Context, id domain.SessionID
 		return false, nil
 	}
 	delete(f.sessions, id)
+	delete(f.worktrees, id)
 	return true, nil
 }
 

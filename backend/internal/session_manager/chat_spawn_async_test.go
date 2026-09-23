@@ -174,16 +174,100 @@ func TestResumeFailedAsyncChatSpawnRetriesSameSessionAndQueue(t *testing.T) {
 	}
 }
 
+func TestResumeFailedAsyncChatSpawnRetainsOpeningAttachments(t *testing.T) {
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st := newFakeStore()
+	st.projects[string(chatTestProject)] = domain.ProjectRecord{ID: string(chatTestProject), Config: testRoleAgents()}
+	ws := &fakeWorkspace{path: workspaceDir, createErr: errors.New("temporary git failure")}
+	m := New(Deps{
+		Runtime: &fakeRuntime{}, Agents: fakeAgents{}, Workspace: ws, Store: st,
+		Messenger: &fakeMessenger{}, Chat: &recordingLauncher{}, Lifecycle: &fakeLCM{store: st},
+		DataDir: dataDir, LookPath: func(string) (string, error) { return "/bin/true", nil },
+	})
+	m.browserCapabilities = browsersvc.NewAuthority()
+	deferred := deferredBackground(m)
+	cfg := asyncChatSpawnConfig("look at this")
+	cfg.Attachments = []ports.SpawnAttachment{{Ext: ".png", Data: []byte("image")}}
+	rec, _, _, err := m.Spawn(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	(*deferred)[0]()
+	if got := st.sessions[rec.ID].ProvisionState; got != domain.SessionProvisionFailed {
+		t.Fatalf("first start state = %q, want failed", got)
+	}
+	ws.createErr = nil
+	if _, err := m.ResumeAgentWithMode(context.Background(), rec.ID); err != nil {
+		t.Fatal(err)
+	}
+	(*deferred)[1]()
+	attachment := filepath.Join(workspaceDir, attachmentsDir, "attachment-1.png")
+	if body, err := os.ReadFile(attachment); err != nil || string(body) != "image" {
+		t.Fatalf("opening attachment after retry = %q, %v", body, err)
+	}
+}
+
+func TestResumeFailedAsyncChatSpawnRetriesAttachmentProjection(t *testing.T) {
+	dataDir := t.TempDir()
+	workspacePath := filepath.Join(t.TempDir(), "workspace")
+	if err := os.WriteFile(workspacePath, []byte("not a directory"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st := newFakeStore()
+	st.projects[string(chatTestProject)] = domain.ProjectRecord{ID: string(chatTestProject), Config: testRoleAgents()}
+	ws := &fakeWorkspace{path: workspacePath}
+	m := New(Deps{
+		Runtime: &fakeRuntime{}, Agents: fakeAgents{}, Workspace: ws, Store: st,
+		Messenger: &fakeMessenger{}, Chat: &recordingLauncher{}, Lifecycle: &fakeLCM{store: st},
+		DataDir: dataDir, LookPath: func(string) (string, error) { return "/bin/true", nil },
+	})
+	m.browserCapabilities = browsersvc.NewAuthority()
+	deferred := deferredBackground(m)
+	cfg := asyncChatSpawnConfig("look at this")
+	cfg.Attachments = []ports.SpawnAttachment{{Ext: ".png", Data: []byte("image")}}
+	rec, _, _, err := m.Spawn(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	(*deferred)[0]()
+	failed := st.sessions[rec.ID]
+	if failed.ProvisionState != domain.SessionProvisionFailed || failed.Metadata.WorkspacePath != workspacePath {
+		t.Fatalf("projection failure did not retain reusable workspace: %+v", failed)
+	}
+	if err := os.Remove(workspacePath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(workspacePath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.ResumeAgentWithMode(context.Background(), rec.ID); err != nil {
+		t.Fatal(err)
+	}
+	(*deferred)[1]()
+	attachment := filepath.Join(workspacePath, attachmentsDir, "attachment-1.png")
+	if body, err := os.ReadFile(attachment); err != nil || string(body) != "image" {
+		t.Fatalf("attachment after projection retry = %q, %v", body, err)
+	}
+}
+
 func TestResumeFailedAsyncChatSpawnReusesPublishedWorkspace(t *testing.T) {
 	launcher := &recordingLauncher{}
 	m, st, _ := newChatManager(launcher)
 	m.browserCapabilities = browsersvc.NewAuthority()
 	deferred := deferredBackground(m)
+	workspacePath := t.TempDir()
+	project := st.projects[string(chatTestProject)]
+	project.Config.PostCreate = []string{"printf x >> provision-runs"}
+	st.projects[string(chatTestProject)] = project
+	if err := os.WriteFile(filepath.Join(workspacePath, "provision-runs"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	st.sessions["mer-1"] = domain.SessionRecord{
 		ID: "mer-1", ProjectID: chatTestProject, Kind: domain.KindWorker,
 		Harness: domain.HarnessCodex, Mode: domain.SessionModeChat,
 		ProvisionState: domain.SessionProvisionFailed,
-		Metadata:       domain.SessionMetadata{Branch: "ao/mer-1/root", WorkspacePath: t.TempDir()},
+		Metadata:       domain.SessionMetadata{Branch: "ao/mer-1/root", WorkspacePath: workspacePath},
 	}
 	ws := m.workspace.(*fakeWorkspace)
 	ws.createErr = errors.New("must not create another worktree")
@@ -197,6 +281,9 @@ func TestResumeFailedAsyncChatSpawnReusesPublishedWorkspace(t *testing.T) {
 	}
 	if got := st.sessions["mer-1"].ProvisionState; got != domain.SessionProvisionReady {
 		t.Fatalf("provision state = %q, want ready", got)
+	}
+	if body, err := os.ReadFile(filepath.Join(workspacePath, "provision-runs")); err != nil || string(body) != "x" {
+		t.Fatalf("post-create ran again on published workspace: %q, %v", body, err)
 	}
 }
 

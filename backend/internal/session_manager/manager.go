@@ -360,6 +360,7 @@ type Store interface {
 	DeleteSessionWorktrees(ctx context.Context, id domain.SessionID) error
 	SetSessionProvisionState(ctx context.Context, id domain.SessionID, state domain.SessionProvisionState, message string, now time.Time) (bool, error)
 	SetSessionProvisionedWorkspace(ctx context.Context, id domain.SessionID, branch, workspacePath, workspaceRepoPath string, now time.Time) (bool, error)
+	SetTaskPreparationBase(ctx context.Context, id domain.SessionID, baseSHA, baseRef string) (bool, error)
 	PromoteTaskPreparation(ctx context.Context, id domain.SessionID, rec domain.SessionRecord) (bool, error)
 	DeleteTaskPreparation(ctx context.Context, id domain.SessionID) (bool, error)
 }
@@ -1468,6 +1469,7 @@ func (m *Manager) createSessionWorkspace(ctx context.Context, project domain.Pro
 			Kind:          cfg.Kind,
 			SessionPrefix: sessionPrefix(project),
 			Branch:        branch,
+			FreshBranch:   cfg.TaskPreparation != "" && cfg.Branch == "",
 			BaseBranch:    baseBranch,
 			BaseRef:       baseRefs[filepath.Clean(project.Path)],
 		})
@@ -1513,6 +1515,7 @@ func (m *Manager) createSessionWorkspace(ctx context.Context, project domain.Pro
 		Kind:          cfg.Kind,
 		SessionPrefix: sessionPrefix(project),
 		Branch:        branch,
+		FreshBranch:   cfg.TaskPreparation != "" && cfg.Branch == "",
 		RootRepoPath:  project.Path,
 		BaseBranch:    project.Config.WorktreeBaseBranch(),
 		BaseRef:       baseRefs[filepath.Clean(project.Path)],
@@ -4453,7 +4456,7 @@ func (m *Manager) restoreAttachments(ctx context.Context, id domain.SessionID, w
 		return nil
 	}
 	if err := m.workspace.AddExclude(ctx, workspace, "/"+attachmentsDir+"/"); err != nil {
-		return fmt.Errorf("exclude attachments directory: %w", err)
+		m.logger.Warn("restore attachments: exclude attachments dir", "sessionID", id, "error", err)
 	}
 	return nil
 }

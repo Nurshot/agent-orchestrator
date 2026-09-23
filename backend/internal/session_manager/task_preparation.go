@@ -74,9 +74,15 @@ func (m *Manager) PrepareTaskWorkspace(ctx context.Context, project domain.Proje
 func (m *Manager) createTaskPreparation(ctx context.Context, prep *taskPreparation) {
 	baseRefs := m.refreshDefaultBranchesBestEffort(ctx, prep.project)
 	ws, workspaceProject, err := m.createSessionWorkspace(ctx, prep.project, ports.SpawnConfig{
-		ProjectID: domain.ProjectID(prep.project.ID),
-		Kind:      domain.KindWorker,
+		ProjectID:       domain.ProjectID(prep.project.ID),
+		Kind:            domain.KindWorker,
+		TaskPreparation: domain.TaskPreparationToken(prep.record.ID),
 	}, prep.record.ID, prep.record.Metadata.Branch, baseRefs)
+	if err == nil {
+		// Keep the original branch tip for cleanup after a daemon restart.
+		// Promotion replaces this hidden row's session-facing metadata.
+		_, err = m.store.SetTaskPreparationBase(ctx, prep.record.ID, ws.BaseSHA, ws.BaseRef)
+	}
 	if err == nil {
 		var updated bool
 		updated, err = m.store.SetSessionProvisionedWorkspace(
@@ -85,12 +91,19 @@ func (m *Manager) createTaskPreparation(ctx context.Context, prep *taskPreparati
 		if err == nil && !updated {
 			err = errors.New("preparation row no longer exists")
 		}
-		if err != nil {
-			cleanupCtx, cancel := spawnRollbackContext(ctx)
-			m.destroySpawnWorkspace(cleanupCtx, ws, workspaceProject)
-			cancel()
+	}
+	if err != nil && ws.Path != "" {
+		cleanupCtx, cancel := spawnRollbackContext(ctx)
+		cleanupErr := m.destroyPreparedWorkspace(cleanupCtx, ws, workspaceProject)
+		if cleanupErr == nil {
+			cleanupErr = m.deletePreparedBranches(cleanupCtx, ws, workspaceProject)
+		}
+		cancel()
+		if cleanupErr == nil {
 			ws = ports.WorkspaceInfo{}
 			workspaceProject = nil
+		} else {
+			err = errors.Join(err, cleanupErr)
 		}
 	}
 	prep.workspace = ws
@@ -195,8 +208,13 @@ func (m *Manager) cleanupTaskPreparation(ctx context.Context, prep *taskPreparat
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-	if prep.workspace.Path != "" && !m.destroySpawnWorkspace(ctx, prep.workspace, prep.workspaceProject) {
-		return errors.New("remove prepared worktree")
+	if prep.workspace.Path != "" {
+		if err := m.destroyPreparedWorkspace(ctx, prep.workspace, prep.workspaceProject); err != nil {
+			return err
+		}
+	}
+	if err := m.deletePreparedBranches(ctx, prep.workspace, prep.workspaceProject); err != nil {
+		return err
 	}
 	prep.workspace = ports.WorkspaceInfo{}
 	prep.workspaceProject = nil
@@ -250,6 +268,7 @@ func (m *Manager) CleanupInterruptedTaskPreparations(ctx context.Context) error 
 
 func (m *Manager) cleanupTaskPreparationRecord(ctx context.Context, rec domain.SessionRecord) error {
 	ws := workspaceInfo(rec)
+	ws.BaseSHA = rec.Metadata.DiffBaseSHA
 	if ws.Path != "" {
 		if rows, ok, err := m.workspaceProjectRows(ctx, rec); err != nil {
 			return err
@@ -257,10 +276,48 @@ func (m *Manager) cleanupTaskPreparationRecord(ctx context.Context, rec domain.S
 			if _, err := m.destroyWorkspaceProjectRows(ctx, rows); err != nil {
 				return err
 			}
+			if err := m.deletePreparedBranches(ctx, ws, &ports.WorkspaceProjectInfo{Worktrees: rows}); err != nil {
+				return err
+			}
 		} else if err := m.workspace.Destroy(ctx, ws); err != nil {
 			return err
+		} else if err := m.deletePreparedBranches(ctx, ws, nil); err != nil {
+			return err
 		}
+	} else if err := m.deletePreparedBranches(ctx, ws, nil); err != nil {
+		return err
 	}
 	_, err := m.store.DeleteTaskPreparation(ctx, rec.ID)
 	return err
+}
+
+func (m *Manager) destroyPreparedWorkspace(ctx context.Context, ws ports.WorkspaceInfo, project *ports.WorkspaceProjectInfo) error {
+	if project == nil {
+		return m.workspace.Destroy(ctx, ws)
+	}
+	for i := len(project.Worktrees) - 1; i >= 0; i-- {
+		info := workspaceInfoFromRepoInfo(project.Worktrees[i])
+		if err := m.workspace.Destroy(ctx, info); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m *Manager) deletePreparedBranches(ctx context.Context, ws ports.WorkspaceInfo, project *ports.WorkspaceProjectInfo) error {
+	cleaner, ok := m.workspace.(ports.WorkspacePreparationBranchCleaner)
+	if !ok {
+		return nil
+	}
+	if project == nil {
+		return cleaner.DeletePreparedBranch(ctx, ws)
+	}
+	for _, row := range project.Worktrees {
+		info := workspaceInfoFromRepoInfo(row)
+		info.BaseSHA = row.BaseSHA
+		if err := cleaner.DeletePreparedBranch(ctx, info); err != nil {
+			return err
+		}
+	}
+	return nil
 }

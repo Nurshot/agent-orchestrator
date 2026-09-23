@@ -129,6 +129,7 @@ var _ ports.WorkspaceDefaultBranchRefresher = (*Workspace)(nil)
 var _ ports.WorkspaceProject = (*Workspace)(nil)
 var _ ports.WorkspaceObserver = (*Workspace)(nil)
 var _ ports.WorkspaceReclaimer = (*Workspace)(nil)
+var _ ports.WorkspacePreparationBranchCleaner = (*Workspace)(nil)
 
 // New builds a gitworktree Workspace, validating that ManagedRoot and
 // RepoResolver are set and resolving the root to an absolute, symlink-free path.
@@ -284,6 +285,22 @@ func (w *Workspace) Create(ctx context.Context, cfg ports.WorkspaceConfig) (port
 	if err := w.validateBranch(ctx, repo, cfg.Branch); err != nil {
 		return ports.WorkspaceInfo{}, err
 	}
+	if cfg.FreshBranch {
+		requested := cfg.Branch
+		for suffix := 2; ; suffix++ {
+			exists, err := w.branchNameTaken(ctx, repo, cfg.Branch, true)
+			if err != nil {
+				return ports.WorkspaceInfo{}, err
+			}
+			if !exists {
+				break
+			}
+			if suffix > 100 {
+				return ports.WorkspaceInfo{}, fmt.Errorf("gitworktree: no unused branch for %q", cfg.Branch)
+			}
+			cfg.Branch = fmt.Sprintf("%s-%d", requested, suffix)
+		}
+	}
 	path, err := w.managedPath(cfg)
 	if err != nil {
 		return ports.WorkspaceInfo{}, err
@@ -291,6 +308,9 @@ func (w *Workspace) Create(ctx context.Context, cfg ports.WorkspaceConfig) (port
 	if info, ok, err := w.existingWorktree(ctx, repo, path, cfg); err != nil {
 		return ports.WorkspaceInfo{}, err
 	} else if ok {
+		if cfg.FreshBranch {
+			return ports.WorkspaceInfo{}, fmt.Errorf("gitworktree: prepared workspace path %q already exists", path)
+		}
 		refs, err := w.resolveWorktreeRefsWithBudget(ctx, repo, cfg.Branch, cfg.BaseBranch)
 		if err != nil {
 			return ports.WorkspaceInfo{}, err
@@ -302,7 +322,14 @@ func (w *Workspace) Create(ctx context.Context, cfg ports.WorkspaceConfig) (port
 	if err != nil {
 		return ports.WorkspaceInfo{}, err
 	}
-	return ports.WorkspaceInfo{Path: path, Branch: cfg.Branch, BaseRef: baseRef, SessionID: cfg.SessionID, ProjectID: cfg.ProjectID}, nil
+	var baseSHA string
+	if cfg.FreshBranch {
+		baseSHA, err = w.revParse(ctx, repo, "refs/heads/"+cfg.Branch)
+		if err != nil {
+			return ports.WorkspaceInfo{}, err
+		}
+	}
+	return ports.WorkspaceInfo{Path: path, Branch: cfg.Branch, BaseSHA: baseSHA, BaseRef: baseRef, SessionID: cfg.SessionID, ProjectID: cfg.ProjectID}, nil
 }
 
 // CreateWorkspaceProject materialises a root-as-repo workspace session: the
@@ -386,7 +413,7 @@ func (w *Workspace) CreateWorkspaceProject(ctx context.Context, cfg ports.Worksp
 	}
 	branch := requestedBranch
 	if !recovering {
-		branch, err = w.workspaceProjectBranch(ctx, repos, requestedBranch)
+		branch, err = w.workspaceProjectBranch(ctx, repos, requestedBranch, cfg.FreshBranch)
 		if err != nil {
 			return ports.WorkspaceProjectInfo{}, err
 		}
@@ -465,7 +492,7 @@ func (w *Workspace) CreateWorkspaceProject(ctx context.Context, cfg ports.Worksp
 		}
 		out.Worktrees = append(out.Worktrees, info)
 		if repo.name == domain.RootWorkspaceRepoName {
-			out.Root = ports.WorkspaceInfo{Path: repo.outputPath, Branch: branch, BaseRef: repo.baseRef, SessionID: cfg.SessionID, ProjectID: cfg.ProjectID}
+			out.Root = ports.WorkspaceInfo{Path: repo.outputPath, Branch: branch, BaseSHA: baseSHA, BaseRef: repo.baseRef, SessionID: cfg.SessionID, ProjectID: cfg.ProjectID}
 		}
 	}
 	return out, nil
@@ -677,6 +704,52 @@ func (w *Workspace) Destroy(ctx context.Context, info ports.WorkspaceInfo) error
 // workspaces need that told apart from a real removal.
 func (w *Workspace) DestroyReclaim(ctx context.Context, info ports.WorkspaceInfo) (ports.WorkspaceReclaim, error) {
 	return w.destroy(ctx, info)
+}
+
+// DeletePreparedBranch is called only after a speculative worktree is gone.
+// A branch that moved beyond its original base belongs to the user and stays.
+func (w *Workspace) DeletePreparedBranch(ctx context.Context, info ports.WorkspaceInfo) error {
+	if info.Branch == "" || info.BaseSHA == "" {
+		return nil
+	}
+	repo, err := w.repoPathForInfo(info)
+	if err != nil {
+		return err
+	}
+	if err := w.validateBranch(ctx, repo, info.Branch); err != nil {
+		return err
+	}
+	unlock, err := repoTeardownLock(repo)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if err := w.requireReachableRepo(repo); err != nil {
+		return err
+	}
+	branchRef := "refs/heads/" + info.Branch
+	exists, err := w.refExists(ctx, repo, branchRef)
+	if err != nil || !exists {
+		return err
+	}
+	records, err := w.listRecords(ctx, repo)
+	if err != nil {
+		return err
+	}
+	if _, checkedOut := findWorktreeByBranch(records, info.Branch); checkedOut {
+		return fmt.Errorf("gitworktree: prepared branch %q is still checked out", info.Branch)
+	}
+	tip, err := w.revParse(ctx, repo, branchRef)
+	if err != nil {
+		return err
+	}
+	if tip != info.BaseSHA {
+		return nil
+	}
+	if _, err := w.run(ctx, w.binary, "-C", repo, "update-ref", "-d", branchRef, tip); err != nil {
+		return fmt.Errorf("gitworktree: delete unmodified prepared branch %q: %w", info.Branch, err)
+	}
+	return nil
 }
 
 func (w *Workspace) destroy(ctx context.Context, info ports.WorkspaceInfo) (ports.WorkspaceReclaim, error) {
@@ -1491,7 +1564,7 @@ type workspaceProjectRepo struct {
 	baseRef      string
 }
 
-func (w *Workspace) workspaceProjectBranch(ctx context.Context, repos []workspaceProjectRepo, requested string) (string, error) {
+func (w *Workspace) workspaceProjectBranch(ctx context.Context, repos []workspaceProjectRepo, requested string, fresh bool) (string, error) {
 	branch := strings.TrimSpace(requested)
 	if branch == "" {
 		return "", errors.New("gitworktree: branch is required")
@@ -1501,7 +1574,7 @@ func (w *Workspace) workspaceProjectBranch(ctx context.Context, repos []workspac
 		if i > 0 {
 			candidate = fmt.Sprintf("%s-%d", branch, i+1)
 		}
-		free, err := w.workspaceProjectBranchFree(ctx, repos, candidate)
+		free, err := w.workspaceProjectBranchFree(ctx, repos, candidate, fresh)
 		if err != nil {
 			return "", err
 		}
@@ -1512,12 +1585,12 @@ func (w *Workspace) workspaceProjectBranch(ctx context.Context, repos []workspac
 	return "", fmt.Errorf("gitworktree: could not find free workspace branch for %q", branch)
 }
 
-func (w *Workspace) workspaceProjectBranchFree(ctx context.Context, repos []workspaceProjectRepo, branch string) (bool, error) {
+func (w *Workspace) workspaceProjectBranchFree(ctx context.Context, repos []workspaceProjectRepo, branch string, fresh bool) (bool, error) {
 	for _, repo := range repos {
 		if err := w.validateBranch(ctx, repo.repoPath, branch); err != nil {
 			return false, err
 		}
-		exists, err := w.refExists(ctx, repo.repoPath, "refs/heads/"+branch)
+		exists, err := w.branchNameTaken(ctx, repo.repoPath, branch, fresh)
 		if err != nil {
 			return false, err
 		}
@@ -1533,6 +1606,23 @@ func (w *Workspace) workspaceProjectBranchFree(ctx context.Context, repos []work
 		}
 	}
 	return true, nil
+}
+
+func (w *Workspace) branchNameTaken(ctx context.Context, repo, branch string, includeRemotes bool) (bool, error) {
+	exists, err := w.refExists(ctx, repo, "refs/heads/"+branch)
+	if err != nil || exists || !includeRemotes {
+		return exists, err
+	}
+	out, err := w.run(ctx, w.binary, "-C", repo, "for-each-ref", "--format=%(refname)", "refs/remotes")
+	if err != nil {
+		return false, fmt.Errorf("gitworktree: list remote branches: %w", err)
+	}
+	for _, ref := range strings.Fields(string(out)) {
+		if strings.HasSuffix(ref, "/"+branch) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (w *Workspace) createWorkspaceProjectRepo(ctx context.Context, repo workspaceProjectRepo, branch string) (string, error) {

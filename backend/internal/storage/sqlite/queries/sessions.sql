@@ -38,8 +38,7 @@ UPDATE sessions SET
     preview_url = ?, preview_revision = ?, terminate_on_pr_merge = ?,
     cleanup_generation = ?, browser_capability_verifier = ?,
     provider_conversation_id = ?, controller_generation = ?, model = ?, updated_at = ?,
-    is_pinned = ?, pinned_at = ?, auto_inject_review = ?, auto_inject_ci = ?,
-    provision_state = ?, provision_error = ?
+    is_pinned = ?, pinned_at = ?, auto_inject_review = ?, auto_inject_ci = ?
 WHERE id = ?;
 
 -- name: UpdateSessionModel :execrows
@@ -280,6 +279,18 @@ UPDATE sessions SET
     workspace_repo_path = sqlc.arg(workspace_repo_path),
     updated_at = sqlc.arg(updated_at)
 WHERE id = sqlc.arg(id)
+  AND provision_state = 'provisioning'
+  AND is_terminated = 0;
+
+-- name: SetTaskPreparationBase :execrows
+-- Only the still-hidden reservation may receive its immutable branch base.
+-- The preparation worker can finish after promotion, so a full row update
+-- here would overwrite the visible session's harness and display fields.
+UPDATE sessions SET
+    diff_base_sha = sqlc.arg(diff_base_sha),
+    diff_base_ref = sqlc.arg(diff_base_ref)
+WHERE id = sqlc.arg(id)
+  AND is_task_preparation = 1
   AND provision_state = 'provisioning'
   AND is_terminated = 0;
 

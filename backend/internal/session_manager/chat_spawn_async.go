@@ -68,6 +68,16 @@ func (m *Manager) beginAsyncChatSpawn(ctx context.Context, in asyncChatSpawn) (d
 		rollback()
 		return domain.SessionRecord{}, 0, 0, wrapSpawnStage(id, ErrSpawnCreate, err)
 	}
+	if !in.retry && len(in.cfg.Attachments) > 0 {
+		stageStarted := time.Now()
+		for i, attachment := range in.cfg.Attachments {
+			if err := m.attachments.PutCanonical(ctx, id, spawnAttachmentName(i, attachment), attachment.Data); err != nil {
+				rollback()
+				return domain.SessionRecord{}, 0, 0, wrapSpawnStage(id, ErrSpawnAttachments, err)
+			}
+		}
+		m.logAsyncChatSpawnStage(id, "spawn_attachments", stageStarted)
+	}
 	if in.prompt != "" {
 		if _, err := m.chat.QueueChatPrompt(ctx, id, in.prompt); err != nil {
 			rollback()
@@ -114,7 +124,8 @@ func (m *Manager) completeAsyncChatSpawn(ctx context.Context, in asyncChatSpawn)
 	var ws ports.WorkspaceInfo
 	var workspaceProject *ports.WorkspaceProjectInfo
 	var err error
-	if in.retry && in.record.Metadata.WorkspacePath != "" {
+	reusePublishedWorkspace := in.retry && in.record.Metadata.WorkspacePath != ""
+	if reusePublishedWorkspace {
 		ws = workspaceInfo(in.record)
 		if in.projectKind == domain.ProjectKindWorkspace {
 			var rows []ports.WorkspaceRepoInfo
@@ -151,30 +162,18 @@ func (m *Manager) completeAsyncChatSpawn(ctx context.Context, in asyncChatSpawn)
 	}
 	m.logAsyncChatSpawnStage(id, "workspace_create", stageStarted)
 	stageStarted = time.Now()
-	if err := m.provisionWorkspace(ctx, in.project, ws.Path); err != nil {
-		m.cleanupAsyncChatWorkspace(ctx, id, ws, workspaceProject)
-		m.failAsyncChatSpawn(ctx, id, wrapSpawnStage(id, ErrWorkspaceProvision, err))
-		return
+	if !reusePublishedWorkspace {
+		if err := m.provisionWorkspace(ctx, in.project, ws.Path); err != nil {
+			m.cleanupAsyncChatWorkspace(ctx, id, ws, workspaceProject)
+			m.failAsyncChatSpawn(ctx, id, wrapSpawnStage(id, ErrWorkspaceProvision, err))
+			return
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		m.cleanupAsyncChatWorkspace(ctx, id, ws, workspaceProject)
 		return
 	}
 	m.logAsyncChatSpawnStage(id, "workspace_provision", stageStarted)
-	if len(in.cfg.Attachments) > 0 {
-		stageStarted = time.Now()
-		// The prompt already references these by name (spawnAttachmentRefs); this
-		// is where the bytes land, before the agent can read them.
-		if _, err := m.writeSpawnAttachments(ctx, id, ws.Path, in.cfg.Attachments); err != nil {
-			m.cleanupAsyncChatWorkspace(ctx, id, ws, workspaceProject)
-			m.failAsyncChatSpawn(ctx, id, wrapSpawnStage(id, ErrSpawnAttachments, err))
-			return
-		}
-		if err := m.workspace.AddExclude(ctx, ws, "/"+attachmentsDir+"/"); err != nil {
-			m.logger.Warn("spawn: exclude attachments dir", "sessionID", id, "error", err)
-		}
-		m.logAsyncChatSpawnStage(id, "spawn_attachments", stageStarted)
-	}
 	// Publish the worktree now rather than at the controller commit. Until the
 	// row carries it, every workspace-scoped read answers
 	// SESSION_WORKSPACE_NOT_FOUND, and the provider start that follows is long
@@ -196,10 +195,11 @@ func (m *Manager) completeAsyncChatSpawn(ctx context.Context, in asyncChatSpawn)
 	m.logAsyncChatSpawnStage(id, "workspace_publish", stageStarted)
 	// A concurrent StageAttachments call must either see this workspace path and
 	// write directly into it, or land in canonical storage before this replay.
+	// This also projects opening attachments saved before the early response.
 	stageStarted = time.Now()
 	if err := m.restoreAttachments(ctx, id, ws); err != nil {
-		m.logger.Warn("spawn: materialize attachments staged while provisioning",
-			"sessionID", id, "error", err)
+		m.failAsyncChatSpawn(ctx, id, wrapSpawnStage(id, ErrSpawnAttachments, err))
+		return
 	}
 	m.logAsyncChatSpawnStage(id, "attachment_restore", stageStarted)
 
@@ -279,15 +279,31 @@ func (m *Manager) retryFailedChatSpawn(ctx context.Context, rec domain.SessionRe
 		return RestoreResult{Session: ready, Mode: RestoreModeNative}, err
 	}
 	if rec.Metadata.ProviderConversationID != "" {
-		resumed, err := m.resumeAgentRecordWithPolicy(ctx, "retry start", rec, false, false)
+		var err error
+		rec, err = m.setProvisionState(ctx, rec.ID, domain.SessionProvisionProvisioning, "")
 		if err != nil {
 			return RestoreResult{}, err
 		}
+		fail := func(cause error) (RestoreResult, error) {
+			cleanupCtx, cancel := spawnRollbackContext(ctx)
+			defer cancel()
+			if _, err := m.setProvisionState(cleanupCtx, rec.ID, domain.SessionProvisionFailed, cause.Error()); err != nil {
+				return RestoreResult{}, errors.Join(cause, err)
+			}
+			return RestoreResult{}, cause
+		}
+		resumed, err := m.resumeAgentRecordWithPolicy(ctx, "retry start", rec, false, false)
+		if err != nil {
+			return fail(err)
+		}
 		if err := m.chat.DrainChatQueue(ctx, rec.ID); err != nil {
-			return RestoreResult{}, err
+			return fail(err)
 		}
 		resumed.Session, err = m.setProvisionState(ctx, rec.ID, domain.SessionProvisionReady, "")
-		return resumed, err
+		if err != nil {
+			return fail(err)
+		}
+		return resumed, nil
 	}
 	project, err := m.loadProject(ctx, rec.ProjectID)
 	if err != nil {
