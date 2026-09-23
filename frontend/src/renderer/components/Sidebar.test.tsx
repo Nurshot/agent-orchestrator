@@ -877,13 +877,14 @@ describe("Sidebar", () => {
 		const scroller = screen.getByTestId("sidebar-scratchpad-scroller");
 		expect(scroller).toHaveClass("overflow-y-auto");
 		expect(scroller.style.height).toBe("");
-		expect(scroller.style.maxHeight).toBe("50cqh");
+		expect(scroller.style.maxHeight).toBe("");
+		expect(document.querySelector("[data-scratchpad-section]")).toHaveStyle({ maxHeight: "calc(50cqh - var(--space-2))" });
 
 		await user.click(screen.getByRole("button", { name: "Show 3 more agents" }));
 
 		expect(screen.getByText("Agent 11")).toBeInTheDocument();
 		expect(screen.getByText("Agent 13")).toBeInTheDocument();
-		expect(scroller.style.maxHeight).toBe("50cqh");
+		expect(scroller.style.maxHeight).toBe("");
 		expect(screen.getByRole("button", { name: "Show fewer agents" })).toBeInTheDocument();
 
 		await user.click(screen.getByRole("button", { name: "Show fewer agents" }));

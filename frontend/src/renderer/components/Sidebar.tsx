@@ -304,14 +304,14 @@ export const SIDEBAR_MAX_WIDTH = 420;
  *  One-way for now (no Show less / no persistence) — intentional first cut.
  *  Collapsed icon rail always shows the full list so projects stay reachable. */
 const SIDEBAR_INITIAL_SECTION_LIMIT = 10;
-/** Scratchpad stays content-sized up to half of the available sidebar height. */
+/** Keep the complete Scratchpad section (including its footer gap) under half the available height. */
 const SECTION_SCROLLER_CLASS =
 	"scrollbar-none overflow-y-auto overflow-x-hidden overscroll-contain group-data-[collapsible=icon]:overflow-visible";
 
-/** Scratchpad's scroller cap, or none in the collapsed icon rail. */
-function sectionScrollerStyle(isCollapsed: boolean): CSSProperties | undefined {
+/** Scratchpad's total section cap, or none in the collapsed icon rail. */
+function scratchpadSectionStyle(isCollapsed: boolean): CSSProperties | undefined {
 	if (isCollapsed) return undefined;
-	return { maxHeight: "50cqh" };
+	return { maxHeight: "calc(50cqh - var(--space-2))" };
 }
 
 function SidebarSectionScroller({
@@ -379,7 +379,7 @@ function SidebarSectionScroller({
 	);
 }
 
-function AnimatedSectionBody({ open, children }: { open: boolean; children: ReactNode }) {
+function AnimatedSectionBody({ open, children, className }: { open: boolean; children: ReactNode; className?: string }) {
 	const prefersReducedMotion = useReducedMotion();
 	return (
 		<AnimatePresence initial={false}>
@@ -391,8 +391,9 @@ function AnimatedSectionBody({ open, children }: { open: boolean; children: Reac
 					exit={{ gridTemplateRows: "0fr", opacity: 0 }}
 					transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.18, ease: [0.25, 0.46, 0.45, 0.94] }}
 					style={{ display: "grid" }}
+					className={className}
 				>
-					<div className="min-h-0 overflow-hidden">{children}</div>
+					<div className="flex min-h-0 flex-col overflow-hidden">{children}</div>
 				</motion.div>
 			) : null}
 		</AnimatePresence>
@@ -1749,7 +1750,11 @@ function ScratchpadSection({
 	);
 
 	return (
-		<div className="sidebar-expanded-chrome mb-2 flex shrink-0 flex-col group-data-[collapsible=icon]:hidden" data-scratchpad-section="">
+		<div
+			className="sidebar-expanded-chrome mb-2 flex min-h-0 shrink-0 flex-col overflow-hidden group-data-[collapsible=icon]:hidden"
+			data-scratchpad-section=""
+			style={scratchpadSectionStyle(isCollapsed)}
+		>
 			<SectionDisclosure
 				label={workspace.name}
 				open={open}
@@ -1773,11 +1778,11 @@ function ScratchpadSection({
 					</Tooltip>
 				}
 			/>
-			<AnimatedSectionBody open={open && listedSessions.length > 0}>
+			<AnimatedSectionBody open={open && listedSessions.length > 0} className="min-h-0 flex-1">
 				<SidebarSectionScroller
-					className={SECTION_SCROLLER_CLASS}
+					className={`${SECTION_SCROLLER_CLASS} min-h-0 flex-1`}
 					testId="sidebar-scratchpad-scroller"
-					style={sectionScrollerStyle(isCollapsed)}
+					wrapperClassName="flex-1"
 				>
 					<SessionReorderList
 						dndId={sessionDndId(STANDALONE_WORKSPACE_ID)}
@@ -2790,7 +2795,7 @@ function ShowMoreRow({ label, expanded, onClick }: { label: string; expanded: bo
 				className={cn(
 					SECTION_ROW_CLASS,
 					NAV_ROW_HIGHLIGHT_HOST_CLASS,
-					"mb-1 rounded-lg text-left text-muted-foreground",
+					"mb-1 shrink-0 rounded-lg text-left text-muted-foreground",
 				)}
 				initial={{ opacity: 0, y: 4 }}
 				animate={{ opacity: 1, y: 0 }}
