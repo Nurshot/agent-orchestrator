@@ -1437,7 +1437,21 @@ function CloudProjectCard({
 			setSubmitIsUnreachable(false);
 			setSubmitIsUnavailable(false);
 		} catch (err) {
-			setGithubTokenError(err instanceof Error ? err.message : t("createProject.couldNotAdd"));
+			// A 401 here is the AO Cloud SESSION token, not the GitHub PAT: PUT
+			// /me/github-pat is rejected at the control plane's auth middleware
+			// before the token is ever validated. Prompt a re-sign-in instead of
+			// mislabeling it as an invalid token (a genuinely bad PAT returns 422
+			// with a token-specific message, handled by the else branch).
+			if (err instanceof CloudCpError && err.status === 401) {
+				setGithubTokenError(
+					t("createProject.cloudSessionExpiredForToken", {
+						defaultValue: "Your AO Cloud session expired. Sign in again, then re-enter the token.",
+					}),
+				);
+				onAuthRequired();
+			} else {
+				setGithubTokenError(err instanceof Error ? err.message : t("createProject.couldNotAdd"));
+			}
 		} finally {
 			setGithubTokenBusy(false);
 		}
