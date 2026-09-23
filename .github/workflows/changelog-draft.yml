@@ -73,6 +73,7 @@ jobs:
           npm run changelog:test
           npm run changelog:validate
           npm run build
+          npm run changelog:ui-test
 
       - name: Commit draft
         if: steps.draft.outputs.has_changes == 'true'
