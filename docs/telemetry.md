@@ -194,8 +194,10 @@ username:
    sends an organization or a bot account.
 2. Best-effort, local signals. Only when no credential is configured at all, AO
    reads the username from GitHub's SSH authentication greeting (a
-   non-interactive `ssh -T git@github.com`, which mutates nothing and prompts for
-   nothing) and, failing that, from a GitHub noreply address configured as your
+   non-interactive `ssh -T git@github.com` that mutates nothing, prompts for
+   nothing, ignores your `~/.ssh/config`, and skips hardware security keys that
+   would need a touch) and, failing that, from a GitHub noreply address set as your
+   global
    git commit email. These are read locally and are not API-verified, so the
    account type is not checked. A configured token that resolves to an
    organization or bot account, and any transient lookup failure, both stay

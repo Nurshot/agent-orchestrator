@@ -88,6 +88,11 @@ func (s *Service) SetGitHubConnectedNotifier(n GitHubConnectedNotifier) {
 // transition. The first observation just records state, so an operator who
 // was already signed in before AO started does not count as connecting.
 func (s *Service) observeGitHubAuth(ctx context.Context, req Requirement) {
+	// A check cut short by a closed request reports signed out without knowing;
+	// recording it would turn the next check into a false "just connected".
+	if ctx.Err() != nil {
+		return
+	}
 	s.authMu.Lock()
 	connected := s.authSeen && !s.authLast && req.Satisfied
 	s.authSeen, s.authLast = true, req.Satisfied

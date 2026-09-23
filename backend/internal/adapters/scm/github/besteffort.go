@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
+
 	aoprocess "github.com/aoagents/agent-orchestrator/backend/internal/process"
 )
 
@@ -64,6 +66,7 @@ type BestEffortLoginResolver struct {
 	Clock func() time.Time
 
 	mu        sync.Mutex
+	group     singleflight.Group
 	login     string
 	resolved  bool
 	expiresAt time.Time
@@ -72,17 +75,35 @@ type BestEffortLoginResolver struct {
 // BestEffortLogin returns a probable login, or "" when none could be resolved.
 // The error is always nil: every failure degrades to an empty result so the
 // caller can stay anonymous.
+//
+// Concurrent callers share one in-flight probe instead of queueing behind a
+// lock, so parallel spawns wait at most one probe, and a caller whose context
+// ends stops waiting without cancelling the probe for the others.
 func (r *BestEffortLoginResolver) BestEffortLogin(ctx context.Context) (string, error) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	now := r.now()
 	if r.resolved && now.Before(r.expiresAt) {
-		return r.login, nil
+		login := r.login
+		r.mu.Unlock()
+		return login, nil
 	}
-	r.login = r.probe(ctx)
-	r.resolved = true
-	r.expiresAt = now.Add(r.ttl())
-	return r.login, nil
+	r.mu.Unlock()
+	ch := r.group.DoChan("probe", func() (any, error) {
+		probeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*sshProbeTimeout)
+		defer cancel()
+		login := r.probe(probeCtx)
+		r.mu.Lock()
+		r.login, r.resolved, r.expiresAt = login, true, r.now().Add(r.ttl())
+		r.mu.Unlock()
+		return login, nil
+	})
+	select {
+	case res := <-ch:
+		login, _ := res.Val.(string)
+		return login, nil
+	case <-ctx.Done():
+		return "", nil
+	}
 }
 
 func (r *BestEffortLoginResolver) probe(ctx context.Context) string {
@@ -121,22 +142,37 @@ func (r *BestEffortLoginResolver) ttl() time.Duration {
 	return defaultBestEffortTTL
 }
 
+// sshProbeArgs keeps the probe silent and side-effect free. -F none skips the
+// user's ssh_config, which can run arbitrary commands (ProxyCommand,
+// LocalCommand, Match exec), reuse a ControlMaster, or point IdentityAgent at an
+// approval-prompting agent such as 1Password. Security-key algorithms are
+// excluded because FIDO keys demand a physical touch that BatchMode does not
+// suppress. The SSH_AUTH_SOCK agent stays enabled: keys held only in the agent
+// are common, and dropping it loses their greeting entirely.
+var sshProbeArgs = []string{
+	"-F", "none",
+	"-o", "BatchMode=yes",
+	"-o", "StrictHostKeyChecking=no",
+	"-o", "UserKnownHostsFile=/dev/null",
+	"-o", "ConnectTimeout=3",
+	"-o", "PasswordAuthentication=no",
+	"-o", "KbdInteractiveAuthentication=no",
+	"-o", "PubkeyAcceptedAlgorithms=-sk-ssh-ed25519@openssh.com,sk-ecdsa-sha2-nistp256@openssh.com",
+	"-o", "ControlMaster=no",
+	"-o", "ControlPath=none",
+	"-o", "ForwardAgent=no",
+	"-o", "ClearAllForwardings=yes",
+	"-T", "git@github.com",
+}
+
 // sshGreetingLogin opens a non-interactive SSH connection to github.com and
-// parses the username from the authentication greeting. It never mutates the
-// user's known_hosts (UserKnownHostsFile=/dev/null) and never prompts
-// (BatchMode=yes). GitHub always closes the session with exit status 1 after the
-// greeting, so a non-nil Run error is expected and ignored; only the greeting
-// text is used.
+// parses the username from the authentication greeting. GitHub always closes
+// the session with exit status 1 after the greeting, so a non-nil Run error is
+// expected and ignored; only the greeting text is used.
 func sshGreetingLogin(ctx context.Context) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, sshProbeTimeout)
 	defer cancel()
-	cmd := aoprocess.CommandContext(ctx, "ssh",
-		"-o", "BatchMode=yes",
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-o", "ConnectTimeout=3",
-		"-T", "git@github.com",
-	)
+	cmd := aoprocess.CommandContext(ctx, "ssh", sshProbeArgs...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	_ = cmd.Run()

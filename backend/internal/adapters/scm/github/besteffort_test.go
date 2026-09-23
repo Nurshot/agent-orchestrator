@@ -7,6 +7,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -228,5 +231,95 @@ func TestNoTokenUnlessCancelledKeepsTimeouts(t *testing.T) {
 	}
 	if err := noTokenUnlessCancelled(context.Background(), probeErr); !errors.Is(err, ErrNoToken) {
 		t.Fatalf("failed probe err = %v, want ErrNoToken", err)
+	}
+}
+
+// The probe must never run user ssh_config commands or wait on a security-key
+// touch, and must keep the agent so agent-only keys still greet.
+func TestSSHProbeArgsStaySilent(t *testing.T) {
+	args := strings.Join(sshProbeArgs, " ")
+	for _, want := range []string{"-F none", "BatchMode=yes", "PasswordAuthentication=no", "KbdInteractiveAuthentication=no", "PubkeyAcceptedAlgorithms=-sk-", "ControlPath=none", "UserKnownHostsFile=/dev/null"} {
+		if !strings.Contains(args, want) {
+			t.Errorf("ssh probe args %q missing %q", args, want)
+		}
+	}
+	if strings.Contains(args, "IdentityAgent=none") {
+		t.Errorf("ssh probe args %q disable the agent; agent-only keys would never greet", args)
+	}
+}
+
+// Parallel spawns on a token-less machine must share one probe rather than
+// queueing a probe each behind the resolver lock.
+func TestBestEffortLoginSharesOneInFlightProbe(t *testing.T) {
+	var calls atomic.Int32
+	release := make(chan struct{})
+	r := &BestEffortLoginResolver{
+		SSH: func(context.Context) (string, error) {
+			calls.Add(1)
+			<-release
+			return "octocat", nil
+		},
+		Email: func(context.Context) (string, error) { return "", errNoBestEffortLogin },
+	}
+	var wg sync.WaitGroup
+	results := make(chan string, 8)
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			login, _ := r.BestEffortLogin(context.Background())
+			results <- login
+		}()
+	}
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	wg.Wait()
+	close(results)
+	for login := range results {
+		if login != "octocat" {
+			t.Fatalf("login = %q, want octocat", login)
+		}
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("ssh probe ran %d times, want 1", got)
+	}
+}
+
+// A caller whose context ends stops waiting, but the shared probe still
+// finishes and caches its result for the next caller.
+func TestBestEffortLoginCallerTimeoutKeepsProbeRunning(t *testing.T) {
+	release := make(chan struct{})
+	var calls atomic.Int32
+	r := &BestEffortLoginResolver{
+		SSH: func(ctx context.Context) (string, error) {
+			calls.Add(1)
+			select {
+			case <-release:
+				return "octocat", nil
+			case <-ctx.Done():
+				return "", ctx.Err()
+			}
+		},
+		Email: func(context.Context) (string, error) { return "", errNoBestEffortLogin },
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	if login, _ := r.BestEffortLogin(ctx); login != "" {
+		t.Fatalf("timed-out caller login = %q, want empty", login)
+	}
+	close(release)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		login, _ := r.BestEffortLogin(context.Background())
+		if login == "octocat" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("probe result never cached; last login = %q", login)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("ssh probe ran %d times, want 1", got)
 	}
 }

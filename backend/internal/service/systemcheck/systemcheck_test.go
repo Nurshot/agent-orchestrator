@@ -583,3 +583,25 @@ func TestCheckGitHubAuth_NotifiesOnlyOnSignInTransition(t *testing.T) {
 		})
 	}
 }
+
+// A check whose request was cancelled reports signed out without knowing, so it
+// must not be recorded; otherwise the next real check reads as a fresh connect.
+func TestCheckGitHubAuth_CancelledCheckIsNotRecorded(t *testing.T) {
+	runner := &fakeCommandRunner{stdout: `{"hosts":{"github.com":[{"active":true,"state":"success"}]}}`}
+	svc := NewWithCommandRunner(&fakeHarnessCatalog{}, executableFinderFunc(lookPathFound(map[string]string{"gh": "/usr/bin/gh"})), runner)
+	notifier := &fakeConnectedNotifier{}
+	svc.SetGitHubConnectedNotifier(notifier)
+
+	if _, err := svc.CheckGitHubAuth(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	svc.observeGitHubAuth(cancelled, Requirement{ID: "github-auth"})
+	if _, err := svc.CheckGitHubAuth(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if notifier.calls != 0 {
+		t.Fatalf("GitHubConnected calls = %d, want 0 for a user who stayed signed in", notifier.calls)
+	}
+}
