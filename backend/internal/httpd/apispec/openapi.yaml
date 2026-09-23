@@ -10125,6 +10125,7 @@ components:
           - omp
           - prime-agent
           - autohand
+          - unreal-agent
           - fake
           type: string
         approvalMode:
@@ -10748,6 +10749,7 @@ components:
           - kimchi
           - prime-agent
           - omp
+          - unreal-agent
           - cloudflared
           type: string
         updatedAt:
@@ -12879,6 +12881,7 @@ components:
           - omp
           - prime-agent
           - autohand
+          - unreal-agent
           type: string
         issueId:
           type: string
