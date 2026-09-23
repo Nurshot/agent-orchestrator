@@ -126,8 +126,9 @@ func TestListReposForceRefreshesOnUnexpected401(t *testing.T) {
 	// Token is not yet expired by its recorded deadline, so no proactive refresh;
 	// GitHub rejects it anyway (early expiry / rotation). One forced refresh +
 	// retry must recover without a reconnect prompt.
-	future := time.Now().Add(time.Hour)
-	if err := s.StoreOAuthToken(context.Background(), "old-token", "old-refresh", future, future.Add(future.Sub(time.Now()))); err != nil {
+	accessExpiry := time.Now().Add(time.Hour)
+	refreshExpiry := time.Now().Add(180 * 24 * time.Hour)
+	if err := s.StoreOAuthToken(context.Background(), "old-token", "old-refresh", accessExpiry, refreshExpiry); err != nil {
 		t.Fatalf("StoreOAuthToken: %v", err)
 	}
 	repos, err := s.ListRepos(context.Background())

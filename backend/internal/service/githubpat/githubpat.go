@@ -109,7 +109,7 @@ func (s *Service) writeLocked(rec storedPAT) error {
 	if err := os.MkdirAll(s.dataDir, 0o700); err != nil {
 		return fmt.Errorf("creating data dir: %w", err)
 	}
-	data, err := json.Marshal(rec)
+	data, err := json.Marshal(rec) //nolint:gosec // G117: storedPAT intentionally persists the OAuth refresh token to a 0600 local file so the daemon can renew the GitHub App token without a user reconnect.
 	if err != nil {
 		return err
 	}
