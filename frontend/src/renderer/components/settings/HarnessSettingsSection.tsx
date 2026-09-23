@@ -44,6 +44,11 @@ const AUTH_STATE_RANK = {
 	unauthorized: 1,
 	unknown: 2,
 } as const;
+const INSTALL_STATE_RANK = {
+	installed: 0,
+	unknown: 1,
+	not_installed: 2,
+} as const;
 type AuthTerminalWorkflow = {
 	agentId: AgentId;
 	action: string;
@@ -148,9 +153,13 @@ export function HarnessSettingsSection({
 	const rows = AGENT_OPTIONS
 		.filter((agentId) => agentId === targetAgentId || agentId === authWorkflow?.agentId || agentLabel(agentId).toLowerCase().includes(normalizedSearch))
 		.sort((left, right) => {
-			const leftState = readinessAgents.get(left)?.authentication.state ?? "unknown";
-			const rightState = readinessAgents.get(right)?.authentication.state ?? "unknown";
-			return AUTH_STATE_RANK[leftState] - AUTH_STATE_RANK[rightState];
+			const leftAgent = readinessAgents.get(left);
+			const rightAgent = readinessAgents.get(right);
+			const authOrder = AUTH_STATE_RANK[leftAgent?.authentication.state ?? "unknown"]
+				- AUTH_STATE_RANK[rightAgent?.authentication.state ?? "unknown"];
+			if (authOrder !== 0) return authOrder;
+			return INSTALL_STATE_RANK[leftAgent?.installation.state ?? "unknown"]
+				- INSTALL_STATE_RANK[rightAgent?.installation.state ?? "unknown"];
 		});
 	const updateAuthState = useCallback((agentId: AgentId, patch: Partial<AgentAuthState>) => {
 		setAuthStates((current) => ({
