@@ -554,7 +554,7 @@ func (c *SessionsController) serveRootedPreviewFile(w http.ResponseWriter, r *ht
 }
 
 func serveOpenedPreviewFile(w http.ResponseWriter, r *http.Request, file *os.File, info fs.FileInfo, clean string) {
-	if !previewutil.IsMarkdownPath(clean) {
+	if !previewutil.IsMarkdownPath(clean) || r.URL.Query().Get("raw") == "1" {
 		http.ServeContent(w, r, info.Name(), info.ModTime(), file)
 		return
 	}

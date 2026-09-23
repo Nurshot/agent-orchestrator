@@ -22,6 +22,12 @@ function renderWithQuery(ui: ReactNode) {
 	);
 }
 
+function scrollContainer(): HTMLElement {
+	const element = document.querySelector(".board-scrollbar");
+	if (!(element instanceof HTMLElement)) throw new Error("expected artifact scroll container");
+	return element;
+}
+
 describe("ArtifactFileView", () => {
 	beforeEach(() => {
 		vi.stubGlobal("fetch", fetchMock);
@@ -38,9 +44,10 @@ describe("ArtifactFileView", () => {
 		renderWithQuery(<ArtifactFileView artifactName="notes.txt" path="notes.txt" sessionId="sess-1" />);
 
 		await waitFor(() => expect(screen.getByText("hello world")).toBeInTheDocument());
+		expect(scrollContainer()).toHaveClass("overflow-y-auto", "min-h-0");
 
 		expect(fetchMock).toHaveBeenCalledWith(
-			"http://127.0.0.1:3001/api/v1/sessions/sess-1/preview/files/__ao_artifacts__/notes.txt",
+			"http://127.0.0.1:3001/api/v1/sessions/sess-1/preview/files/__ao_artifacts__/notes.txt?raw=1",
 		);
 	});
 
@@ -50,6 +57,9 @@ describe("ArtifactFileView", () => {
 		renderWithQuery(<ArtifactFileView artifactName="notes.md" path="notes.md" sessionId="sess-1" />);
 
 		await waitFor(() => expect(screen.getByRole("heading", { name: "Notes" })).toBeInTheDocument());
+		expect(fetchMock).toHaveBeenCalledWith(
+			"http://127.0.0.1:3001/api/v1/sessions/sess-1/preview/files/__ao_artifacts__/notes.md?raw=1",
+		);
 		expect(screen.getByText("hello")).toBeInTheDocument();
 		expect(screen.queryByText(/^# Notes/)).not.toBeInTheDocument();
 	});
@@ -61,7 +71,7 @@ describe("ArtifactFileView", () => {
 
 		await waitFor(() => expect(fetchMock).toHaveBeenCalled());
 		expect(fetchMock).toHaveBeenCalledWith(
-			"http://127.0.0.1:3001/api/v1/sessions/sess-1/preview/files/__ao_artifacts__/sub%20dir/report.txt",
+			"http://127.0.0.1:3001/api/v1/sessions/sess-1/preview/files/__ao_artifacts__/sub%20dir/report.txt?raw=1",
 		);
 	});
 

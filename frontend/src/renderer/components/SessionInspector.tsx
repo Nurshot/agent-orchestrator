@@ -348,25 +348,15 @@ const SummaryView = memo(function SummaryView({
 	const showUsageError = developerMode && usageQuery.isError;
 	const prSummaries = sessionPRDisplaySummaries(session, query.data);
 	const hasPRs = prSummaries.length > 0;
-	// V1 keeps PR presentation unchanged: when a session has both (outputType
-	// "pr_artifact"), PR cards render exactly as before and artifacts append
-	// below them in the same section, rather than replacing anything.
 	const artifacts = sessionArtifacts(session);
 	const hasArtifacts = artifacts.length > 0;
-	// A session with no known output (outputType absent or "none") and no real
-	// PRs/artifacts has nothing to show here — skip the section instead of
-	// rendering an empty "No pull request opened yet." card.
-	const hasKnownOutput = session.outputType !== undefined && session.outputType !== "none";
-	const showPRSection = hasPRs || hasArtifacts || hasKnownOutput;
-	const prSectionTitle = hasPRs
-		? prSummaries.length > 1
-			? t("inspector.pullRequests", { count: prSummaries.length })
-			: t("inspector.pullRequest")
-		: hasArtifacts
-			? artifacts.length > 1
-				? t("inspector.artifacts", { count: artifacts.length })
-				: t("inspector.artifact")
-			: t("inspector.pullRequest");
+	const showPRSection = hasPRs || session.outputType === "pr" || session.outputType === "pr_artifact";
+	const prSectionTitle = prSummaries.length > 1
+		? t("inspector.pullRequests", { count: prSummaries.length })
+		: t("inspector.pullRequest");
+	const artifactSectionTitle = artifacts.length > 1
+		? t("inspector.artifacts", { count: artifacts.length })
+		: t("inspector.artifact");
 	// Cloud orchestrators list the workers they spawned; local orchestrators
 	// have no parent/child model and every other session has no children.
 	const showWorkers =
@@ -384,6 +374,19 @@ const SummaryView = memo(function SummaryView({
 				</>
 			}
 			activityTitle={t("inspector.activity")}
+			artifactCards={
+				hasArtifacts ? (
+					artifacts.map((artifact) => (
+						<ArtifactSummaryCard
+							artifact={artifact}
+							key={artifact.path}
+							onOpenArtifact={onOpenArtifact}
+							session={session}
+						/>
+					))
+				) : undefined
+			}
+			artifactTitle={hasArtifacts ? artifactSectionTitle : undefined}
 			completion={<SessionControls session={session} />}
 			pullRequestCards={
 				showPRSection ? (
@@ -398,16 +401,7 @@ const SummaryView = memo(function SummaryView({
 									sessionId={session.id}
 								/>
 							))}
-						{hasArtifacts &&
-							artifacts.map((artifact) => (
-								<ArtifactSummaryCard
-									artifact={artifact}
-									key={artifact.path}
-									onOpenArtifact={onOpenArtifact}
-									session={session}
-								/>
-							))}
-						{!hasPRs && !hasArtifacts ? (
+						{!hasPRs ? (
 							<p className={inspectorEmptyClass}>{t("inspector.noPROpened")}</p>
 						) : null}
 					</div>

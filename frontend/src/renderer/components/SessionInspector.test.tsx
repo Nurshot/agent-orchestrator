@@ -917,7 +917,7 @@ describe("SessionInspector Artifacts section", () => {
     expect(screen.queryByText(/Artifacts? /)).not.toBeInTheDocument();
   });
 
-  it("keeps PR presentation unchanged and appends artifacts when a session has both (pr_artifact)", () => {
+  it("shows separate pull request and artifact sections when a session has both (pr_artifact)", () => {
     renderWithQuery(
       <SessionInspector
         session={session([pr(7, "open")], {
@@ -928,6 +928,7 @@ describe("SessionInspector Artifacts section", () => {
     );
 
     expect(screen.getByText("Pull request")).toBeInTheDocument();
+    expect(screen.getByText("Artifact")).toBeInTheDocument();
     expect(screen.getAllByText("PR #7").length).toBeGreaterThan(0);
     expect(screen.getByText("notes.md")).toBeInTheDocument();
   });

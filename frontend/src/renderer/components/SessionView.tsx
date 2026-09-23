@@ -30,7 +30,6 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { NotificationCenter } from "./NotificationCenter";
 import { ResizeHandle } from "./ResizeHandle";
 import { SessionFileExplorer } from "./SessionFileExplorer";
-import { ArtifactFileView } from "./ArtifactFileView";
 import { CloudFileContentPane, CloudWorkspaceDiff } from "./CloudWorkspaceDiff";
 import { SessionFileTab } from "./SessionFileTabs";
 import { SessionFileWorkspace } from "./SessionFileWorkspace";
@@ -2196,24 +2195,15 @@ export function SessionView({ sessionId }: SessionViewProps) {
 								inspectorView === "files" && session ? (
 									session.cloud ? (
 										<CloudWorkspaceDiff annotation={fileAnnotation} onOpenFile={openCenterFile} onSplitChange={setFilesSplit} onToggleMaximized={handleToggleFilesPopOut} session={session} split={filesSplit} />
-									) : filePreviewRequestsBySession[sessionId]?.source === "artifact" ? (
-										<ArtifactFileView
-											artifactName={
-												session.artifactFiles?.find((artifact) => artifact.path === filePreviewRequestsBySession[sessionId]?.path)
-													?.name ?? filePreviewRequestsBySession[sessionId]!.path
-											}
-											key={filePreviewRequestsBySession[sessionId]!.key}
-											path={filePreviewRequestsBySession[sessionId]!.path}
-											sessionId={session.id}
-										/>
 									) : (
 										<SessionFileExplorer
-										onOpenFile={openCenterFile}
-										onSplitChange={setFilesSplit}
-										onToggleMaximized={handleToggleFilesPopOut}
-										revealRequest={filePreviewRequestsBySession[sessionId] ?? null}
-										sessionId={session.id}
-										split={filesSplit}
+											artifacts={session.artifactFiles ?? []}
+											onOpenFile={openCenterFile}
+											onSplitChange={setFilesSplit}
+											onToggleMaximized={handleToggleFilesPopOut}
+											revealRequest={filePreviewRequestsBySession[sessionId] ?? null}
+											sessionId={session.id}
+											split={filesSplit}
 										/>
 									)
 								) : null
@@ -2222,9 +2212,9 @@ export function SessionView({ sessionId }: SessionViewProps) {
 							onOpenArtifact={browserOnly ? undefined : handleOpenArtifact}
 							onOpenFiles={browserOnly ? undefined : handleOpenFiles}
 							onOpenReviewFile={handleOpenReviewFile}
-								onOpenReviewerTerminal={selectReviewerTerminal}
-								onOpenReviewerChat={selectReviewerChat}
-								onWorkerMessageSent={showChatSurface || reviewerChatId ? selectSessionTerminal : undefined}
+							onOpenReviewerTerminal={selectReviewerTerminal}
+							onOpenReviewerChat={selectReviewerChat}
+							onWorkerMessageSent={showChatSurface || reviewerChatId ? selectSessionTerminal : undefined}
 							onToggleBrowserPopOut={handleToggleBrowserPopOut}
 							onViewChange={transitionInspectorView}
 							view={inspectorView}
@@ -2316,9 +2306,11 @@ export function SessionView({ sessionId }: SessionViewProps) {
 								<CloudWorkspaceDiff annotation={fileAnnotation} isMaximized onOpenFile={openCenterFile} onSplitChange={setFilesSplit} onToggleMaximized={handleToggleFilesPopOut} session={session} split={filesSplit} />
 							) : (
 								<SessionFileExplorer
+									artifacts={session.artifactFiles ?? []}
 									isMaximized
 									onSplitChange={setFilesSplit}
 									onToggleMaximized={handleToggleFilesPopOut}
+									revealRequest={filePreviewRequestsBySession[sessionId] ?? null}
 									sessionId={session.id}
 									split={filesSplit}
 								/>

@@ -35,8 +35,10 @@ export function ArtifactFileView({
 	const annotation = useFileAnnotation(sessionId, { source: artifactName });
 
 	return (
-		<div className="h-full min-h-0">
-			<FileContentPane annotation={annotation} initialMode={initialModeFor(path)} path={path} sessionId={sessionId} source={ARTIFACT_SOURCE} split={false} />
+		<div className="flex h-full min-h-0 flex-col bg-background">
+			<div className="board-scrollbar min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain">
+				<FileContentPane annotation={annotation} initialMode={initialModeFor(path)} path={path} sessionId={sessionId} source={ARTIFACT_SOURCE} split={false} />
+			</div>
 		</div>
 	);
 }

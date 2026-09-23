@@ -107,7 +107,7 @@ async function fetchSessionPRFile(sessionId: string, number: number, sourceUrl: 
 // uses for HTML artifacts, just fetched directly here instead of navigated to.
 function artifactPreviewFileUrl(sessionId: string, path: string): string {
 	const encodedPath = path.split("/").map(encodeURIComponent).join("/");
-	return `${getApiBaseUrl()}/api/v1/sessions/${encodeURIComponent(sessionId)}/preview/files/__ao_artifacts__/${encodedPath}`;
+	return `${getApiBaseUrl()}/api/v1/sessions/${encodeURIComponent(sessionId)}/preview/files/__ao_artifacts__/${encodedPath}?raw=1`;
 }
 
 async function fetchSessionArtifactFile(sessionId: string, path: string, errorMessage: string): Promise<WorkspaceFileDetail> {
@@ -340,10 +340,9 @@ export function sessionSourceFilesQueryOptions(sessionId: string, source: FilesS
 	if (source.kind === "pull_request") {
 		return { queryKey: ["session-source-files", sessionId, "pull_request", source.url, source.snapshot ?? ""], queryFn: () => fetchSessionPRFiles(sessionId, source.number, source.url, errorMessage) };
 	}
-	// No artifact directory tree listing yet — ArtifactFileView is handed one
-	// specific path directly, so nothing calls this with an artifact source.
-	// The queryFn still needs to exist and type-check even though it's never
-	// invoked (see sessionSourceFileRevisionQueryOptions for the same shape).
+	// Artifact directory listings come from the session summary artifactFiles
+	// contract. The queryFn still needs to exist and type-check even though the
+	// Files explorer disables this query while the artifact source is active.
 	return {
 		queryKey: ["session-source-files", sessionId, "artifact"] as const,
 		queryFn: (): Promise<WorkspaceFilesResponse> => {

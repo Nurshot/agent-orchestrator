@@ -1925,6 +1925,38 @@ func TestSessionsAPI_SetPreviewLocalRelativePathResolvesToPreviewOrigin(t *testi
 	}
 }
 
+func TestSessionsAPI_PreviewFileRawMarkdownBypassesHTMLRendering(t *testing.T) {
+	svc := newFakeSessionService()
+	workspace := t.TempDir()
+	const markdown = "# Artifact notes\n\nhello\n"
+	if err := os.WriteFile(filepath.Join(workspace, "notes.md"), []byte(markdown), 0o644); err != nil {
+		t.Fatalf("write markdown: %v", err)
+	}
+	s := svc.sessions["ao-1"]
+	s.Metadata = domain.SessionMetadata{WorkspacePath: workspace}
+	svc.sessions["ao-1"] = s
+	srv := newSessionTestServer(t, svc)
+
+	body, status, headers := doRequest(t, srv, http.MethodGet, "/api/v1/sessions/ao-1/preview/files/notes.md", "")
+	if status != http.StatusOK {
+		t.Fatalf("render markdown preview = %d, want 200; body=%s", status, body)
+	}
+	if !strings.Contains(headers.Get("Content-Type"), "text/html") || !bytes.Contains(body, []byte("<!doctype html>")) {
+		t.Fatalf("rendered markdown response content-type=%q body=%q, want HTML document", headers.Get("Content-Type"), body)
+	}
+
+	body, status, headers = doRequest(t, srv, http.MethodGet, "/api/v1/sessions/ao-1/preview/files/notes.md?raw=1", "")
+	if status != http.StatusOK {
+		t.Fatalf("raw markdown preview = %d, want 200; body=%s", status, body)
+	}
+	if got := string(body); got != markdown {
+		t.Fatalf("raw markdown body = %q, want %q", got, markdown)
+	}
+	if strings.Contains(headers.Get("Content-Type"), "text/html") {
+		t.Fatalf("raw markdown content type = %q, want non-HTML", headers.Get("Content-Type"))
+	}
+}
+
 func TestSessionsAPI_SetPreviewServesBrowserDisplayableArtifacts(t *testing.T) {
 	tests := []struct {
 		name        string
