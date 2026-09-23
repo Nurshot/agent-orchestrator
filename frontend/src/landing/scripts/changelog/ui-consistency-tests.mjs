@@ -42,7 +42,7 @@ test("every changelog feed entry uses the weekly UI contract", async () => {
 		if (seenIds.has(id)) issues.push("duplicate article id");
 		seenIds.add(id);
 		if (!id.startsWith("changelog-")) issues.push("missing stable changelog id");
-		if (!hasClasses(article, ["relative"]) || article.hasClass("border-b")) {
+		if (!hasClasses(article, ["relative", "select-text"]) || article.hasClass("border-b")) {
 			issues.push("article layout classes differ");
 		}
 		if (!hasClasses(title, ["text-2xl", "md:text-3xl", "font-medium", "mb-4"])) {
