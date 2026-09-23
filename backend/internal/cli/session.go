@@ -266,7 +266,7 @@ func newSessionRestoreCommand(ctx *commandContext) *cobra.Command {
 	var opts sessionOptions
 	cmd := &cobra.Command{
 		Use:   "restore <id>",
-		Short: "Relaunch a terminated session",
+		Short: "Restore a terminated session or resume an exited agent",
 		Args:  oneSessionIDArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := normalizeSessionID(args[0])
@@ -623,10 +623,12 @@ func (c *commandContext) killSession(ctx context.Context, cmd *cobra.Command, id
 }
 
 func (c *commandContext) restoreSession(ctx context.Context, cmd *cobra.Command, id string, opts sessionOptions) error {
-	if opts.project != "" {
-		if _, err := c.fetchScopedSession(ctx, id, opts.project); err != nil {
-			return err
-		}
+	sess, err := c.fetchScopedSession(ctx, id, opts.project)
+	if err != nil {
+		return err
+	}
+	if !sess.IsTerminated && sess.Activity.State == "exited" {
+		return c.resumeSessionAgent(ctx, cmd, id, sessionOptions{})
 	}
 	var res restoreSessionResponse
 	if err := c.postJSON(ctx, "sessions/"+url.PathEscape(id)+"/restore", struct{}{}, &res); err != nil {
