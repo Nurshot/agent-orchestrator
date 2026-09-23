@@ -594,7 +594,7 @@ export function SessionView({ sessionId }: SessionViewProps) {
 	const [filesPoppedOut, setFilesPoppedOut] = useState(false);
 	const [filesSplit, setFilesSplit] = useState(() => window.localStorage.getItem("ao.files.diffStyle") === "split");
 	const [filePreviewRequestsBySession, setFilePreviewRequestsBySession] = useState<
-		Record<string, { path: string; key: number; source?: "artifact" }>
+		Record<string, { feedback?: boolean; path: string; key: number; source?: "artifact" }>
 	>({});
 	const [fileTabsBySession, setFileTabsBySession] = useState<Record<string, SessionFileTabState>>({});
 	const fileTabs = fileTabsBySession[sessionId] ?? EMPTY_SESSION_FILE_TABS;
@@ -1774,12 +1774,12 @@ export function SessionView({ sessionId }: SessionViewProps) {
 	);
 
 	const handleOpenArtifact = useCallback(
-		(target: { path: string }) => {
+		(target: { feedback?: boolean; path: string }) => {
 			if (browserOnly) return;
 			prepareFilesInspector();
 			setFilePreviewRequestsBySession((current) => ({
 				...current,
-				[sessionId]: { path: target.path, key: (current[sessionId]?.key ?? 0) + 1, source: "artifact" },
+				[sessionId]: { feedback: target.feedback, path: target.path, key: (current[sessionId]?.key ?? 0) + 1, source: "artifact" },
 			}));
 		},
 		[browserOnly, prepareFilesInspector, sessionId],

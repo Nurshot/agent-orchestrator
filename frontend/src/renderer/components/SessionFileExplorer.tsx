@@ -43,7 +43,7 @@ type SessionFileExplorerProps = {
 	onOpenFile?: (path: string, options?: FileOpenOptions) => void;
 	onSplitChange?: (split: boolean) => void;
 	onToggleMaximized?: (next: boolean) => void;
-	revealRequest?: { path: string; key: number; source?: "artifact" } | null;
+	revealRequest?: { feedback?: boolean; path: string; key: number; source?: "artifact" } | null;
 	split?: boolean;
 };
 
@@ -85,6 +85,10 @@ export function SessionFileExplorer({
 		[artifacts],
 	);
 	const selectedArtifact = artifacts.find((artifact) => artifact.path === selectedArtifactPath);
+	const artifactFeedbackRequestKey =
+		revealRequest?.source === "artifact" && revealRequest.feedback && revealRequest.path === selectedArtifact?.path
+			? revealRequest.key
+			: undefined;
 
 	const filesQuery = useQuery({
 		...sessionSourceFilesQueryOptions(sessionId, querySource, t("files.error.loadWorkspace")),
@@ -280,6 +284,7 @@ export function SessionFileExplorer({
 				<ArtifactFilesPanel
 					artifact={selectedArtifact}
 					artifactTree={artifactTree}
+					feedbackRequestKey={artifactFeedbackRequestKey}
 					filter={filter}
 					isMaximized={isMaximized}
 					onBack={() => setSelectedArtifactPath(null)}
@@ -345,6 +350,7 @@ export function SessionFileExplorer({
 function ArtifactFilesPanel({
 	artifact,
 	artifactTree,
+	feedbackRequestKey,
 	filter,
 	isMaximized,
 	onBack,
@@ -354,6 +360,7 @@ function ArtifactFilesPanel({
 }: {
 	artifact?: SessionArtifact;
 	artifactTree: TreeNode[];
+	feedbackRequestKey?: number;
 	filter: string;
 	isMaximized: boolean;
 	onBack: () => void;
@@ -378,7 +385,12 @@ function ArtifactFilesPanel({
 				<ResizableHandle />
 				<ResizablePanel defaultSize="74%" minSize="40%">
 					{artifact ? (
-						<ArtifactFileView artifactName={artifact.name} path={artifact.path} sessionId={sessionId} />
+						<ArtifactFileView
+							artifactName={artifact.name}
+							feedbackRequestKey={feedbackRequestKey}
+							path={artifact.path}
+							sessionId={sessionId}
+						/>
 					) : (
 						<PanelMessage>{t("files.explorer.selectFile")}</PanelMessage>
 					)}
@@ -401,7 +413,12 @@ function ArtifactFilesPanel({
 					</Button>
 					<span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{artifact.path}</span>
 				</div>
-				<ArtifactFileView artifactName={artifact.name} path={artifact.path} sessionId={sessionId} />
+				<ArtifactFileView
+					artifactName={artifact.name}
+					feedbackRequestKey={feedbackRequestKey}
+					path={artifact.path}
+					sessionId={sessionId}
+				/>
 			</div>
 		);
 	}
