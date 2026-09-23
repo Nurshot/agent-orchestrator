@@ -16,6 +16,7 @@ test("every changelog feed entry uses the weekly UI contract", async () => {
 	}
 
 	const $ = load(await response.text());
+	assert.ok(hasClasses($("main").first(), ["select-text"]), "the changelog page is not selectable");
 	const feed = $("section[aria-label='Weekly product updates']");
 	assert.ok(hasClasses(feed.parent(), ["max-w-4xl"]), "the changelog content is not max-w-4xl");
 	const articles = feed.children("article").toArray();
