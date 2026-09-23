@@ -805,6 +805,25 @@ describe("Sidebar", () => {
 		expect(screen.getByTestId("sidebar-projects-scroller")).not.toContainElement(screen.getByText("baby"));
 	});
 
+	it("optically centers the Project and Scratchpad header add icons", () => {
+		renderSidebar({
+			workspaces: [
+				workspace,
+				{
+					id: STANDALONE_WORKSPACE_ID,
+					name: "Scratchpad",
+					kind: STANDALONE_PROJECT_KIND,
+					path: "",
+					sessions: [],
+				},
+			],
+		});
+
+		for (const label of ["New project", "Open a new agent"]) {
+			expect(screen.getByRole("button", { name: label }).querySelector("svg")).toHaveClass("translate-y-px");
+		}
+	});
+
 	it("opens an ad hoc agent on its own session route", async () => {
 		const user = userEvent.setup();
 		renderSidebar({

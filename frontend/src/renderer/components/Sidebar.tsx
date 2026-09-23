@@ -1769,7 +1769,7 @@ function ScratchpadSection({
 									onClick={() => requestNewTask(STANDALONE_WORKSPACE_ID)}
 									type="button"
 								>
-									<Plus className="size-icon-sm" aria-hidden="true" />
+										<Plus className="size-icon-sm translate-y-px" aria-hidden="true" />
 								</button>
 							</span>
 						</TooltipTrigger>
@@ -2987,7 +2987,7 @@ function CreateProjectButton({
 								onClick={choosePath}
 								type="button"
 							>
-								<Plus className="size-icon-sm" aria-hidden="true" />
+									<Plus className="size-icon-sm translate-y-px" aria-hidden="true" />
 							</button>
 						</span>
 					</TooltipTrigger>
