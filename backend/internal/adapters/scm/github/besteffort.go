@@ -149,9 +149,10 @@ func sshGreetingLogin(ctx context.Context) (string, error) {
 
 // gitNoreplyLogin reads git's configured commit email and, when it is a GitHub
 // noreply address, extracts the embedded username. Any other email yields no
-// login. Run without -C, so it reflects the operator's global identity.
+// login. --global pins the read to the operator's ~/.gitconfig; without it a
+// repo-local user.email in the daemon's working directory would win.
 func gitNoreplyLogin(ctx context.Context) (string, error) {
-	out, err := aoprocess.CommandContext(ctx, "git", "config", "--get", "user.email").Output()
+	out, err := aoprocess.CommandContext(ctx, "git", "config", "--global", "--get", "user.email").Output()
 	if err != nil {
 		return "", err
 	}
