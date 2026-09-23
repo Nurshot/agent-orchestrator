@@ -1019,6 +1019,9 @@ func readBootstrapResult(ctx context.Context, output <-chan ptyOutput, timeout t
 			return result.String(), errors.New("coder: workspace PTY did not report the worker bootstrap result")
 		case value, ok := <-output:
 			if !ok {
+				if err := ctx.Err(); err != nil {
+					return result.String(), err
+				}
 				return result.String(), io.EOF
 			}
 			result.WriteString(value.data)
@@ -1027,6 +1030,9 @@ func readBootstrapResult(ctx context.Context, output <-chan ptyOutput, timeout t
 				return text, nil
 			}
 			if value.err != nil {
+				if err := ctx.Err(); err != nil {
+					return text, err
+				}
 				return text, fmt.Errorf("coder: read workspace PTY: %w", value.err)
 			}
 		}
