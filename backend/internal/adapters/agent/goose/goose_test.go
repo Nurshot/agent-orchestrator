@@ -447,7 +447,7 @@ func TestGetRestoreCommandReadsAgentSessionID(t *testing.T) {
 	}
 	want := []string{
 		"env", "GOOSE_MODE=auto",
-		"goose", "run", "--system", "restore inline wins", "-t", "", "--resume", "--session-id", "20260720_1",
+		"goose", "run", "--system", "restore inline wins", "-t", "", "--interactive", "--resume", "--session-id", "20260720_1",
 	}
 	if !reflect.DeepEqual(cmd, want) {
 		t.Fatalf("restore cmd\nwant: %#v\n got: %#v", want, cmd)
