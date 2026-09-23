@@ -391,6 +391,7 @@ describe("HarnessSettingsSection", () => {
 		renderSection();
 		const row = (await screen.findByText("Claude Code")).closest('[data-agent="claude-code"]') as HTMLElement;
 		expect(within(row).getByRole("button", { name: "Login" })).toBeInTheDocument();
+		expect(within(row).queryByRole("button", { name: "Installed" })).not.toBeInTheDocument();
 		expect(screen.queryByRole("button", { name: "Refresh harness status" })).not.toBeInTheDocument();
 		expect(within(row).queryByRole("button", { name: "Check login" })).not.toBeInTheDocument();
 		expect(within(row).queryByRole("button", { name: "Check configuration" })).not.toBeInTheDocument();
@@ -413,7 +414,7 @@ describe("HarnessSettingsSection", () => {
 		expect(within(row).queryByRole("button", { name: "Install" })).not.toBeInTheDocument();
 	});
 
-	it("keeps stable catalog order while readiness updates", async () => {
+	it("sorts harnesses by authentication state while preserving catalog order within each group", async () => {
 		const readiness = catalogWithInstalled("claude-code", "codex", "cursor", "goose");
 		readiness.agents[0].authentication.state = "unknown";
 		readiness.agents[1].authentication.state = "authorized";
@@ -431,7 +432,7 @@ describe("HarnessSettingsSection", () => {
 		await waitFor(() => {
 			const agentIds = Array.from(document.querySelectorAll<HTMLElement>("[data-agent]"))
 				.map((row) => row.dataset.agent);
-			expect(agentIds.slice(0, 4)).toEqual(["claude-code", "codex", "cursor", "goose"]);
+			expect(agentIds.slice(0, 4)).toEqual(["codex", "goose", "cursor", "claude-code"]);
 		});
 	});
 

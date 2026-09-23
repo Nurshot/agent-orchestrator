@@ -38,6 +38,12 @@ const FOCUS_HIGHLIGHT_MS = 2_000;
 type AgentAuthState = { pending: boolean; error: string | null };
 type AgentAuthStates = Partial<Record<AgentId, AgentAuthState>>;
 type AgentAuthProbeResult = Awaited<ReturnType<typeof probeAgentAuth>>;
+const AUTH_STATE_RANK = {
+	authorized: 0,
+	not_applicable: 0,
+	unauthorized: 1,
+	unknown: 2,
+} as const;
 type AuthTerminalWorkflow = {
 	agentId: AgentId;
 	action: string;
@@ -140,7 +146,12 @@ export function HarnessSettingsSection({
 	const normalizedSearch = search.trim().toLowerCase();
 	const targetAgentId = AGENT_OPTIONS.find((agentId) => agentId === focusAgentId) ?? null;
 	const rows = AGENT_OPTIONS
-		.filter((agentId) => agentId === targetAgentId || agentId === authWorkflow?.agentId || agentLabel(agentId).toLowerCase().includes(normalizedSearch));
+		.filter((agentId) => agentId === targetAgentId || agentId === authWorkflow?.agentId || agentLabel(agentId).toLowerCase().includes(normalizedSearch))
+		.sort((left, right) => {
+			const leftState = readinessAgents.get(left)?.authentication.state ?? "unknown";
+			const rightState = readinessAgents.get(right)?.authentication.state ?? "unknown";
+			return AUTH_STATE_RANK[leftState] - AUTH_STATE_RANK[rightState];
+		});
 	const updateAuthState = useCallback((agentId: AgentId, patch: Partial<AgentAuthState>) => {
 		setAuthStates((current) => ({
 			...current,
@@ -459,6 +470,9 @@ export function HarnessSettingsSection({
 						const installationStatusLabel = authStatus === "authorized"
 							? t("settings.harness.authorized")
 							: t("settings.harness.installed");
+						const showInstallationStatus = authStatus === "authorized"
+							|| authStatus === "not_applicable"
+							|| (!authPlans.isPending && (!authPlan || authPlan.action === "instructions"));
 						const rowHasError = failed || Boolean(authState?.error);
 						const rowAuthWorkflow = authWorkflow?.agentId === agentId ? authWorkflow : null;
 						const hasDiagnostics = Boolean(
@@ -524,7 +538,7 @@ export function HarnessSettingsSection({
 				<span className="inline-flex items-center gap-1.5 text-xs text-settings-muted" role="status"><LoaderCircle className="size-4 animate-spin" aria-hidden="true" />{job?.status === "installing" ? t("settings.harness.installing") : t("settings.harness.verifying")}</span>
 							) : isInstalled ? (
 								<div className="flex shrink-0 items-center gap-2">
-								<Button
+								{showInstallationStatus ? <Button
 					type="button"
 					size="none"
 					variant="ghost"
@@ -533,7 +547,7 @@ export function HarnessSettingsSection({
 					disabled
 								>
 									{installationStatusLabel}
-								</Button>
+								</Button> : null}
 								{authControls}
 								</div>
 							) : failed ? (
