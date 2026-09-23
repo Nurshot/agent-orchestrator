@@ -144,6 +144,7 @@ export const ChatComposer = memo(function ChatComposer({
 	disabled,
 	disabledPlaceholder,
 	settings,
+	contextIndicator,
 	approval,
 	elicitation,
 	skills = [],
@@ -186,6 +187,7 @@ export const ChatComposer = memo(function ChatComposer({
 		retainedContent?: number[],
 	) => void | Promise<unknown>;
 	settings?: ReactNode;
+	contextIndicator?: ReactNode;
 	/** A provider decision that temporarily replaces ordinary message entry. */
 	approval?: ReactNode;
 	/** A provider question, docked above the composer until it is answered. */
@@ -1421,7 +1423,7 @@ export const ChatComposer = memo(function ChatComposer({
 					if (controlsDisabled) return;
 					if (
 						e.target === e.currentTarget ||
-						!(e.target as HTMLElement).closest("button, a, [role='option'], ul")
+						!(e.target as HTMLElement).closest("button, a, [role='option'], [data-context-meter], ul")
 					) {
 						editor.current?.focus();
 					}
@@ -1590,6 +1592,7 @@ export const ChatComposer = memo(function ChatComposer({
 								</Tooltip>
 							</>
 						) : null}
+						{contextIndicator}
 						{settings}
 					</div>
 

@@ -4,6 +4,7 @@ import type { ChatConfigOption, ChatModel, ConversationSnapshot, TurnSettings } 
 
 export type ConversationActionsEntry = {
 	kind: "conversation-actions";
+	sessionId: string;
 	snapshot: ConversationSnapshot;
 	sessionTitle: string;
 	openingShell: boolean;

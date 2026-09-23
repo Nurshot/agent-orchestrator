@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
 	createWorkDirectory,
 	npmInvocation,
+	patchClaudeContextUsage,
 	patchClaudeRetryDetails,
 	pruneNodeDistribution,
 	runtimeSourceFiles,
@@ -106,6 +107,52 @@ describe("patchClaudeRetryDetails", () => {
 		expect(patched).toContain("message.retry_delay_ms / 1000");
 		expect(patched).toContain("Trying again in ${retryDelay}.");
 		expect(patched).toContain("details: retryDetails");
+	});
+});
+
+describe("patchClaudeContextUsage", () => {
+	it("publishes the SDK context snapshot through ACP after a result", async () => {
+		const adapterPath = join(temporaryDirectory(), "acp-agent.js");
+		writeFileSync(adapterPath, `
+                            // Send usage_update notification
+                            if (lastAssistantTotalUsage !== null) {
+                                await sendUpdate({
+                                    update: {
+                                        used: lastAssistantTotalUsage,
+                                        size: session.contextWindowSize,
+                                    },
+                                });
+                            }
+                            if (session.cancelled) {
+`);
+
+		expect(patchClaudeContextUsage(adapterPath)).toBe(true);
+		expect(patchClaudeContextUsage(adapterPath)).toBe(false);
+		const patched = readFileSync(adapterPath, "utf8");
+		expect(patched).toContain("session.query.getContextUsage()");
+		expect(patched).toContain("used: contextUsage.totalTokens");
+		expect(patched).toContain("size: contextUsage.rawMaxTokens");
+		expect(patched).toContain("_ao/contextSource");
+
+		const start = patched.indexOf("// Send usage_update notification");
+		const end = patched.indexOf("if (session.cancelled) {", start);
+		const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+		const run = new AsyncFunction("session", "sendUpdate", "params", `
+			let lastAssistantTotalUsage = 9;
+			${patched.slice(start, end)}
+		`);
+		const updates = [];
+		const session = {
+			contextWindowSize: 100,
+			contextWindowAuthoritative: false,
+			query: { getContextUsage: async () => ({ totalTokens: 17, rawMaxTokens: 200 }) },
+		};
+		await run.call({ logger: { error: () => {} } }, session, (notification) => {
+			updates.push(notification.update);
+		}, { sessionId: "session-1" });
+		expect(updates.map(({ used, size }) => [used, size])).toEqual([[9, 100], [17, 200]]);
+		expect(updates[1]._meta).toEqual({ "_ao/contextSource": "claude_agent_sdk" });
+		expect(session.contextWindowAuthoritative).toBe(true);
 	});
 });
 

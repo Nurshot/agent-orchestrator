@@ -82,6 +82,61 @@ export function patchClaudeRetryDetails(adapterPath) {
 	return true;
 }
 
+/**
+ * claude-agent-acp 0.70 reports the last assistant message's token usage as
+ * context occupancy. The SDK's getContextUsage also counts system instructions,
+ * tools, and memory. Publish that snapshot after each result so AO's existing
+ * usage_update projection receives the provider's complete count.
+ */
+export function patchClaudeContextUsage(adapterPath) {
+	const source = readFileSync(adapterPath, "utf8");
+	const start = source.indexOf("// Send usage_update notification");
+	const end = source.indexOf("if (session.cancelled) {", start);
+	if (start < 0 || end < 0 || source.indexOf("// Send usage_update notification", start + 1) >= 0) {
+		throw new Error("claude-agent-acp result usage block no longer matches AO's context patch");
+	}
+	const block = source.slice(start, end);
+	if (block.includes("_ao/contextSource")) return false;
+	if (!block.includes("used: lastAssistantTotalUsage,") || !block.includes("size: session.contextWindowSize,")) {
+		throw new Error("claude-agent-acp result usage block no longer matches AO's context patch");
+	}
+
+	const snapshot = [
+		"// AO: replace the message-only proxy with the SDK's full context snapshot.",
+		"                            let contextUsageTimer;",
+		"                            try {",
+		"                                const contextUsage = await Promise.race([",
+		"                                    session.query.getContextUsage(),",
+		"                                    new Promise((_, reject) => {",
+		"                                        contextUsageTimer = setTimeout(() => reject(new Error('Claude SDK context usage timed out')), 10000);",
+		"                                    }),",
+		"                                ]);",
+		"                                if (Number.isFinite(contextUsage.totalTokens) && contextUsage.totalTokens >= 0 &&",
+		"                                    Number.isFinite(contextUsage.rawMaxTokens) && contextUsage.rawMaxTokens > 0) {",
+		"                                    lastAssistantTotalUsage = contextUsage.totalTokens;",
+		"                                    session.contextWindowSize = contextUsage.rawMaxTokens;",
+		"                                    session.contextWindowAuthoritative = true;",
+		"                                    await sendUpdate({",
+		"                                        sessionId: params.sessionId,",
+		"                                        update: {",
+		"                                            sessionUpdate: 'usage_update',",
+		"                                            used: contextUsage.totalTokens,",
+		"                                            size: contextUsage.rawMaxTokens,",
+		"                                            _meta: { '_ao/contextSource': 'claude_agent_sdk' },",
+		"                                        },",
+		"                                    });",
+		"                                }",
+		"                            } catch (error) {",
+		"                                this.logger.error('Failed to fetch Claude SDK context usage:', error);",
+		"                            } finally {",
+		"                                clearTimeout(contextUsageTimer);",
+		"                            }",
+		"                            ",
+	].join("\n");
+	writeFileSync(adapterPath, source.slice(0, end) + snapshot + source.slice(end));
+	return true;
+}
+
 export function pruneNodeDistribution(nodeRoot) {
 	// The Unix archives expose npm/corepack as bin/ symlinks into lib/. Remove
 	// the entry points before their targets so packagers never see dangling

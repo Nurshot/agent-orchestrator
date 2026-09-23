@@ -319,6 +319,7 @@ export function ChatSessionScreen({ session }: { session: MobileChatSession }) {
 		setMenuOpen(false);
 		void dismissKeyboardBeforeSheet(keyboardVisible).then(() => router.push(chatSheetRoute({
 			kind: "conversation-actions",
+			sessionId: session.id,
 			snapshot: current,
 			sessionTitle: sessionName,
 			openingShell,
