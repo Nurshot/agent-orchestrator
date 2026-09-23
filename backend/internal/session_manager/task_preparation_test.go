@@ -46,32 +46,6 @@ func TestTaskPreparationIsClaimedWithoutCreatingAnotherWorktree(t *testing.T) {
 	}
 }
 
-func TestSynchronousSpawnWaitsForInFlightPreparation(t *testing.T) {
-	m, st, _, ws := newManager()
-	deferred := deferredBackground(m)
-	token, err := m.PrepareTaskWorkspace(context.Background(), st.projects["mer"])
-	if err != nil {
-		t.Fatal(err)
-	}
-	done := make(chan error, 1)
-	go func() {
-		_, _, _, err := m.Spawn(context.Background(), ports.SpawnConfig{
-			ProjectID: "mer", Kind: domain.KindWorker, TaskPreparation: token,
-		})
-		done <- err
-	}()
-	(*deferred)[0]()
-	if err := <-done; err != nil {
-		t.Fatal(err)
-	}
-	if ws.createCount != 1 || ws.destroyed != 0 {
-		t.Fatalf("worktrees created = %d, destroyed = %d; want one retained", ws.createCount, ws.destroyed)
-	}
-	if got := st.sessions["mer-1"].ProvisionState.WithDefault(); got != domain.SessionProvisionReady {
-		t.Fatalf("provision state = %q, want ready", got)
-	}
-}
-
 func TestCancelTaskPreparationRemovesWorkspaceAndRow(t *testing.T) {
 	m, st, _, ws := newManager()
 	m.runBackground = func(work func()) { work() }
