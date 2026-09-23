@@ -220,6 +220,10 @@ func (s *Service) canRefresh(stored storedPAT) bool {
 // refreshLocked exchanges the refresh token for a fresh access token (and a
 // rotated refresh token) and persists the result. The caller must hold s.mu.
 func (s *Service) refreshLocked(ctx context.Context, stored storedPAT) (storedPAT, error) {
+	// Bound the refresh so a hung GitHub OAuth endpoint cannot hold s.mu (and
+	// thus stall concurrent ListRepos/HasPAT) for the whole request lifetime.
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 	body, err := json.Marshal(map[string]string{
 		"client_id":     s.clientID,
 		"client_secret": s.clientSecret,

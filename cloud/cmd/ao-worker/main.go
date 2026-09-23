@@ -314,7 +314,7 @@ func prepareWorkspace(
 		// repo. Extra repos reuse the session's checkout-grant token, so they work
 		// for repositories the installation can access; arbitrary private
 		// third-party repos need per-repo grants (a follow-up).
-		cloneExtraRepos(ctx, logger, checkoutGrant.Token, bootstrap.Launch.ExtraRepos, workspace)
+		cloneExtraRepos(ctx, logger, checkoutGrant.Token, bootstrap.Launch.ExtraRepos, workspace, dataDir)
 	}
 	if err := worker.EnsureWorkspaceReviewBase(
 		ctx, worker.ExecGitRunner{}, workspace, bootstrap.Launch.DefaultBranch,
@@ -330,7 +330,7 @@ func prepareWorkspace(
 // skipped so the session always starts on its primary repo. The launcher
 // (workerexec) computes the same paths via worker.ExtraRepoPath and lists them
 // in the agent's system prompt.
-func cloneExtraRepos(ctx context.Context, logger *slog.Logger, token string, repos []worker.RepoRef, workspace string) {
+func cloneExtraRepos(ctx context.Context, logger *slog.Logger, token string, repos []worker.RepoRef, workspace, dataDir string) {
 	if len(repos) == 0 {
 		return
 	}
@@ -341,31 +341,16 @@ func cloneExtraRepos(ctx context.Context, logger *slog.Logger, token string, rep
 	}
 	for _, repo := range repos {
 		dest := worker.ExtraRepoPath(workspace, repo.URL)
-		args := []string{"clone", "--origin", "origin", "--no-tags"}
-		if strings.TrimSpace(repo.Branch) != "" {
-			args = append(args, "--branch", repo.Branch)
-		}
-		args = append(args, "--", authenticatedCloneURL(repo.URL, token), dest)
-		if _, err := (worker.ExecGitRunner{}).Run(ctx, parent, nil, args...); err != nil {
+		// Clone via worker.CloneExtraRepo, which uses the primary checkout's
+		// askpass mechanism: the token stays in the command's environment and
+		// never enters the URL, argv, or the repo's .git/config, and the repo is
+		// wired to the session credential helper for the agent's own git ops.
+		if err := worker.CloneExtraRepo(ctx, worker.ExecGitRunner{}, parent, dest, repo.URL, repo.Branch, token, dataDir); err != nil {
 			logger.Warn("multi-repo: extra repo clone failed (non-fatal)", "repo", repo.URL, "error", err)
 			continue
 		}
 		logger.Info("multi-repo: cloned extra repo", "repo", repo.URL, "path", dest)
 	}
-}
-
-// authenticatedCloneURL injects the session's GitHub App installation token into
-// an https github.com clone URL, mirroring the primary checkout's auth.
-func authenticatedCloneURL(repoURL, token string) string {
-	if strings.TrimSpace(token) == "" {
-		return repoURL
-	}
-	parsed, err := url.Parse(repoURL)
-	if err != nil {
-		return repoURL
-	}
-	parsed.User = url.UserPassword("x-access-token", token)
-	return parsed.String()
 }
 
 func startInteractiveAgent(
