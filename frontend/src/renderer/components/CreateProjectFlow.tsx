@@ -1487,7 +1487,19 @@ function CloudProjectCard({
 				queryClient.invalidateQueries({ queryKey: ["github-repos"] }),
 			]);
 		} catch (err) {
-			setGithubOAuthError(err instanceof Error ? err.message : t("createProject.githubAuthFailed", { defaultValue: "GitHub authentication failed" }));
+			// If the AO Cloud session lapsed mid-connect, saving to the control
+			// plane returns a 401 from its auth middleware. Re-authenticate rather
+			// than reporting it as a GitHub failure.
+			if (err instanceof CloudCpError && err.status === 401) {
+				setGithubOAuthError(
+					t("createProject.cloudSessionExpiredForConnect", {
+						defaultValue: "Your AO Cloud session expired. Sign in again, then connect GitHub.",
+					}),
+				);
+				onAuthRequired();
+			} else {
+				setGithubOAuthError(err instanceof Error ? err.message : t("createProject.githubAuthFailed", { defaultValue: "GitHub authentication failed" }));
+			}
 		} finally {
 			setGithubOAuthBusy(false);
 		}
