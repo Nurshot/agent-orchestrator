@@ -300,8 +300,7 @@ export const SIDEBAR_DEFAULT_WIDTH = 240;
 /** Floor/ceiling for sidebar resize — pass the same values to useResizable AND ResizeHandle. */
 export const SIDEBAR_MIN_WIDTH = 200;
 export const SIDEBAR_MAX_WIDTH = 420;
-/** Cap each section's list until the user clicks Show more.
- *  One-way for now (no Show less / no persistence) — intentional first cut.
+/** Initial item count shown in expanded sections; Show more/less toggles the remainder.
  *  Collapsed icon rail always shows the full list so projects stay reachable. */
 const SIDEBAR_INITIAL_SECTION_LIMIT = 10;
 /** Keep the complete Scratchpad section (including its footer gap) under half the available height. */
