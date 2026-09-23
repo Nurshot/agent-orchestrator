@@ -46,13 +46,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           REQUESTED_DATE: ${{ inputs.date }}
         run: |
-          if [ -n "$REQUESTED_DATE" ]; then
-            date="$REQUESTED_DATE"
-          elif [ "$EVENT_NAME" = "schedule" ]; then
-            date="$(date -u -d 'yesterday' +%F)"
-          else
-            date="$(date -u +%F)"
-          fi
+          date="$(node frontend/src/landing/scripts/changelog/resolve-date.mjs)"
           if [[ ! "$date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
             echo "Invalid changelog date: $date" >&2
             exit 1
