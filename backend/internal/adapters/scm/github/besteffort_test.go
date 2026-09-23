@@ -3,8 +3,14 @@ package github
 import (
 	"context"
 	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
+
+	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
 )
 
 func TestCredentialHelperTokenSourceParsesPasswordAndCaches(t *testing.T) {
@@ -167,5 +173,60 @@ func TestNoreplyRegex(t *testing.T) {
 		if got != want {
 			t.Fatalf("noreplyRe(%q) = %q, want %q", email, got, want)
 		}
+	}
+}
+
+// On a machine with no credential, gh is missing or logged out and git exits
+// 128. Both must read as ErrNoToken, or the provider reports a generic auth
+// failure and the best-effort fallback never runs.
+func TestTokenChainReportsNoTokenWithoutCredentials(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell stub for gh")
+	}
+	bin := t.TempDir()
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git not installed")
+	}
+	if err := os.Symlink(gitPath, filepath.Join(bin, "git")); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+
+	check := func(name string) {
+		t.Helper()
+		tokens := FallbackTokenSource{&GHTokenSource{}, &CredentialHelperTokenSource{}}
+		if _, err := tokens.Token(context.Background()); !errors.Is(err, ErrNoToken) {
+			t.Fatalf("%s: token chain err = %v, want ErrNoToken", name, err)
+		}
+		p, err := NewProvider(ProviderOptions{Token: tokens, SkipTokenPreflight: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := p.AuthenticatedIdentity(context.Background()); !errors.Is(err, ports.ErrSCMNoCredentials) {
+			t.Fatalf("%s: identity err = %v, want ErrSCMNoCredentials", name, err)
+		}
+	}
+	check("gh not installed")
+
+	stub := "#!/bin/sh\necho 'no oauth token found for github.com' >&2\nexit 1\n"
+	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(stub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	check("gh logged out")
+}
+
+func TestNoTokenUnlessCancelledKeepsTimeouts(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	probeErr := errors.New("signal: killed")
+	if err := noTokenUnlessCancelled(ctx, probeErr); !errors.Is(err, probeErr) || errors.Is(err, ErrNoToken) {
+		t.Fatalf("cancelled probe err = %v, want the original error", err)
+	}
+	if err := noTokenUnlessCancelled(context.Background(), probeErr); !errors.Is(err, ErrNoToken) {
+		t.Fatalf("failed probe err = %v, want ErrNoToken", err)
 	}
 }

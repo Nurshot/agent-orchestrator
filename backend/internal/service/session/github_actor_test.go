@@ -178,3 +178,42 @@ func TestGitHubConnectedSendsNothingWithoutHandle(t *testing.T) {
 		})
 	}
 }
+
+// Each handle-carrying event is gated on its own kill switch, so silencing
+// ao.session.spawned must not silence ao.github.connected, and a disabled
+// connect event must not spend a GitHub lookup.
+func TestGitHubConnectedHonorsItsOwnKillSwitch(t *testing.T) {
+	for name, tc := range map[string]struct {
+		events    map[string]bool
+		wantEmits int
+	}{
+		"spawned disabled, connect enabled": {events: map[string]bool{"ao.github.connected": true}, wantEmits: 1},
+		"connect disabled":                  {events: map[string]bool{"ao.session.spawned": true}, wantEmits: 0},
+	} {
+		t.Run(name, func(t *testing.T) {
+			sink := &fakeTelemetrySink{}
+			resolver := &countingIdentityResolver{identity: ports.SCMIdentity{Login: "octocat", Human: true}}
+			svc := NewWithDeps(Deps{Telemetry: sink, GithubIdentity: resolver, GithubActorEvents: tc.events})
+			svc.runBackground = runInline
+
+			svc.GitHubConnected(context.Background())
+
+			if len(sink.events) != tc.wantEmits {
+				t.Fatalf("emitted %d events, want %d", len(sink.events), tc.wantEmits)
+			}
+			if tc.wantEmits == 0 && resolver.calls != 0 {
+				t.Fatalf("resolver called %d times for a disabled event, want 0", resolver.calls)
+			}
+		})
+	}
+}
+
+type countingIdentityResolver struct {
+	identity ports.SCMIdentity
+	calls    int
+}
+
+func (c *countingIdentityResolver) AuthenticatedIdentityForProvider(context.Context, string, string) (ports.SCMIdentity, error) {
+	c.calls++
+	return c.identity, nil
+}

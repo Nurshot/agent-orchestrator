@@ -169,12 +169,24 @@ func (s *GHTokenSource) ttl() time.Duration {
 	return defaultGHTokenCacheTTL
 }
 
+// ghAuthToken maps "gh missing" and "gh not logged in" to ErrNoToken so an
+// operator with no credential reaches the best-effort fallback instead of a
+// generic auth failure. A cancelled or timed-out probe stays a real error.
 func ghAuthToken(ctx context.Context) (string, error) {
 	out, err := aoprocess.CommandContext(ctx, "gh", "auth", "token").Output()
 	if err != nil {
-		return "", err
+		return "", noTokenUnlessCancelled(ctx, err)
 	}
 	return string(out), nil
+}
+
+// noTokenUnlessCancelled reports a failed credential probe as ErrNoToken, except
+// when the context ended, which says nothing about whether a credential exists.
+func noTokenUnlessCancelled(ctx context.Context, err error) error {
+	if ctx.Err() != nil {
+		return err
+	}
+	return ErrNoToken
 }
 
 // defaultCredentialHost is the host queried when CredentialHelperTokenSource.Host
@@ -278,7 +290,8 @@ func gitCredentialFill(ctx context.Context, host string) (string, error) {
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=never")
 	out, err := cmd.Output()
 	if err != nil {
-		return "", err
+		// With prompts disabled, git exits 128 when nothing is stored.
+		return "", noTokenUnlessCancelled(ctx, err)
 	}
 	return parseCredentialPassword(string(out)), nil
 }

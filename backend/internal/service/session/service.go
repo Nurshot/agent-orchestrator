@@ -199,7 +199,8 @@ type Service struct {
 	// githubIdentity optionally resolves the operator's authenticated GitHub
 	// account so the handle rides along with product telemetry. Nil disables it
 	// and the emitter degrades to anonymous.
-	githubIdentity ports.ScopedIdentityResolver
+	githubIdentity    ports.ScopedIdentityResolver
+	githubActorEvents map[string]bool
 }
 
 // SetChatProviderPreserver wires the live Chat lifetime observation after both
@@ -239,6 +240,9 @@ type Deps struct {
 	// GithubIdentity resolves the operator's authenticated GitHub account so the
 	// handle rides along with product telemetry.
 	GithubIdentity ports.ScopedIdentityResolver
+	// GithubActorEvents names the handle-carrying events allowed to resolve and
+	// send it. Nil allows every such event, which keeps focused tests small.
+	GithubActorEvents map[string]bool
 }
 
 // NewWithDeps wires a session service with optional PR-claim dependencies.
@@ -247,7 +251,7 @@ func NewWithDeps(d Deps) *Service {
 	if backgroundContext == nil {
 		backgroundContext = context.Background()
 	}
-	s := &Service{manager: d.Manager, store: d.Store, prClaimer: d.PRClaimer, scm: d.SCM, tracker: d.Tracker, clock: d.Clock, dataDir: d.DataDir, signalCapable: d.SignalCapable, telemetry: d.Telemetry, logger: d.Logger, backgroundContext: backgroundContext, agentReadiness: d.AgentReadiness, githubIdentity: d.GithubIdentity}
+	s := &Service{manager: d.Manager, store: d.Store, prClaimer: d.PRClaimer, scm: d.SCM, tracker: d.Tracker, clock: d.Clock, dataDir: d.DataDir, signalCapable: d.SignalCapable, telemetry: d.Telemetry, logger: d.Logger, backgroundContext: backgroundContext, agentReadiness: d.AgentReadiness, githubIdentity: d.GithubIdentity, githubActorEvents: d.GithubActorEvents}
 	if s.prClaimer == nil {
 		if w, ok := d.Store.(ports.PRClaimer); ok {
 			s.prClaimer = w
@@ -396,8 +400,10 @@ func (s *Service) emitSpawned(ctx context.Context, rec domain.SessionRecord, dur
 		"harness":     string(rec.Harness),
 		"duration_ms": durationMs,
 	}
-	if actor, ok := s.githubActor(ctx); ok {
-		payload["github_actor"] = actor
+	if s.githubActorEventEnabled("ao.session.spawned") {
+		if actor, ok := s.githubActor(ctx); ok {
+			payload["github_actor"] = actor
+		}
 	}
 	s.telemetry.Emit(context.Background(), ports.TelemetryEvent{
 		Name:       "ao.session.spawned",
@@ -418,10 +424,14 @@ func (s *Service) emitSpawned(ctx context.Context, rec domain.SessionRecord, dur
 // usually returned by the time it finishes. A login that does not resolve
 // sends nothing.
 func (s *Service) GitHubConnected(ctx context.Context) {
-	if s.telemetry == nil || s.githubIdentity == nil {
+	if s.telemetry == nil || s.githubIdentity == nil || !s.githubActorEventEnabled("ao.github.connected") {
 		return
 	}
 	s.emitGitHubConnectedInBackground(reqid.FromContext(ctx))
+}
+
+func (s *Service) githubActorEventEnabled(name string) bool {
+	return s.githubActorEvents == nil || s.githubActorEvents[name]
 }
 
 func (s *Service) emitGitHubConnectedInBackground(requestID string) {
