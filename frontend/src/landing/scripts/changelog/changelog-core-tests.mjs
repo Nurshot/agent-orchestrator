@@ -3,10 +3,12 @@ import test from "node:test";
 import {
 	classifyPullRequest,
 	extractPullRequestNumbers,
+	productArea,
 	pullRequestSummary,
 	renderHistoricalWeek,
 	renderWeeklyDraft,
 } from "./changelog-core.mjs";
+import { selectDraftInputs } from "./draft.mjs";
 
 const pullRequest = (overrides = {}) => ({
 	number: 42,
@@ -57,6 +59,14 @@ test("extracts unique pull request references", () => {
 		"Shipped in (#99)",
 	].join("\n");
 	assert.deepEqual([...extractPullRequestNumbers(content)], [42, 99]);
+});
+
+test("matches pull request product-area terms as complete words", () => {
+	assert.equal(productArea(pullRequest({ title: "feat(pr): improve review flow" })), "Pull requests");
+	assert.equal(
+		productArea(pullRequest({ title: "perf: improve sidebar performance" })),
+		"Desktop",
+	);
 });
 
 test("renders a reviewable weekly MDX draft", () => {
@@ -138,5 +148,34 @@ test("renders historical weeks without an editorial checklist", () => {
 	});
 	assert.match(result.content, /historical: true/);
 	assert.match(result.content, /## Features/);
+	assert.match(result.content, /## Learn more/);
+	assert.match(result.content, /Read the documentation/);
 	assert.doesNotMatch(result.content, /Review before merge/);
+});
+
+test("recollects the complete week when an existing draft is regenerated", () => {
+	const entries = [
+		{
+			file: "2026-09-13-weekly-update.mdx",
+			raw: 'rangeEnd: "2026-09-13"\n<PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/41" />',
+			data: { rangeEnd: "2026-09-13" },
+		},
+		{
+			file: "2026-09-20-weekly-update.mdx",
+			raw: 'rangeEnd: "2026-09-20"\n<PRBadge url="https://github.com/Untrivial-ai/agent-orchestrator/pull/42" />',
+			data: { rangeEnd: "2026-09-20" },
+		},
+	];
+	const selected = selectDraftInputs({
+		entries,
+		entryFile: "2026-09-20-weekly-update.mdx",
+		endDate: "2026-09-20",
+		collected: [pullRequest(), pullRequest({ number: 43 })],
+	});
+
+	assert.equal(selected.startDate, "2026-09-14");
+	assert.deepEqual(
+		selected.pullRequests.map((item) => item.number),
+		[42, 43],
+	);
 });

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import matter from "gray-matter";
 import {
 	extractPullRequestNumbers,
@@ -130,6 +131,20 @@ function setOutput(name, value) {
 	}
 }
 
+export function selectDraftInputs({ entries, entryFile, endDate, collected }) {
+	const previousEntries = entries.filter((entry) => entry.file !== entryFile);
+	const startDate = previousBoundary(previousEntries, endDate);
+	const previouslyReferenced = new Set(
+		previousEntries.flatMap((entry) => [...extractPullRequestNumbers(entry.raw)]),
+	);
+	return {
+		startDate,
+		pullRequests: collected.filter(
+			(pullRequest) => !previouslyReferenced.has(pullRequest.number),
+		),
+	};
+}
+
 async function main() {
 	const endDate = requestedDate();
 	if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
@@ -138,21 +153,16 @@ async function main() {
 
 	const entryFile = `${endDate}-weekly-update.mdx`;
 	const entryPath = path.join(changelogDirectory, entryFile);
-	if (fs.existsSync(entryPath)) {
-		console.log(`A weekly changelog already exists at ${entryPath}; leaving it unchanged.`);
-		setOutput("has_changes", "false");
-		return;
-	}
-
 	const entries = getExistingEntries();
-	const startDate = previousBoundary(entries, endDate);
-	const previouslyReferenced = new Set(
-		entries.flatMap((entry) => [...extractPullRequestNumbers(entry.raw)]),
-	);
+	const entriesBeforeDraft = entries.filter((entry) => entry.file !== entryFile);
+	const startDate = previousBoundary(entriesBeforeDraft, endDate);
 	const collected = await collectMergedPullRequests(startDate, endDate);
-	const newPullRequests = collected.filter(
-		(pullRequest) => !previouslyReferenced.has(pullRequest.number),
-	);
+	const { pullRequests: newPullRequests } = selectDraftInputs({
+		entries,
+		entryFile,
+		endDate,
+		collected,
+	});
 	const draft = renderWeeklyDraft({
 		pullRequests: newPullRequests,
 		startDate,
@@ -161,6 +171,14 @@ async function main() {
 
 	if (!draft) {
 		console.log("No user-facing merged pull requests were found for this window.");
+		setOutput("has_changes", "false");
+		return;
+	}
+	const existingContent = fs.existsSync(entryPath)
+		? fs.readFileSync(entryPath, "utf8")
+		: undefined;
+	if (existingContent === draft.content) {
+		console.log(`Weekly changelog at ${entryPath} is already up to date.`);
 		setOutput("has_changes", "false");
 		return;
 	}
@@ -181,7 +199,11 @@ async function main() {
 	setOutput("date", endDate);
 	setOutput("entry_path", relativeEntryPath);
 	setOutput("body_path", bodyPath);
-	console.log(`Created ${relativeEntryPath} from ${newPullRequests.length} merged pull requests.`);
+	console.log(
+		`${existingContent === undefined ? "Created" : "Updated"} ${relativeEntryPath} from ${newPullRequests.length} merged pull requests.`,
+	);
 }
 
-await main();
+if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
+	await main();
+}

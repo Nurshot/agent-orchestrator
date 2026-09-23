@@ -105,7 +105,7 @@ export function productArea(pullRequest) {
 	if (/terminal|pty|tui/.test(value)) return "Terminal";
 	if (/chat|composer/.test(value)) return "Chat";
 	if (/agent|harness|session/.test(value)) return "Agents";
-	if (/github|git|scm|pull|review|pr/.test(value)) return "Pull requests";
+	if (/\b(?:github|git|scm|pull|review|pr)\b/.test(value)) return "Pull requests";
 	if (/release|update|updater/.test(value)) return "Updates";
 	if (/cloud|account|auth/.test(value)) return "Cloud";
 	if (/cli/.test(value)) return "CLI";
@@ -399,6 +399,13 @@ export function renderHistoricalWeek({ changes, startDate, endDate, totalCommits
 			`This week contained ${totalCommits} integrated ${totalCommits === 1 ? "change" : "changes"}. There were no separately announced user-facing updates.`,
 		);
 	}
+	sections.push(
+		"",
+		"## Learn more",
+		"",
+		"- [Read the documentation](/docs)",
+		"- [View detailed releases on GitHub](https://github.com/Untrivial-ai/agent-orchestrator/releases)",
+	);
 
 	return {
 		content: `${sections.join("\n").trim()}\n`,
