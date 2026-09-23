@@ -478,7 +478,7 @@ export function TaskComposer({
 				harness,
 				selectedProvider ?? "",
 			]),
-			create: async (idempotencyKey) => {
+			create: async (idempotencyKey, clientInstanceId) => {
 				void captureRendererEvent("ao.renderer.cloud_preparation_requested", { project_id: projectId });
 				try {
 					const { preparation: lease, session } = await cloudClient.prepareSession(
@@ -486,6 +486,7 @@ export function TaskComposer({
 						{
 							projectId,
 							harness,
+							clientInstanceId,
 							...(selectedProvider ? { provider: selectedProvider } : {}),
 						},
 						{ idempotencyKey },
@@ -497,12 +498,19 @@ export function TaskComposer({
 					throw error;
 				}
 			},
-			commit: async (sessionId, input, idempotencyKey) => {
-				await cloudClient.commitSessionPreparation(cloudOrg.id, sessionId, input, { idempotencyKey });
+			commit: async (sessionId, input, idempotencyKey, clientInstanceId, generation) => {
+				await cloudClient.commitSessionPreparation(
+					cloudOrg.id,
+					sessionId,
+					{ ...input, clientInstanceId, generation },
+					{ idempotencyKey },
+				);
 				void queryClient.invalidateQueries({ queryKey: cloudSessionsQueryKey });
 			},
-			cancel: async (sessionId) => {
-				await cloudClient.deleteSession(cloudOrg.id, sessionId);
+			detach: async (sessionId, clientInstanceId, generation) => {
+				await cloudClient.detachSessionPreparation(
+					cloudOrg.id, sessionId, clientInstanceId, generation,
+				);
 			},
 			onEvent: (event, properties) => {
 				void captureRendererEvent(`ao.renderer.cloud_preparation_${event}`, {
@@ -510,8 +518,10 @@ export function TaskComposer({
 					...properties,
 				});
 			},
-			renew: async (sessionId) => {
-				const { preparation: lease } = await cloudClient.renewSessionPreparation(cloudOrg.id, sessionId);
+			renew: async (sessionId, clientInstanceId, generation) => {
+				const { preparation: lease } = await cloudClient.renewSessionPreparation(
+					cloudOrg.id, sessionId, { clientInstanceId, generation },
+				);
 				return lease;
 			},
 			scopeKey: `${cloudUserId ?? ""}:${cloudOrg.id}:${projectId}`,
@@ -523,7 +533,7 @@ export function TaskComposer({
 		};
 	}, [
 		cloudClient.commitSessionPreparation,
-		cloudClient.deleteSession,
+		cloudClient.detachSessionPreparation,
 		cloudClient.prepareSession,
 		cloudClient.renewSessionPreparation,
 		cloudOrg?.id,

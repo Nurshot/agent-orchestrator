@@ -24,8 +24,8 @@ import (
 // Store is the durable state the reconciler converges.
 type Store interface {
 	ClaimSandboxes(ctx context.Context, owner string, limit int, lease time.Duration) ([]domain.Sandbox, error)
-	RenewSandboxClaim(ctx context.Context, owner, orgID, sessionID string, lease time.Duration) error
-	UpdateSandboxObservation(ctx context.Context, owner, orgID, sessionID, providerEnvironmentID, observedState, lastError string, reconcileAfter time.Time) error
+	RenewSandboxClaim(ctx context.Context, owner, orgID, sessionID string, generation int64, lease time.Duration) error
+	UpdateSandboxObservation(ctx context.Context, owner, orgID, sessionID string, generation int64, providerEnvironmentID, observedState, lastError string, reconcileAfter time.Time) error
 	AcceptSandboxProviderPause(ctx context.Context, owner, orgID, sessionID, providerEnvironmentID string, reconcileAfter time.Time) (bool, error)
 	RecordSandboxFailure(ctx context.Context, owner, orgID, sessionID, providerEnvironmentID, lastError string) error
 	ReleaseSandboxClaim(ctx context.Context, owner, orgID, sessionID string, reconcileAfter time.Time) error
@@ -326,6 +326,7 @@ func (r *Reconciler) reconcileQueuedClaim(
 					r.owner,
 					record.OrgID,
 					record.SessionID,
+					record.PreparationGeneration,
 					r.lease,
 				); err != nil {
 					renewalErr <- err
@@ -437,6 +438,7 @@ func (r *Reconciler) reconcileClaim(ctx context.Context, record domain.Sandbox) 
 		r.owner,
 		record.OrgID,
 		record.SessionID,
+		record.PreparationGeneration,
 		r.lease,
 	); err != nil {
 		return err
@@ -462,6 +464,7 @@ func (r *Reconciler) reconcileClaim(ctx context.Context, record domain.Sandbox) 
 					r.owner,
 					record.OrgID,
 					record.SessionID,
+					record.PreparationGeneration,
 					r.lease,
 				)
 				if err != nil {
@@ -1055,6 +1058,23 @@ func (r *Reconciler) provision(
 		}
 		return r.fail(ctx, record, err)
 	}
+	if err := r.store.RenewSandboxClaim(
+		ctx, r.owner, record.OrgID, record.SessionID,
+		record.PreparationGeneration, r.lease,
+	); err != nil {
+		if errors.Is(err, postgres.ErrSandboxLeaseLost) {
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+			defer cancel()
+			if deleteErr := provider.Delete(cleanupCtx, environment.ID); deleteErr != nil &&
+				!errors.Is(deleteErr, sandbox.ErrNotFound) {
+				r.log.Warn("delete sandbox from stale preparation",
+					"session_id", record.SessionID,
+					"provider_id", environment.ID,
+					"err", deleteErr)
+			}
+		}
+		return err
+	}
 	r.log.Info("sandbox provisioned",
 		"session_id", record.SessionID,
 		"provider", record.Provider,
@@ -1255,9 +1275,11 @@ func (r *Reconciler) workerSpec(ctx context.Context, record domain.Sandbox) (san
 		Environment:      workerEnvironment,
 		DurableRoot:      layout.root,
 		Labels: map[string]string{
-			"ao.session_id": record.SessionID,
-			"ao.org_id":     record.OrgID,
-			"ao.managed":    "true",
+			"ao.session_id":             record.SessionID,
+			"ao.org_id":                 record.OrgID,
+			"ao.managed":                "true",
+			"ao.preparation_generation": fmt.Sprintf("%d", record.PreparationGeneration),
+			"ao.provider_operation_id":  fmt.Sprintf("%s:%d:create", record.SessionID, record.PreparationGeneration),
 		},
 		AutoDeleteMinutes: 7 * 24 * 60,
 	}, nil
@@ -1304,6 +1326,7 @@ func (r *Reconciler) observe(
 		r.owner,
 		record.OrgID,
 		record.SessionID,
+		record.PreparationGeneration,
 		providerID,
 		state,
 		lastError,

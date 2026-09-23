@@ -85,10 +85,12 @@ type Session struct {
 	// from idle-pause, a restore, or any re-provision), so a client can key its
 	// terminal on it and re-attach to the live agent instead of clinging to the
 	// dead epoch's exited terminal. 0 when no worker has ever connected.
-	WorkerEpoch          int64
-	PreparationExpiresAt *time.Time `json:"-"`
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
+	WorkerEpoch            int64
+	PreparationExpiresAt   *time.Time `json:"-"`
+	PreparationGeneration  int64      `json:"-"`
+	PreparationDisposition string     `json:"-"`
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
 }
 
 // Status derives the session's display status from runtime and pull request facts.
@@ -129,11 +131,21 @@ type CreateSession struct {
 	// PreparationExpiresAfter marks a hidden, promptless session that starts
 	// cold compute while the user fills in the task composer. Commit clears it.
 	PreparationExpiresAfter time.Duration `json:"preparationExpiresAfter,omitempty"`
+	// PreparationClientInstanceID identifies one composer attachment. It is not
+	// part of the server-derived compatibility identity.
+	PreparationClientInstanceID string `json:"preparationClientInstanceId,omitempty"`
 }
 
 type CommitSessionPreparation struct {
-	DisplayName string
-	Prompt      string
+	DisplayName      string
+	Prompt           string
+	ClientInstanceID string
+	Generation       int64
+}
+
+type SessionPreparationLease struct {
+	ExpiresAt  time.Time
+	Generation int64
 }
 
 type ClientEvent struct {

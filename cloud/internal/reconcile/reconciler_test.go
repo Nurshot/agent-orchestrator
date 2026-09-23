@@ -3,6 +3,7 @@ package reconcile
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/aoagents/agent-orchestrator/cloud/internal/domain"
+	"github.com/aoagents/agent-orchestrator/cloud/internal/postgres"
 	"github.com/aoagents/agent-orchestrator/cloud/internal/sandbox"
 )
 
@@ -18,15 +20,16 @@ type lifecycleStore struct {
 	acceptedPause bool
 	acceptCalls   int
 	observations  []string
+	renewError    error
 }
 
 func (s *lifecycleStore) ClaimSandboxes(context.Context, string, int, time.Duration) ([]domain.Sandbox, error) {
 	return nil, nil
 }
-func (s *lifecycleStore) RenewSandboxClaim(context.Context, string, string, string, time.Duration) error {
-	return nil
+func (s *lifecycleStore) RenewSandboxClaim(context.Context, string, string, string, int64, time.Duration) error {
+	return s.renewError
 }
-func (s *lifecycleStore) UpdateSandboxObservation(_ context.Context, _, _, _, _, state, _ string, _ time.Time) error {
+func (s *lifecycleStore) UpdateSandboxObservation(_ context.Context, _, _, _ string, _ int64, _, state, _ string, _ time.Time) error {
 	s.observations = append(s.observations, state)
 	return nil
 }
@@ -61,12 +64,57 @@ func (s *lifecycleStore) RecordSandboxStartupRepair(context.Context, string, str
 
 type lifecycleProvider struct {
 	environment sandbox.Environment
+	createdSpec sandbox.Spec
 	starts      int
 	extensions  []time.Time
 }
 
-func (p *lifecycleProvider) Create(context.Context, sandbox.Spec) (sandbox.Environment, error) {
+func (p *lifecycleProvider) Create(_ context.Context, spec sandbox.Spec) (sandbox.Environment, error) {
+	p.createdSpec = spec
 	return p.environment, nil
+}
+
+type lateCreateProvider struct {
+	*lifecycleProvider
+	deleteCalls int
+}
+
+func (p *lateCreateProvider) FindBySession(context.Context, string) (sandbox.Environment, bool, error) {
+	return sandbox.Environment{}, false, nil
+}
+
+func (p *lateCreateProvider) Delete(context.Context, sandbox.ID) error {
+	p.deleteCalls++
+	return nil
+}
+
+func TestProvisionDeletesCreateResultAfterPreparationGenerationIsFenced(t *testing.T) {
+	store := &lifecycleStore{renewError: postgres.ErrSandboxLeaseLost}
+	provider := &lateCreateProvider{lifecycleProvider: &lifecycleProvider{
+		environment: sandbox.Environment{ID: "environment-1", State: sandbox.StateProvisioning},
+	}}
+	reconciler := testReconciler(store, provider)
+	record := domain.Sandbox{
+		SessionID:             "session-1",
+		OrgID:                 "org-1",
+		Provider:              sandbox.ProviderDocker,
+		PreparationGeneration: 7,
+	}
+
+	err := reconciler.provision(context.Background(), record, provider)
+
+	if !errors.Is(err, postgres.ErrSandboxLeaseLost) {
+		t.Fatalf("provision error = %v", err)
+	}
+	if provider.deleteCalls != 1 {
+		t.Fatalf("delete calls = %d, want 1", provider.deleteCalls)
+	}
+	if got := provider.createdSpec.Labels["ao.preparation_generation"]; got != "7" {
+		t.Fatalf("preparation generation label = %q", got)
+	}
+	if len(store.observations) != 0 {
+		t.Fatalf("stale observations = %v", store.observations)
+	}
 }
 func (p *lifecycleProvider) Get(context.Context, sandbox.ID) (sandbox.Environment, error) {
 	return p.environment, nil
@@ -445,7 +493,7 @@ func (s *pausePathStore) DisconnectSessionWorkers(context.Context, string, strin
 }
 
 func (s *pausePathStore) UpdateSandboxObservation(
-	_ context.Context, _, _, _, _, observedState, _ string, _ time.Time,
+	_ context.Context, _, _, _ string, _ int64, _, observedState, _ string, _ time.Time,
 ) error {
 	s.observed = observedState
 	return nil

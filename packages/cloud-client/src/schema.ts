@@ -344,6 +344,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cloud/v1/orgs/{orgId}/sessions/{sessionId}/preparation-attachments/{clientInstanceId}": {
+        parameters: {
+            query: {
+                generation: number;
+            };
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+                sessionId: components["parameters"]["SessionId"];
+                clientInstanceId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["detachSessionPreparation"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cloud/v1/orgs/{orgId}/sessions/{sessionId}/children": {
         parameters: {
             query?: never;
@@ -1687,25 +1709,45 @@ export interface components {
             projectId: string;
             harness: string;
             /** Format: uuid */
+            clientInstanceId: string;
+            /** Format: uuid */
             sandboxProviderConnectionId?: string;
             provider?: string;
         };
         SessionPreparationLease: {
             /** Format: date-time */
             expiresAt: string;
+            /** Format: date-time */
+            attachmentExpiresAt: string;
             /** Format: int64 */
             leaseSeconds: number;
+            /** Format: int64 */
+            generation: number;
         };
         PrepareSessionResponse: {
+            /** Format: uuid */
+            claimId: string;
+            /** @enum {string} */
+            disposition: "created" | "reused";
             session: components["schemas"]["Session"];
             preparation: components["schemas"]["SessionPreparationLease"];
         };
         RenewSessionPreparationResponse: {
             preparation: components["schemas"]["SessionPreparationLease"];
         };
+        RenewSessionPreparationInput: {
+            /** Format: uuid */
+            clientInstanceId: string;
+            /** Format: int64 */
+            generation: number;
+        };
         CommitSessionPreparationInput: {
             displayName: string;
             prompt: string;
+            /** Format: uuid */
+            clientInstanceId: string;
+            /** Format: int64 */
+            generation: number;
         };
         SessionPage: {
             items: components["schemas"]["Session"][];
@@ -2712,7 +2754,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Hidden session preparation created. */
+            /** @description Compatible hidden session preparation created or reused. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -2819,9 +2861,40 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenewSessionPreparationInput"];
+            };
+        };
         responses: {
             /** @description Preparation lease renewed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenewSessionPreparationResponse"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    detachSessionPreparation: {
+        parameters: {
+            query: {
+                generation: number;
+            };
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+                sessionId: components["parameters"]["SessionId"];
+                clientInstanceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Composer attachment detached and preparation grace renewed. */
             200: {
                 headers: {
                     [name: string]: unknown;

@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { createCloudCpClient } from "./client";
 
 describe("cloud control-plane session lifecycle", () => {
-	it("prepares, renews, and commits one hidden session with stable mutation keys", async () => {
+	it("prepares, renews, detaches, and commits one hidden session with stable mutation keys", async () => {
+		const clientInstanceId = "00000000-0000-0000-0000-0000000000c1";
 		const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
 			new Response(
 				JSON.stringify({ session: { id: "session/1" } }),
@@ -17,14 +18,15 @@ describe("cloud control-plane session lifecycle", () => {
 
 		await client.prepareSession(
 			"org/1",
-			{ projectId: "project-1", harness: "codex", provider: "nodeops" },
+			{ projectId: "project-1", harness: "codex", provider: "nodeops", clientInstanceId },
 			{ idempotencyKey: "prepare-key" },
 		);
-		await client.renewSessionPreparation("org/1", "session/1");
+		await client.renewSessionPreparation("org/1", "session/1", { clientInstanceId, generation: 3 });
+		await client.detachSessionPreparation("org/1", "session/1", clientInstanceId, 3);
 		await client.commitSessionPreparation(
 			"org/1",
 			"session/1",
-			{ displayName: "Fix startup", prompt: "Run the checks" },
+			{ displayName: "Fix startup", prompt: "Run the checks", clientInstanceId, generation: 3 },
 			{ idempotencyKey: "commit-key" },
 		);
 
@@ -36,9 +38,12 @@ describe("cloud control-plane session lifecycle", () => {
 			"https://cloud.example.test/api/cloud/v1/orgs/org%2F1/sessions/session%2F1/renew-preparation",
 		);
 		expect(fetchMock.mock.calls[2]?.[0]).toBe(
+			"https://cloud.example.test/api/cloud/v1/orgs/org%2F1/sessions/session%2F1/preparation-attachments/00000000-0000-0000-0000-0000000000c1?generation=3",
+		);
+		expect(fetchMock.mock.calls[3]?.[0]).toBe(
 			"https://cloud.example.test/api/cloud/v1/orgs/org%2F1/sessions/session%2F1/commit-preparation",
 		);
-		expect(new Headers(fetchMock.mock.calls[2]?.[1]?.headers).get("Idempotency-Key")).toBe("commit-key");
+		expect(new Headers(fetchMock.mock.calls[3]?.[1]?.headers).get("Idempotency-Key")).toBe("commit-key");
 	});
 
 	it("posts explicit resume intent for one encoded session", async () => {

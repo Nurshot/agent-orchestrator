@@ -23,6 +23,7 @@ import type {
 	CloudCpPrepareSessionRequest,
 	CloudCpCommitSessionPreparationRequest,
 	CloudCpPrepareSessionResponse,
+	CloudCpRenewSessionPreparationRequest,
 	CloudCpRenewSessionPreparationResponse,
 	CloudCpErrorEnvelope,
 	CloudCpInvitationsResponse,
@@ -149,6 +150,14 @@ export interface CloudCpClient {
 	renewSessionPreparation(
 		orgId: string,
 		sessionId: string,
+		body: CloudCpRenewSessionPreparationRequest,
+		options?: CloudCpRequestOptions,
+	): Promise<CloudCpRenewSessionPreparationResponse>;
+	detachSessionPreparation(
+		orgId: string,
+		sessionId: string,
+		clientInstanceId: string,
+		generation: number,
 		options?: CloudCpRequestOptions,
 	): Promise<CloudCpRenewSessionPreparationResponse>;
 	commitSessionPreparation(
@@ -452,10 +461,17 @@ export function createCloudCpClient(options: CloudCpClientOptions): CloudCpClien
 				signal: o?.signal,
 				idempotencyKey: o?.idempotencyKey ?? newIdempotencyKey(),
 			}),
-		renewSessionPreparation: (orgId, sessionId, o) =>
+		renewSessionPreparation: (orgId, sessionId, body, o) =>
 			requestJson("POST", `/orgs/${seg(orgId)}/sessions/${seg(sessionId)}/renew-preparation`, {
+				body,
 				signal: o?.signal,
 			}),
+		detachSessionPreparation: (orgId, sessionId, clientInstanceId, generation, o) =>
+			requestJson(
+				"DELETE",
+				`/orgs/${seg(orgId)}/sessions/${seg(sessionId)}/preparation-attachments/${seg(clientInstanceId)}`,
+				{ query: { generation }, signal: o?.signal },
+			),
 		commitSessionPreparation: (orgId, sessionId, body, o) =>
 			requestJson("POST", `/orgs/${seg(orgId)}/sessions/${seg(sessionId)}/commit-preparation`, {
 				body,

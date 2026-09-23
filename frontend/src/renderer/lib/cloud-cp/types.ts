@@ -185,16 +185,21 @@ export interface CloudCpCreateSessionRequest {
 export interface CloudCpPrepareSessionRequest {
 	projectId: string;
 	harness: string;
+	clientInstanceId: string;
 	sandboxProviderConnectionId?: string;
 	provider?: string;
 }
 
 export interface CloudCpSessionPreparationLease {
+	attachmentExpiresAt: string;
 	expiresAt: string;
 	leaseSeconds: number;
+	generation: number;
 }
 
 export interface CloudCpPrepareSessionResponse extends CloudCpSessionResponse {
+	claimId: string;
+	disposition: "created" | "reused";
 	preparation: CloudCpSessionPreparationLease;
 }
 
@@ -205,6 +210,13 @@ export interface CloudCpRenewSessionPreparationResponse {
 export interface CloudCpCommitSessionPreparationRequest {
 	displayName: string;
 	prompt: string;
+	clientInstanceId: string;
+	generation: number;
+}
+
+export interface CloudCpRenewSessionPreparationRequest {
+	clientInstanceId: string;
+	generation: number;
 }
 
 export interface CloudCpSession {

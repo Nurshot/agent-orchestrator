@@ -9,24 +9,32 @@ export type CloudSessionPreparationCommit = {
 };
 
 export type CloudSessionPreparationLease = {
+	attachmentExpiresAt: string;
 	expiresAt: string;
+	generation: number;
 	leaseSeconds: number;
 };
 
 export type CloudSessionPreparationRegistration = {
 	attempt: CloudStartupAttempt;
-	cancel: (sessionId: string) => Promise<void>;
+	detach: (sessionId: string, clientInstanceId: string, generation: number) => Promise<void>;
 	commit: (
 		sessionId: string,
 		input: CloudSessionPreparationCommit,
 		idempotencyKey: string,
+		clientInstanceId: string,
+		generation: number,
 	) => Promise<void>;
 	compatibilityKey: string;
-	create: (idempotencyKey: string) => Promise<{
+	create: (idempotencyKey: string, clientInstanceId: string) => Promise<{
 		lease: CloudSessionPreparationLease;
 		sessionId: string;
 	}>;
-	renew: (sessionId: string) => Promise<CloudSessionPreparationLease>;
+	renew: (
+		sessionId: string,
+		clientInstanceId: string,
+		generation: number,
+	) => Promise<CloudSessionPreparationLease>;
 	scopeKey: string;
 	onEvent?: (event: string, properties?: Record<string, unknown>) => void;
 };
@@ -56,10 +64,13 @@ type PreparationEntry = {
 	attachments: number;
 	attempt: CloudStartupAttempt;
 	cleanupStarted: boolean;
+	clientInstanceId: string;
 	commitKey: string;
 	compatibilityKey: string;
 	createKey: string;
 	durableSessionId?: string;
+	detachInFlight?: Promise<void>;
+	generation?: number;
 	expiresAtMs?: number;
 	expiryTimer?: ReturnType<typeof setTimeout>;
 	key: string;
@@ -121,7 +132,8 @@ function scheduleExpiry(entry: PreparationEntry): void {
 function setLease(entry: PreparationEntry, lease: CloudSessionPreparationLease): void {
 	const serverExpiresAtMs = Date.parse(lease.expiresAt);
 	const leaseDurationMs = lease.leaseSeconds * 1_000;
-	if (!Number.isFinite(serverExpiresAtMs) || !Number.isFinite(leaseDurationMs) || leaseDurationMs <= 0) {
+	if (!Number.isFinite(serverExpiresAtMs) || !Number.isFinite(leaseDurationMs) || leaseDurationMs <= 0 ||
+		!Number.isSafeInteger(lease.generation) || lease.generation < 1) {
 		throw new Error("The control plane returned an invalid preparation expiry.");
 	}
 	const expiresAtMs = Date.now() + leaseDurationMs;
@@ -130,17 +142,29 @@ function setLease(entry: PreparationEntry, lease: CloudSessionPreparationLease):
 	scheduleExpiry(entry);
 }
 
+function detachEntry(entry: PreparationEntry): Promise<void> {
+	if (entry.detachInFlight) return entry.detachInFlight;
+	entry.detachInFlight = ensureReady(entry).then((sessionId) => {
+		if (entry.generation === undefined) return;
+		return entry.registration.detach(sessionId, entry.clientInstanceId, entry.generation);
+	}).finally(() => {
+		entry.detachInFlight = undefined;
+	});
+	return entry.detachInFlight;
+}
+
 function cleanupInvalidated(entry: PreparationEntry): void {
-	if (!entry.durableSessionId || entry.cleanupStarted) return;
+	if (entry.cleanupStarted) return;
 	entry.cleanupStarted = true;
-	void entry.registration.cancel(entry.durableSessionId).catch(() => undefined);
+	void detachEntry(entry).catch(() => undefined);
 }
 
 function ensureReady(entry: PreparationEntry): Promise<string> {
 	if (entry.ready) return entry.ready;
-	entry.ready = entry.registration.create(entry.createKey).then(({ lease, sessionId }) => {
+	entry.ready = entry.registration.create(entry.createKey, entry.clientInstanceId).then(({ lease, sessionId }) => {
 		if (!sessionId.trim()) throw new Error("The control plane returned no session identifier.");
 		entry.durableSessionId = sessionId;
+		entry.generation = lease.generation;
 		setLease(entry, lease);
 		bindCloudStartupAttempt(sessionId, entry.attempt);
 		if (entry.phase === "invalidated") cleanupInvalidated(entry);
@@ -161,6 +185,7 @@ function createEntry(registration: CloudSessionPreparationRegistration): Prepara
 		attachments: 0,
 		attempt: registration.attempt,
 		cleanupStarted: false,
+		clientInstanceId: globalThis.crypto.randomUUID(),
 		commitKey: globalThis.crypto.randomUUID(),
 		compatibilityKey: registration.compatibilityKey,
 		createKey: globalThis.crypto.randomUUID(),
@@ -228,10 +253,12 @@ async function renewEntry(entry: PreparationEntry): Promise<CloudSessionPreparat
 	if (entry.renewInFlight) return entry.renewInFlight;
 	emitEvent(entry, "renewal_attempted");
 	entry.renewInFlight = ensureReady(entry).then((sessionId) => {
+		if (entry.generation === undefined) throw new Error("The control plane returned no preparation generation.");
 		clearTimer(entry.expiryTimer);
 		entry.expiryTimer = undefined;
-		return entry.registration.renew(sessionId);
+		return entry.registration.renew(sessionId, entry.clientInstanceId, entry.generation);
 	}).then((lease) => {
+		entry.generation = lease.generation;
 		setLease(entry, lease);
 		emitEvent(entry, "renewal_succeeded");
 		return lease;
@@ -250,6 +277,26 @@ async function renewEntry(entry: PreparationEntry): Promise<CloudSessionPreparat
 		entry.renewInFlight = undefined;
 	});
 	return entry.renewInFlight;
+}
+
+async function reattachEntry(entry: PreparationEntry): Promise<void> {
+	const previousSessionId = entry.durableSessionId;
+	if (entry.detachInFlight) await entry.detachInFlight.catch(() => undefined);
+	entry.createKey = globalThis.crypto.randomUUID();
+	const ready = entry.registration.create(
+		entry.createKey, entry.clientInstanceId,
+	).then(({ lease, sessionId }) => {
+		entry.durableSessionId = sessionId;
+		entry.generation = lease.generation;
+		setLease(entry, lease);
+		if (sessionId !== previousSessionId) bindCloudStartupAttempt(sessionId, entry.attempt);
+		return sessionId;
+	}).catch((error) => {
+		entry.ready = undefined;
+		throw error;
+	});
+	entry.ready = ready;
+	await ready;
 }
 
 function scheduleActivityRenewal(entry: PreparationEntry, delay?: number): void {
@@ -297,7 +344,7 @@ export function startCloudSessionPreparation(
 
 	if (reused) {
 		emitEvent(entry, "reattached");
-		void renewEntry(entry).catch((error) => {
+		void reattachEntry(entry).catch((error) => {
 			if (isCloudSessionPreparationExpired(error)) entry = replaceExpiredEntry(entry);
 		});
 	}
@@ -324,7 +371,10 @@ export function startCloudSessionPreparation(
 				sessionId = await ensureReady(active);
 			}
 			try {
-				await active.registration.commit(sessionId, input, active.commitKey);
+				if (active.generation === undefined) throw new Error("The control plane returned no preparation generation.");
+				await active.registration.commit(
+					sessionId, input, active.commitKey, active.clientInstanceId, active.generation,
+				);
 			} catch (error) {
 				if (isCloudSessionPreparationExpired(error)) {
 					active.phase = "expired";
@@ -332,7 +382,10 @@ export function startCloudSessionPreparation(
 					emitEvent(active, "expired", { attachment_state: "committing" });
 					throw error;
 				}
-				await active.registration.commit(sessionId, input, active.commitKey);
+				if (active.generation === undefined) throw error;
+				await active.registration.commit(
+					sessionId, input, active.commitKey, active.clientInstanceId, active.generation,
+				);
 			}
 			active.phase = "committed";
 			removeEntry(active);
@@ -358,7 +411,7 @@ export function startCloudSessionPreparation(
 			active.activityDirty = false;
 			clearTimer(active.activityTimer);
 			active.activityTimer = undefined;
-			void renewEntry(active).catch(() => undefined);
+			void detachEntry(active).catch(() => undefined);
 		},
 		retainForCommit: () => {
 			const active = currentEntry(true);

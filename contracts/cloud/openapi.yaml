@@ -412,7 +412,7 @@ paths:
               $ref: "#/components/schemas/PrepareSessionInput"
       responses:
         "201":
-          description: Hidden session preparation created.
+          description: Compatible hidden session preparation created or reused.
           content:
             application/json:
               schema:
@@ -486,9 +486,44 @@ paths:
     post:
       operationId: renewSessionPreparation
       tags: [Sessions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenewSessionPreparationInput"
       responses:
         "200":
           description: Preparation lease renewed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RenewSessionPreparationResponse"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/cloud/v1/orgs/{orgId}/sessions/{sessionId}/preparation-attachments/{clientInstanceId}:
+    parameters:
+      - $ref: "#/components/parameters/OrgId"
+      - $ref: "#/components/parameters/SessionId"
+      - name: clientInstanceId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: generation
+        in: query
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+    delete:
+      operationId: detachSessionPreparation
+      tags: [Sessions]
+      responses:
+        "200":
+          description: Composer attachment detached and preparation grace renewed.
           content:
             application/json:
               schema:
@@ -3076,7 +3111,7 @@ components:
     PrepareSessionInput:
       type: object
       additionalProperties: false
-      required: [projectId, harness]
+      required: [projectId, harness, clientInstanceId]
       properties:
         projectId:
           type: string
@@ -3085,6 +3120,9 @@ components:
           type: string
           minLength: 1
           maxLength: 120
+        clientInstanceId:
+          type: string
+          format: uuid
         sandboxProviderConnectionId:
           type: string
           format: uuid
@@ -3093,20 +3131,33 @@ components:
     SessionPreparationLease:
       type: object
       additionalProperties: false
-      required: [expiresAt, leaseSeconds]
+      required: [expiresAt, attachmentExpiresAt, leaseSeconds, generation]
       properties:
         expiresAt:
+          type: string
+          format: date-time
+        attachmentExpiresAt:
           type: string
           format: date-time
         leaseSeconds:
           type: integer
           format: int64
           minimum: 1
+        generation:
+          type: integer
+          format: int64
+          minimum: 1
     PrepareSessionResponse:
       type: object
       additionalProperties: false
-      required: [session, preparation]
+      required: [claimId, disposition, session, preparation]
       properties:
+        claimId:
+          type: string
+          format: uuid
+        disposition:
+          type: string
+          enum: [created, reused]
         session:
           $ref: "#/components/schemas/Session"
         preparation:
@@ -3118,10 +3169,22 @@ components:
       properties:
         preparation:
           $ref: "#/components/schemas/SessionPreparationLease"
+    RenewSessionPreparationInput:
+      type: object
+      additionalProperties: false
+      required: [clientInstanceId, generation]
+      properties:
+        clientInstanceId:
+          type: string
+          format: uuid
+        generation:
+          type: integer
+          format: int64
+          minimum: 1
     CommitSessionPreparationInput:
       type: object
       additionalProperties: false
-      required: [displayName, prompt]
+      required: [displayName, prompt, clientInstanceId, generation]
       properties:
         displayName:
           type: string
@@ -3131,6 +3194,13 @@ components:
           type: string
           minLength: 1
           maxLength: 65536
+        clientInstanceId:
+          type: string
+          format: uuid
+        generation:
+          type: integer
+          format: int64
+          minimum: 1
     SessionPage:
       type: object
       additionalProperties: false

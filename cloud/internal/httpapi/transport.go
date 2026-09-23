@@ -83,6 +83,8 @@ func (s *Server) writeStoreError(w http.ResponseWriter, r *http.Request, err err
 		writeError(w, r, http.StatusGone, "PREPARATION_EXPIRED", "The session preparation expired.")
 	case errors.Is(err, postgres.ErrPreparationCommitted):
 		writeError(w, r, http.StatusConflict, "PREPARATION_COMMITTED", "The session preparation was already committed.")
+	case errors.Is(err, postgres.ErrPreparationStale):
+		writeError(w, r, http.StatusConflict, "PREPARATION_STALE", "The session preparation generation is stale.")
 	case errors.Is(err, postgres.ErrPreparationUnavailable):
 		writeError(w, r, http.StatusConflict, "PREPARATION_UNAVAILABLE", "The session preparation is unavailable.")
 	default:

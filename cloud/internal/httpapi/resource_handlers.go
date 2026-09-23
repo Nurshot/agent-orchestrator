@@ -73,7 +73,8 @@ type createSessionRequest struct {
 	// Provider selects which configured sandbox provider runs this session. It
 	// is optional: an empty value uses the control plane default. When set it
 	// must be one of the providers the deployment offers (see /me).
-	Provider string `json:"provider,omitempty"`
+	Provider                    string `json:"provider,omitempty"`
+	PreparationClientInstanceID string `json:"-"`
 }
 
 type prepareSessionRequest struct {
@@ -81,16 +82,26 @@ type prepareSessionRequest struct {
 	Harness                     string `json:"harness"`
 	SandboxProviderConnectionID string `json:"sandboxProviderConnectionId,omitempty"`
 	Provider                    string `json:"provider,omitempty"`
+	ClientInstanceID            string `json:"clientInstanceId"`
 }
 
 type commitSessionPreparationRequest struct {
-	DisplayName string `json:"displayName"`
-	Prompt      string `json:"prompt"`
+	DisplayName      string `json:"displayName"`
+	Prompt           string `json:"prompt"`
+	ClientInstanceID string `json:"clientInstanceId"`
+	Generation       int64  `json:"generation"`
+}
+
+type renewSessionPreparationRequest struct {
+	ClientInstanceID string `json:"clientInstanceId"`
+	Generation       int64  `json:"generation"`
 }
 
 type sessionPreparationLeaseResponse struct {
-	ExpiresAt    time.Time `json:"expiresAt"`
-	LeaseSeconds int64     `json:"leaseSeconds"`
+	ExpiresAt           time.Time `json:"expiresAt"`
+	AttachmentExpiresAt time.Time `json:"attachmentExpiresAt"`
+	LeaseSeconds        int64     `json:"leaseSeconds"`
+	Generation          int64     `json:"generation"`
 }
 
 const sessionPreparationTTL = 2 * time.Minute
@@ -406,6 +417,11 @@ func (s *Server) prepareSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_request", "The request body is invalid.")
 		return
 	}
+	input.ClientInstanceID = strings.TrimSpace(input.ClientInstanceID)
+	if requireUUID(input.ClientInstanceID, "clientInstanceId") != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_request", "clientInstanceId must be a UUID.")
+		return
+	}
 	s.createSessionFromRequest(w, r, orgID, key, createSessionRequest{
 		ProjectID:                   input.ProjectID,
 		Kind:                        "worker",
@@ -414,6 +430,7 @@ func (s *Server) prepareSession(w http.ResponseWriter, r *http.Request) {
 		Mode:                        "trusted",
 		SandboxProviderConnectionID: input.SandboxProviderConnectionID,
 		Provider:                    input.Provider,
+		PreparationClientInstanceID: input.ClientInstanceID,
 	}, sessionPreparationTTL)
 }
 
@@ -537,20 +554,21 @@ func (s *Server) createSessionFromRequest(
 		key,
 		s.maxSandboxes,
 		domain.CreateSession{
-			ProjectID:               request.ProjectID,
-			Kind:                    request.Kind,
-			Harness:                 request.Harness,
-			DisplayName:             request.DisplayName,
-			Prompt:                  request.Prompt,
-			Mode:                    request.Mode,
-			DeniedCommands:          request.DeniedCommands,
-			Provider:                plan.Provider,
-			SandboxConnectionID:     request.SandboxProviderConnectionID,
-			ResourceProfile:         plan.ResourceProfile,
-			BootstrapContext:        plan.BootstrapContext,
-			Release:                 s.release,
-			ParentSessionID:         parentSessionID,
-			PreparationExpiresAfter: preparationExpiresAfter,
+			ProjectID:                   request.ProjectID,
+			Kind:                        request.Kind,
+			Harness:                     request.Harness,
+			DisplayName:                 request.DisplayName,
+			Prompt:                      request.Prompt,
+			Mode:                        request.Mode,
+			DeniedCommands:              request.DeniedCommands,
+			Provider:                    plan.Provider,
+			SandboxConnectionID:         request.SandboxProviderConnectionID,
+			ResourceProfile:             plan.ResourceProfile,
+			BootstrapContext:            plan.BootstrapContext,
+			Release:                     s.release,
+			ParentSessionID:             parentSessionID,
+			PreparationExpiresAfter:     preparationExpiresAfter,
+			PreparationClientInstanceID: request.PreparationClientInstanceID,
 		},
 	)
 	if err != nil {
@@ -565,9 +583,13 @@ func (s *Server) createSessionFromRequest(
 			return
 		}
 		response["preparation"] = sessionPreparationLeaseResponse{
-			ExpiresAt:    *session.PreparationExpiresAt,
-			LeaseSeconds: int64(preparationExpiresAfter / time.Second),
+			ExpiresAt:           *session.PreparationExpiresAt,
+			AttachmentExpiresAt: *session.PreparationExpiresAt,
+			LeaseSeconds:        int64(preparationExpiresAfter / time.Second),
+			Generation:          session.PreparationGeneration,
 		}
+		response["claimId"] = session.ID
+		response["disposition"] = session.PreparationDisposition
 	}
 	writeJSON(w, http.StatusCreated, response)
 }
@@ -613,16 +635,20 @@ func (s *Server) commitSessionPreparation(w http.ResponseWriter, r *http.Request
 		return
 	}
 	request.DisplayName = strings.TrimSpace(request.DisplayName)
+	request.ClientInstanceID = strings.TrimSpace(request.ClientInstanceID)
 	if request.DisplayName == "" || len(request.DisplayName) > 80 ||
-		strings.TrimSpace(request.Prompt) == "" || len(request.Prompt) > 65536 {
+		strings.TrimSpace(request.Prompt) == "" || len(request.Prompt) > 65536 ||
+		requireUUID(request.ClientInstanceID, "clientInstanceId") != nil || request.Generation < 1 {
 		writeError(w, r, http.StatusUnprocessableEntity, "validation_error", "Session name or prompt is invalid.")
 		return
 	}
 	session, err := s.store.CommitSessionPreparation(
 		r.Context(), principalFrom(r), orgID, sessionID, key,
 		domain.CommitSessionPreparation{
-			DisplayName: request.DisplayName,
-			Prompt:      request.Prompt,
+			DisplayName:      request.DisplayName,
+			Prompt:           request.Prompt,
+			ClientInstanceID: request.ClientInstanceID,
+			Generation:       request.Generation,
 		},
 	)
 	if err != nil {
@@ -639,8 +665,19 @@ func (s *Server) renewSessionPreparation(w http.ResponseWriter, r *http.Request)
 		writeError(w, r, http.StatusBadRequest, "invalid_request", "orgId and sessionId must be UUIDs.")
 		return
 	}
-	expiresAt, err := s.store.RenewSessionPreparation(
-		r.Context(), principalFrom(r), orgID, sessionID, sessionPreparationTTL,
+	var request renewSessionPreparationRequest
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_request", "The request body is invalid.")
+		return
+	}
+	request.ClientInstanceID = strings.TrimSpace(request.ClientInstanceID)
+	if requireUUID(request.ClientInstanceID, "clientInstanceId") != nil || request.Generation < 1 {
+		writeError(w, r, http.StatusBadRequest, "invalid_request", "A valid clientInstanceId and generation are required.")
+		return
+	}
+	lease, err := s.store.RenewSessionPreparation(
+		r.Context(), principalFrom(r), orgID, sessionID,
+		request.ClientInstanceID, request.Generation, sessionPreparationTTL,
 	)
 	if err != nil {
 		s.writeStoreError(w, r, err)
@@ -648,8 +685,42 @@ func (s *Server) renewSessionPreparation(w http.ResponseWriter, r *http.Request)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"preparation": sessionPreparationLeaseResponse{
-			ExpiresAt:    expiresAt,
-			LeaseSeconds: int64(sessionPreparationTTL / time.Second),
+			ExpiresAt:           lease.ExpiresAt,
+			AttachmentExpiresAt: lease.ExpiresAt,
+			LeaseSeconds:        int64(sessionPreparationTTL / time.Second),
+			Generation:          lease.Generation,
+		},
+	})
+}
+
+func (s *Server) detachSessionPreparation(w http.ResponseWriter, r *http.Request) {
+	orgID := chi.URLParam(r, "orgId")
+	sessionID := chi.URLParam(r, "sessionId")
+	clientInstanceID := chi.URLParam(r, "clientInstanceId")
+	if requireUUID(orgID, "orgId") != nil || requireUUID(sessionID, "sessionId") != nil ||
+		requireUUID(clientInstanceID, "clientInstanceId") != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_request", "orgId, sessionId, and clientInstanceId must be UUIDs.")
+		return
+	}
+	generation, err := strconv.ParseInt(r.URL.Query().Get("generation"), 10, 64)
+	if err != nil || generation < 1 {
+		writeError(w, r, http.StatusBadRequest, "invalid_request", "generation must be a positive integer.")
+		return
+	}
+	lease, err := s.store.DetachSessionPreparation(
+		r.Context(), principalFrom(r), orgID, sessionID,
+		clientInstanceID, generation, sessionPreparationTTL,
+	)
+	if err != nil {
+		s.writeStoreError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"preparation": sessionPreparationLeaseResponse{
+			ExpiresAt:           lease.ExpiresAt,
+			AttachmentExpiresAt: lease.ExpiresAt,
+			LeaseSeconds:        int64(sessionPreparationTTL / time.Second),
+			Generation:          lease.Generation,
 		},
 	})
 }

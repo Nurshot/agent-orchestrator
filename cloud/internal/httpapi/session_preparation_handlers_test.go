@@ -17,18 +17,26 @@ import (
 
 type preparationHandlerStore struct {
 	Store
-	createdInput  domain.CreateSession
-	commitInput   domain.CommitSessionPreparation
-	commitSession string
-	commitError   error
-	renewSession  string
-	renewLease    time.Duration
-	renewExpires  time.Time
-	renewError    error
-	createCalls   int
-	commitCalls   int
-	renewCalls    int
+	createdInput     domain.CreateSession
+	commitInput      domain.CommitSessionPreparation
+	commitSession    string
+	commitError      error
+	renewSession     string
+	renewClient      string
+	renewGeneration  int64
+	renewLease       time.Duration
+	renewExpires     time.Time
+	renewError       error
+	detachSession    string
+	detachClient     string
+	detachGeneration int64
+	detachCalls      int
+	createCalls      int
+	commitCalls      int
+	renewCalls       int
 }
+
+const preparationClientID = "00000000-0000-0000-0000-0000000000c1"
 
 type concurrentPreparationStore struct {
 	*preparationHandlerStore
@@ -101,6 +109,8 @@ func (s *preparationHandlerStore) CreateSession(
 	if input.PreparationExpiresAfter > 0 {
 		expiresAt := time.Date(2026, time.September, 23, 12, 2, 0, 0, time.UTC)
 		session.PreparationExpiresAt = &expiresAt
+		session.PreparationGeneration = 1
+		session.PreparationDisposition = "created"
 	}
 	return session, nil
 }
@@ -108,13 +118,30 @@ func (s *preparationHandlerStore) CreateSession(
 func (s *preparationHandlerStore) RenewSessionPreparation(
 	_ context.Context,
 	_ domain.Principal,
-	_, sessionID string,
+	_, sessionID, clientInstanceID string,
+	generation int64,
 	lease time.Duration,
-) (time.Time, error) {
+) (domain.SessionPreparationLease, error) {
 	s.renewCalls++
 	s.renewSession = sessionID
+	s.renewClient = clientInstanceID
+	s.renewGeneration = generation
 	s.renewLease = lease
-	return s.renewExpires, s.renewError
+	return domain.SessionPreparationLease{ExpiresAt: s.renewExpires, Generation: generation}, s.renewError
+}
+
+func (s *preparationHandlerStore) DetachSessionPreparation(
+	_ context.Context,
+	_ domain.Principal,
+	_, sessionID, clientInstanceID string,
+	generation int64,
+	_ time.Duration,
+) (domain.SessionPreparationLease, error) {
+	s.detachCalls++
+	s.detachSession = sessionID
+	s.detachClient = clientInstanceID
+	s.detachGeneration = generation
+	return domain.SessionPreparationLease{ExpiresAt: s.renewExpires, Generation: generation}, nil
 }
 
 func (s *preparationHandlerStore) CommitSessionPreparation(
@@ -141,6 +168,7 @@ func preparationRequest(t *testing.T, method, path, body, sessionID string) *htt
 	rctx.URLParams.Add("orgId", autolinkOrgID)
 	if sessionID != "" {
 		rctx.URLParams.Add("sessionId", sessionID)
+		rctx.URLParams.Add("clientInstanceId", preparationClientID)
 	}
 	ctx := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
 	ctx = context.WithValue(ctx, principalKey, domain.Principal{UserID: "00000000-0000-0000-0000-0000000000f6"})
@@ -155,7 +183,7 @@ func TestPrepareSessionCreatesHiddenExpiringWorker(t *testing.T) {
 		t,
 		http.MethodPost,
 		"/api/cloud/v1/orgs/"+autolinkOrgID+"/session-preparations",
-		`{"projectId":"`+autolinkProjectID+`","harness":"codex","provider":"nodeops"}`,
+		`{"projectId":"`+autolinkProjectID+`","harness":"codex","provider":"nodeops","clientInstanceId":"`+preparationClientID+`"}`,
 		"",
 	))
 
@@ -171,13 +199,17 @@ func TestPrepareSessionCreatesHiddenExpiringWorker(t *testing.T) {
 	if store.createdInput.PreparationExpiresAfter != sessionPreparationTTL {
 		t.Fatalf("preparation TTL = %v, want %v", store.createdInput.PreparationExpiresAfter, sessionPreparationTTL)
 	}
+	if store.createdInput.PreparationClientInstanceID != preparationClientID {
+		t.Fatalf("preparation client = %q", store.createdInput.PreparationClientInstanceID)
+	}
 	var response struct {
 		Preparation sessionPreparationLeaseResponse `json:"preparation"`
 	}
 	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.Preparation.LeaseSeconds != 120 || response.Preparation.ExpiresAt.IsZero() {
+	if response.Preparation.LeaseSeconds != 120 || response.Preparation.ExpiresAt.IsZero() ||
+		response.Preparation.Generation != 1 {
 		t.Fatalf("preparation lease = %+v", response.Preparation)
 	}
 }
@@ -194,7 +226,7 @@ func TestPrepareSessionRunsIndependentPreflightsConcurrently(t *testing.T) {
 		t,
 		http.MethodPost,
 		"/api/cloud/v1/orgs/"+autolinkOrgID+"/session-preparations",
-		`{"projectId":"`+autolinkProjectID+`","harness":"codex","provider":"nodeops"}`,
+		`{"projectId":"`+autolinkProjectID+`","harness":"codex","provider":"nodeops","clientInstanceId":"`+preparationClientID+`"}`,
 		"",
 	)
 	ctx, cancel := context.WithTimeout(request.Context(), time.Second)
@@ -225,7 +257,7 @@ func TestCommitSessionPreparationQueuesFirstTask(t *testing.T) {
 		t,
 		http.MethodPost,
 		"/api/cloud/v1/orgs/"+autolinkOrgID+"/sessions/"+sessionID+"/commit-preparation",
-		`{"displayName":"Fix startup","prompt":"Run the checks"}`,
+		`{"displayName":"Fix startup","prompt":"Run the checks","clientInstanceId":"`+preparationClientID+`","generation":1}`,
 		sessionID,
 	))
 
@@ -235,7 +267,8 @@ func TestCommitSessionPreparationQueuesFirstTask(t *testing.T) {
 	if store.commitCalls != 1 || store.commitSession != sessionID {
 		t.Fatalf("commit = (%d, %q), want (1, %q)", store.commitCalls, store.commitSession, sessionID)
 	}
-	if store.commitInput.DisplayName != "Fix startup" || store.commitInput.Prompt != "Run the checks" {
+	if store.commitInput.DisplayName != "Fix startup" || store.commitInput.Prompt != "Run the checks" ||
+		store.commitInput.ClientInstanceID != preparationClientID || store.commitInput.Generation != 1 {
 		t.Fatalf("commit input = %+v", store.commitInput)
 	}
 }
@@ -250,7 +283,7 @@ func TestCommitSessionPreparationRejectsEmptyPrompt(t *testing.T) {
 		t,
 		http.MethodPost,
 		"/api/cloud/v1/orgs/"+autolinkOrgID+"/sessions/"+sessionID+"/commit-preparation",
-		`{"displayName":"New task","prompt":"  "}`,
+		`{"displayName":"New task","prompt":"  ","clientInstanceId":"`+preparationClientID+`","generation":1}`,
 		sessionID,
 	))
 
@@ -271,6 +304,7 @@ func TestCommitSessionPreparationReturnsStableStateErrors(t *testing.T) {
 	}{
 		{name: "expired", err: postgres.ErrPreparationExpired, status: http.StatusGone, code: "PREPARATION_EXPIRED"},
 		{name: "committed", err: postgres.ErrPreparationCommitted, status: http.StatusConflict, code: "PREPARATION_COMMITTED"},
+		{name: "stale", err: postgres.ErrPreparationStale, status: http.StatusConflict, code: "PREPARATION_STALE"},
 		{name: "unavailable", err: postgres.ErrPreparationUnavailable, status: http.StatusConflict, code: "PREPARATION_UNAVAILABLE"},
 	}
 	for _, test := range tests {
@@ -284,7 +318,7 @@ func TestCommitSessionPreparationReturnsStableStateErrors(t *testing.T) {
 				t,
 				http.MethodPost,
 				"/api/cloud/v1/orgs/"+autolinkOrgID+"/sessions/"+sessionID+"/commit-preparation",
-				`{"displayName":"New task","prompt":"Run checks"}`,
+				`{"displayName":"New task","prompt":"Run checks","clientInstanceId":"`+preparationClientID+`","generation":1}`,
 				sessionID,
 			))
 
@@ -313,14 +347,15 @@ func TestRenewSessionPreparationExtendsLease(t *testing.T) {
 		t,
 		http.MethodPost,
 		"/api/cloud/v1/orgs/"+autolinkOrgID+"/sessions/"+sessionID+"/renew-preparation",
-		"",
+		`{"clientInstanceId":"`+preparationClientID+`","generation":1}`,
 		sessionID,
 	))
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body = %s", recorder.Code, recorder.Body.String())
 	}
-	if store.renewCalls != 1 || store.renewSession != sessionID || store.renewLease != sessionPreparationTTL {
+	if store.renewCalls != 1 || store.renewSession != sessionID || store.renewLease != sessionPreparationTTL ||
+		store.renewClient != preparationClientID || store.renewGeneration != 1 {
 		t.Fatalf("renew = (%d, %q, %v)", store.renewCalls, store.renewSession, store.renewLease)
 	}
 	var response struct {
@@ -329,7 +364,8 @@ func TestRenewSessionPreparationExtendsLease(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if !response.Preparation.ExpiresAt.Equal(expiresAt) || response.Preparation.LeaseSeconds != 120 {
+	if !response.Preparation.ExpiresAt.Equal(expiresAt) || response.Preparation.LeaseSeconds != 120 ||
+		response.Preparation.Generation != 1 {
 		t.Fatalf("preparation lease = %+v", response.Preparation)
 	}
 }
@@ -343,6 +379,7 @@ func TestRenewSessionPreparationReturnsStableStateErrors(t *testing.T) {
 	}{
 		{name: "expired", err: postgres.ErrPreparationExpired, status: http.StatusGone, code: "PREPARATION_EXPIRED"},
 		{name: "committed", err: postgres.ErrPreparationCommitted, status: http.StatusConflict, code: "PREPARATION_COMMITTED"},
+		{name: "stale", err: postgres.ErrPreparationStale, status: http.StatusConflict, code: "PREPARATION_STALE"},
 		{name: "unavailable", err: postgres.ErrPreparationUnavailable, status: http.StatusConflict, code: "PREPARATION_UNAVAILABLE"},
 	}
 	for _, test := range tests {
@@ -356,7 +393,7 @@ func TestRenewSessionPreparationReturnsStableStateErrors(t *testing.T) {
 				t,
 				http.MethodPost,
 				"/api/cloud/v1/orgs/"+autolinkOrgID+"/sessions/"+sessionID+"/renew-preparation",
-				"",
+				`{"clientInstanceId":"`+preparationClientID+`","generation":1}`,
 				sessionID,
 			))
 
@@ -371,5 +408,31 @@ func TestRenewSessionPreparationReturnsStableStateErrors(t *testing.T) {
 				t.Fatalf("code = %q, want %q", response.Code, test.code)
 			}
 		})
+	}
+}
+
+func TestDetachSessionPreparationStartsGraceWithoutDeletingSharedSession(t *testing.T) {
+	expiresAt := time.Date(2026, time.September, 23, 12, 4, 0, 0, time.UTC)
+	store := &preparationHandlerStore{renewExpires: expiresAt}
+	srv := newChildServer(store, bothProviderProvisioning(sandbox.ProviderNodeOps), sandbox.ProviderNodeOps)
+	recorder := httptest.NewRecorder()
+	sessionID := "00000000-0000-0000-0000-0000000000e5"
+	request := preparationRequest(
+		t,
+		http.MethodDelete,
+		"/api/cloud/v1/orgs/"+autolinkOrgID+"/sessions/"+sessionID+
+			"/preparation-attachments/"+preparationClientID+"?generation=1",
+		"",
+		sessionID,
+	)
+
+	srv.detachSessionPreparation(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", recorder.Code, recorder.Body.String())
+	}
+	if store.detachCalls != 1 || store.detachSession != sessionID ||
+		store.detachClient != preparationClientID || store.detachGeneration != 1 {
+		t.Fatalf("detach = (%d, %q, %q, %d)", store.detachCalls, store.detachSession, store.detachClient, store.detachGeneration)
 	}
 }

@@ -51,6 +51,7 @@ export type CreateSessionInput = Schemas["CreateSessionInput"];
 export type PrepareSessionInput = Schemas["PrepareSessionInput"];
 export type SessionPreparationLease = Schemas["SessionPreparationLease"];
 export type PrepareSessionResponse = Schemas["PrepareSessionResponse"];
+export type RenewSessionPreparationInput = Schemas["RenewSessionPreparationInput"];
 export type RenewSessionPreparationResponse = Schemas["RenewSessionPreparationResponse"];
 export type CommitSessionPreparationInput = Schemas["CommitSessionPreparationInput"];
 export type DeleteSessionResponse = Schemas["DeleteSessionResponse"];

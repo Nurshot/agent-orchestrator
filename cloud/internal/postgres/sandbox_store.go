@@ -30,6 +30,7 @@ const sandboxColumns = `sandbox.session_id, sandbox.org_id, sandbox.provider,
 	COALESCE(sandbox.provider_connection_id::text, ''),
 	sandbox.desired_state, sandbox.observed_state,
 	sandbox.resource_profile, sandbox.bootstrap_context,
+	sandbox.preparation_generation,
 	sandbox.worker_last_seen_at, sandbox.startup_started_at,
 	sandbox.startup_attempts,
 	sandbox.deletion_requested_at,
@@ -47,19 +48,112 @@ func (s *Store) ClaimSandboxes(
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
+	type expiredPreparation struct {
+		orgID     string
+		sessionID string
+	}
+	expiredPreparations := make([]expiredPreparation, 0)
+	if err := s.withService(ctx, func(tx pgx.Tx) error {
+		rows, err := tx.Query(
+			ctx,
+			`SELECT org_id, session_id
+			FROM ao_sandboxes
+			WHERE preparation_expires_at <= clock_timestamp()
+			  AND desired_state <> 'deleted'
+			ORDER BY preparation_expires_at, created_at
+			LIMIT 100`,
+		)
+		if err != nil {
+			return fmt.Errorf("list expired prepared sandboxes: %w", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var expired expiredPreparation
+			if err := rows.Scan(&expired.orgID, &expired.sessionID); err != nil {
+				return fmt.Errorf("scan expired prepared sandbox: %w", err)
+			}
+			expiredPreparations = append(expiredPreparations, expired)
+		}
+		if err := rows.Err(); err != nil {
+			return fmt.Errorf("iterate expired prepared sandboxes: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	for _, candidate := range expiredPreparations {
+		if err := s.withOrg(ctx, candidate.orgID, func(tx pgx.Tx) error {
+			var expired bool
+			if err := tx.QueryRow(
+				ctx,
+				`WITH expired AS (
+					UPDATE ao_sandboxes
+					SET desired_state = 'deleted',
+						preparation_generation = preparation_generation + 1,
+						reconcile_after = now(),
+						reconcile_lease_owner = '',
+						reconcile_lease_until = NULL,
+						updated_at = now()
+					WHERE org_id = $1
+					  AND session_id = $2
+					  AND preparation_expires_at <= clock_timestamp()
+					  AND desired_state <> 'deleted'
+					RETURNING 1
+				)
+				SELECT EXISTS (SELECT 1 FROM expired)`,
+				candidate.orgID,
+				candidate.sessionID,
+			).Scan(&expired); err != nil {
+				return fmt.Errorf("expire prepared sandbox: %w", err)
+			}
+			if !expired {
+				return nil
+			}
+			if _, err := tx.Exec(
+				ctx,
+				`UPDATE ao_sessions
+				SET is_terminated = true,
+					activity_state = 'exited',
+					updated_at = now()
+				WHERE org_id = $1 AND id = $2`,
+				candidate.orgID,
+				candidate.sessionID,
+			); err != nil {
+				return fmt.Errorf("terminate expired prepared session: %w", err)
+			}
+			if _, err := tx.Exec(
+				ctx,
+				`UPDATE ao_access_tickets
+				SET consumed_at = COALESCE(consumed_at, now())
+				WHERE org_id = $1
+				  AND session_id = $2
+				  AND consumed_at IS NULL`,
+				candidate.orgID,
+				candidate.sessionID,
+			); err != nil {
+				return fmt.Errorf("invalidate expired prepared session tickets: %w", err)
+			}
+			if _, err := tx.Exec(
+				ctx,
+				`UPDATE ao_worker_connections
+				SET disconnected_at = COALESCE(disconnected_at, now())
+				WHERE org_id = $1
+				  AND session_id = $2
+				  AND disconnected_at IS NULL`,
+				candidate.orgID,
+				candidate.sessionID,
+			); err != nil {
+				return fmt.Errorf("disconnect expired prepared session workers: %w", err)
+			}
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+	}
+
 	sandboxes := make([]domain.Sandbox, 0, limit)
 	err := s.withService(ctx, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(
-			ctx,
-			`UPDATE ao_sandboxes
-			SET desired_state = 'deleted',
-				reconcile_after = now(),
-				updated_at = now()
-			WHERE preparation_expires_at <= now()
-			  AND desired_state <> 'deleted'`,
-		); err != nil {
-			return fmt.Errorf("expire prepared sandboxes: %w", err)
-		}
 		rows, err := tx.Query(
 			ctx,
 			`WITH candidates AS (
@@ -125,6 +219,7 @@ func (s *Store) ClaimSandboxes(
 func (s *Store) RenewSandboxClaim(
 	ctx context.Context,
 	owner, orgID, sessionID string,
+	generation int64,
 	lease time.Duration,
 ) error {
 	return s.withOrg(ctx, orgID, func(tx pgx.Tx) error {
@@ -135,11 +230,13 @@ func (s *Store) RenewSandboxClaim(
 			WHERE session_id = $1
 				AND org_id = $4
 				AND reconcile_lease_owner = $2
-				AND reconcile_lease_until > now()`,
+				AND reconcile_lease_until > now()
+				AND preparation_generation = $5`,
 			sessionID,
 			owner,
 			intervalString(lease),
 			orgID,
+			generation,
 		)
 		if err != nil {
 			return fmt.Errorf("renew sandbox claim: %w", err)
@@ -157,6 +254,7 @@ func (s *Store) RenewSandboxClaim(
 func (s *Store) UpdateSandboxObservation(
 	ctx context.Context,
 	owner, orgID, sessionID string,
+	generation int64,
 	providerEnvironmentID, observedState, lastError string,
 	reconcileAfter time.Time,
 ) error {
@@ -200,7 +298,8 @@ func (s *Store) UpdateSandboxObservation(
 			WHERE session_id = $1
 				AND org_id = $7
 				AND reconcile_lease_owner = $2
-				AND reconcile_lease_until > now()`,
+				AND reconcile_lease_until > now()
+				AND preparation_generation = $8`,
 			sessionID,
 			owner,
 			providerEnvironmentID,
@@ -208,6 +307,7 @@ func (s *Store) UpdateSandboxObservation(
 			lastError,
 			reconcileAfter,
 			orgID,
+			generation,
 		)
 		if err != nil {
 			return fmt.Errorf("update sandbox observation: %w", err)
@@ -728,6 +828,32 @@ func (s *Store) IssueAccessTicket(
 	err := s.withOrg(ctx, orgID, func(tx pgx.Tx) error {
 		var workerEpoch any
 		if purpose == "worker_bootstrap" {
+			var available bool
+			if err := tx.QueryRow(
+				ctx,
+				`SELECT EXISTS (
+					SELECT 1
+					FROM ao_sessions session
+					JOIN ao_sandboxes sandbox
+					  ON sandbox.org_id = session.org_id AND sandbox.session_id = session.id
+					WHERE session.org_id = $1 AND session.id = $2
+					  AND session.is_terminated = false
+					  AND sandbox.desired_state = 'running'
+					  AND (
+						session.is_preparation = false
+						OR (
+							session.preparation_expires_at > clock_timestamp()
+							AND sandbox.preparation_expires_at > clock_timestamp()
+						)
+					  )
+				)`,
+				orgID, sessionID,
+			).Scan(&available); err != nil {
+				return err
+			}
+			if !available {
+				return ErrPreparationUnavailable
+			}
 			var epoch int64
 			if err := tx.QueryRow(
 				ctx,
@@ -831,6 +957,39 @@ func (s *Store) RedeemWorkerBootstrapTicket(
 		if err != nil {
 			return fmt.Errorf("consume access ticket: %w", err)
 		}
+		if _, err := tx.Exec(
+			ctx,
+			`SELECT set_config('ao.org_id', $1, true)`,
+			ticket.OrgID,
+		); err != nil {
+			return err
+		}
+		var available bool
+		if err := tx.QueryRow(
+			ctx,
+			`SELECT EXISTS (
+				SELECT 1
+				FROM ao_sessions session
+				JOIN ao_sandboxes sandbox
+				  ON sandbox.org_id = session.org_id AND sandbox.session_id = session.id
+				WHERE session.org_id = $1 AND session.id = $2
+				  AND session.is_terminated = false
+				  AND sandbox.desired_state = 'running'
+				  AND (
+					session.is_preparation = false
+					OR (
+						session.preparation_expires_at > clock_timestamp()
+						AND sandbox.preparation_expires_at > clock_timestamp()
+					)
+				  )
+			)`,
+			ticket.OrgID, ticket.SessionID,
+		).Scan(&available); err != nil {
+			return err
+		}
+		if !available {
+			return ErrInvalidTicket
+		}
 		return nil
 	})
 	if err != nil {
@@ -914,7 +1073,21 @@ func (s *Store) RegisterWorkerBootstrap(
 				activity_blocked_tool_name = '',
 				activity_blocked_tool_use_id = '',
 				updated_at = now()
-			WHERE org_id = $1 AND id = $2 AND is_terminated = false`,
+			WHERE org_id = $1 AND id = $2 AND is_terminated = false
+			  AND (
+				is_preparation = false
+				OR preparation_expires_at > clock_timestamp()
+			  )
+			  AND EXISTS (
+				SELECT 1 FROM ao_sandboxes sandbox
+				WHERE sandbox.org_id = ao_sessions.org_id
+				  AND sandbox.session_id = ao_sessions.id
+				  AND sandbox.desired_state = 'running'
+				  AND (
+					ao_sessions.is_preparation = false
+					OR sandbox.preparation_expires_at > clock_timestamp()
+				  )
+			  )`,
 			orgID, sessionID,
 		)
 		if err != nil {
@@ -1237,6 +1410,7 @@ func scanSandbox(row rowScanner) (domain.Sandbox, error) {
 		&record.ObservedState,
 		&resourceProfile,
 		&bootstrapContext,
+		&record.PreparationGeneration,
 		&record.WorkerLastSeenAt,
 		&record.StartupStartedAt,
 		&record.StartupAttempts,

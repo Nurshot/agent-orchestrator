@@ -16,7 +16,9 @@ const attempt = { attemptId: "attempt-1", startedAtMs: 100 };
 
 function lease(seconds = 120) {
 	return {
+		attachmentExpiresAt: new Date(Date.now() + seconds * 1_000).toISOString(),
 		expiresAt: new Date(Date.now() + seconds * 1_000).toISOString(),
+		generation: 1,
 		leaseSeconds: seconds,
 	};
 }
@@ -26,7 +28,7 @@ function registration(
 ): CloudSessionPreparationRegistration {
 	return {
 		attempt,
-		cancel: vi.fn().mockResolvedValue(undefined),
+		detach: vi.fn().mockResolvedValue(undefined),
 		commit: vi.fn().mockResolvedValue(undefined),
 		compatibilityKey: "project-1:codex:nodeops",
 		create: vi.fn().mockImplementation(async () => ({ lease: lease(), sessionId: "session-1" })),
@@ -67,9 +69,11 @@ describe("cloud session preparation", () => {
 			"session-1",
 			{ displayName: "Fix startup", prompt: "Do the work" },
 			expect.any(String),
+			expect.any(String),
+			1,
 		);
 		preparation.release();
-		expect(options.cancel).not.toHaveBeenCalled();
+		expect(options.detach).not.toHaveBeenCalled();
 	});
 
 	it("keeps a preparation during close grace and reuses it on reopen", async () => {
@@ -83,9 +87,9 @@ describe("cloud session preparation", () => {
 		const second = startCloudSessionPreparation(options);
 		await flushPromises();
 
-		expect(options.create).toHaveBeenCalledOnce();
-		expect(options.renew).toHaveBeenCalledOnce();
-		expect(options.cancel).not.toHaveBeenCalled();
+		expect(options.create).toHaveBeenCalledTimes(2);
+		expect(options.renew).not.toHaveBeenCalled();
+		expect(options.detach).toHaveBeenCalledOnce();
 		expect(onEvent).toHaveBeenCalledWith("acquired", { acquisition: "new" });
 		expect(onEvent).toHaveBeenCalledWith("detached", { session_id: "session-1" });
 		expect(onEvent).toHaveBeenCalledWith("acquired", {
@@ -94,6 +98,25 @@ describe("cloud session preparation", () => {
 		});
 		expect(onEvent).toHaveBeenCalledWith("reattached", { session_id: "session-1" });
 		await expect(second.commit({ displayName: "Reopen", prompt: "Continue" })).resolves.toBe("session-1");
+	});
+
+	it("retries an ambiguous server reattach with its reattach idempotency key", async () => {
+		const create = vi.fn()
+			.mockImplementationOnce(async () => ({ lease: lease(), sessionId: "session-1" }))
+			.mockRejectedValueOnce(new Error("offline"))
+			.mockImplementationOnce(async () => ({ lease: lease(), sessionId: "session-1" }));
+		const options = registration({ create });
+		const first = startCloudSessionPreparation(options);
+		await flushPromises();
+		first.release();
+		await flushPromises();
+
+		const reopened = startCloudSessionPreparation(options);
+		await flushPromises();
+		await expect(reopened.commit({ displayName: "Reopen", prompt: "Continue" })).resolves.toBe("session-1");
+
+		expect(create).toHaveBeenCalledTimes(3);
+		expect(create.mock.calls[1]?.[0]).toBe(create.mock.calls[2]?.[0]);
 	});
 
 	it("renews after a close that happens before create resolves", async () => {
@@ -109,8 +132,8 @@ describe("cloud session preparation", () => {
 		resolveCreate({ lease: lease(), sessionId: "session-2" });
 		await flushPromises();
 
-		expect(renew).toHaveBeenCalledWith("session-2");
-		expect(options.cancel).not.toHaveBeenCalled();
+		expect(renew).not.toHaveBeenCalled();
+		expect(options.detach).toHaveBeenCalledWith("session-2", expect.any(String), 1);
 	});
 
 	it("shares one preparation across compatible mounts", async () => {
@@ -125,10 +148,10 @@ describe("cloud session preparation", () => {
 		expect(options.renew).not.toHaveBeenCalled();
 		second.release();
 		await flushPromises();
-		expect(options.renew).toHaveBeenCalledOnce();
+		expect(options.detach).toHaveBeenCalledOnce();
 	});
 
-	it("deletes an incompatible preparation", async () => {
+	it("detaches an incompatible preparation", async () => {
 		const firstOptions = registration();
 		startCloudSessionPreparation(firstOptions);
 		await flushPromises();
@@ -136,7 +159,7 @@ describe("cloud session preparation", () => {
 		startCloudSessionPreparation(registration({ compatibilityKey: "project-1:codex:coder" }));
 		await flushPromises();
 
-		expect(firstOptions.cancel).toHaveBeenCalledWith("session-1");
+		expect(firstOptions.detach).toHaveBeenCalledWith("session-1", expect.any(String), 1);
 	});
 
 	it("coalesces meaningful activity into one trailing renewal", async () => {

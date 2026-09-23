@@ -64,6 +64,7 @@ type Sandbox struct {
 	ObservedState         string
 	ResourceProfile       json.RawMessage
 	BootstrapContext      json.RawMessage
+	PreparationGeneration int64
 	// WorkerLastSeenAt is nil until a worker has checked in at least once,
 	// which is what distinguishes "never started" from "went silent" and
 	// selects the startup deadline over the heartbeat deadline.

@@ -11,6 +11,7 @@ import type {
   CreateSessionInput,
   PrepareSessionInput,
   PrepareSessionResponse,
+  RenewSessionPreparationInput,
   RenewSessionPreparationResponse,
   CommitSessionPreparationInput,
   CurrentAccount,
@@ -355,11 +356,28 @@ export class CloudClient {
   renewSessionPreparation(
     orgId: string,
     sessionId: string,
+    input: RenewSessionPreparationInput,
     options: RequestOptions = {},
   ): Promise<RenewSessionPreparationResponse> {
     return this.request(
       this.orgPath(orgId, `/sessions/${encodeURIComponent(sessionId)}/renew-preparation`),
-      { method: "POST", signal: options.signal },
+      { method: "POST", body: input, signal: options.signal },
+    );
+  }
+
+  detachSessionPreparation(
+    orgId: string,
+    sessionId: string,
+    clientInstanceId: string,
+    generation: number,
+    options: RequestOptions = {},
+  ): Promise<RenewSessionPreparationResponse> {
+    return this.request(
+      this.orgPath(
+        orgId,
+        `/sessions/${encodeURIComponent(sessionId)}/preparation-attachments/${encodeURIComponent(clientInstanceId)}?generation=${generation}`,
+      ),
+      { method: "DELETE", signal: options.signal },
     );
   }
 

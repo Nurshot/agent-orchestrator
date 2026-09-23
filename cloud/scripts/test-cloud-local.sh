@@ -162,6 +162,7 @@ import json
 import pathlib
 import sys
 import time
+import uuid
 import urllib.error
 import urllib.request
 
@@ -348,6 +349,7 @@ elif mode == "prepare":
     org_id = state["orgId"]
     prompt = f"prepared-session-smoke-{time.time_ns()}"
     commit_key = f"commit-preparation-{time.time_ns()}"
+    client_instance_id = str(uuid.uuid4())
     started = time.time()
     prepared = request(
         "POST",
@@ -356,6 +358,7 @@ elif mode == "prepare":
             "projectId": state["projectId"],
             "harness": state["harness"],
             "provider": "docker",
+            "clientInstanceId": client_instance_id,
         },
         token=token,
         idempotency_key=f"prepare-session-{time.time_ns()}",
@@ -363,14 +366,34 @@ elif mode == "prepare":
     )
     session = prepared["session"]
     preparation = prepared["preparation"]
-    if preparation["leaseSeconds"] != 120 or not preparation["expiresAt"]:
+    if preparation["leaseSeconds"] != 120 or not preparation["expiresAt"] or preparation["generation"] < 1:
         raise RuntimeError(f"invalid preparation lease: {preparation!r}")
+    if prepared["disposition"] != "created" or prepared["claimId"] != session["id"]:
+        raise RuntimeError(f"invalid created preparation response: {prepared!r}")
+    reused_client_instance_id = str(uuid.uuid4())
+    reused = request(
+        "POST",
+        f"/api/cloud/v1/orgs/{org_id}/session-preparations",
+        body={
+            "projectId": state["projectId"],
+            "harness": state["harness"],
+            "provider": "docker",
+            "clientInstanceId": reused_client_instance_id,
+        },
+        token=token,
+        idempotency_key=f"reuse-preparation-{time.time_ns()}",
+        expected=201,
+    )
+    if reused["disposition"] != "reused" or reused["session"]["id"] != session["id"]:
+        raise RuntimeError(f"compatible preparation did not reuse one session: {reused!r}")
     if session["id"] in visible_session_ids(org_id, state["projectId"], token):
         raise RuntimeError("uncommitted preparation appeared in the session list")
     state.update({
         "preparationId": session["id"],
         "preparationPrompt": prompt,
         "preparationCommitKey": commit_key,
+        "preparationClientInstanceId": client_instance_id,
+        "preparationGeneration": preparation["generation"],
         "preparationExpiresAt": preparation["expiresAt"],
         "preparationStartedAt": started,
     })
@@ -380,6 +403,10 @@ elif mode == "renew-preparation":
     renewed = request(
         "POST",
         f"/api/cloud/v1/orgs/{state['orgId']}/sessions/{state['preparationId']}/renew-preparation",
+        body={
+            "clientInstanceId": state["preparationClientInstanceId"],
+            "generation": state["preparationGeneration"],
+        },
         token=state["token"],
     )["preparation"]
     if renewed["leaseSeconds"] != 120:
@@ -413,6 +440,8 @@ elif mode == "commit-preparation":
     body = {
         "displayName": "Prepared session smoke",
         "prompt": state["preparationPrompt"],
+        "clientInstanceId": state["preparationClientInstanceId"],
+        "generation": state["preparationGeneration"],
     }
     first = request(
         "POST",
@@ -456,6 +485,10 @@ elif mode == "renew-committed-preparation":
     error = request(
         "POST",
         f"/api/cloud/v1/orgs/{state['orgId']}/sessions/{state['preparationId']}/renew-preparation",
+        body={
+            "clientInstanceId": state["preparationClientInstanceId"],
+            "generation": state["preparationGeneration"],
+        },
         token=state["token"],
         expected=409,
     )
@@ -465,6 +498,7 @@ elif mode == "cancel-preparation":
     state = json.loads(state_file.read_text())
     token = state["token"]
     org_id = state["orgId"]
+    client_instance_id = str(uuid.uuid4())
     session = request(
         "POST",
         f"/api/cloud/v1/orgs/{org_id}/session-preparations",
@@ -472,6 +506,7 @@ elif mode == "cancel-preparation":
             "projectId": state["projectId"],
             "harness": state["harness"],
             "provider": "docker",
+            "clientInstanceId": client_instance_id,
         },
         token=token,
         idempotency_key=f"cancel-preparation-{time.time_ns()}",
@@ -489,27 +524,36 @@ elif mode == "expire-preparation":
     state = json.loads(state_file.read_text())
     token = state["token"]
     org_id = state["orgId"]
-    session = request(
+    client_instance_id = str(uuid.uuid4())
+    prepared = request(
         "POST",
         f"/api/cloud/v1/orgs/{org_id}/session-preparations",
         body={
             "projectId": state["projectId"],
             "harness": state["harness"],
             "provider": "docker",
+            "clientInstanceId": client_instance_id,
         },
         token=token,
         idempotency_key=f"expire-preparation-{time.time_ns()}",
         expected=201,
-    )["session"]
+    )
+    session = prepared["session"]
     if session["id"] in visible_session_ids(org_id, state["projectId"], token):
         raise RuntimeError("expiring preparation appeared in the session list")
     state["expiringPreparationId"] = session["id"]
+    state["expiringPreparationClientInstanceId"] = client_instance_id
+    state["expiringPreparationGeneration"] = prepared["preparation"]["generation"]
     state_file.write_text(json.dumps(state))
 elif mode == "renew-expired-preparation":
     state = json.loads(state_file.read_text())
     error = request(
         "POST",
         f"/api/cloud/v1/orgs/{state['orgId']}/sessions/{state['expiringPreparationId']}/renew-preparation",
+        body={
+            "clientInstanceId": state["expiringPreparationClientInstanceId"],
+            "generation": state["expiringPreparationGeneration"],
+        },
         token=state["token"],
         expected=410,
     )

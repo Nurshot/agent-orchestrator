@@ -19,6 +19,7 @@ var (
 	ErrSandboxQuotaExceeded   = errors.New("sandbox quota exceeded")
 	ErrPreparationExpired     = errors.New("session preparation expired")
 	ErrPreparationCommitted   = errors.New("session preparation already committed")
+	ErrPreparationStale       = errors.New("session preparation generation is stale")
 	ErrPreparationUnavailable = errors.New("session preparation unavailable")
 	ErrWorkerUnavailable      = errors.New("worker unavailable")
 	// ErrTerminalSessionExited means an agent terminal finished and there is no
