@@ -2869,7 +2869,7 @@ function SectionDisclosure({
 				<button
 					aria-expanded={open}
 					aria-label={label}
-					className="relative z-[1] flex min-w-0 flex-1 items-center gap-2 text-left"
+					className="relative z-[1] flex min-w-0 flex-1 self-stretch items-center gap-2 text-left"
 					onClick={onToggle}
 					type="button"
 				>
