@@ -19,6 +19,7 @@ const bridgeMocks = vi.hoisted(() => ({
 	getRepositoryBranch: vi.fn(),
 	scanImportFolder: vi.fn(),
 	connectProviderAuth: vi.fn(),
+	openExternal: vi.fn(),
 }));
 
 const apiMocks = vi.hoisted(() => ({
@@ -40,7 +41,7 @@ vi.mock("../lib/bridge", () => ({
 		refreshGitHubOwners: bridgeMocks.refreshGitHubOwners,
 		getRepositoryBranch: bridgeMocks.getRepositoryBranch,
 			scanImportFolder: bridgeMocks.scanImportFolder,
-			openExternal: vi.fn().mockResolvedValue(undefined),
+			openExternal: bridgeMocks.openExternal,
 		},
 		cloud: {
 			connectProviderAuth: bridgeMocks.connectProviderAuth,
@@ -79,6 +80,11 @@ const cloudMocks = vi.hoisted(() => ({
 	listUserProviderConnections: vi.fn(),
 	putGitHubPAT: vi.fn(),
 	validateSavedRepositoryAccess: vi.fn(),
+	startGitHubInstallation: vi.fn(),
+	getGitHubUser: vi.fn(),
+	listGitHubInstallations: vi.fn(),
+	listGitHubRepositories: vi.fn(),
+	createGitHubProject: vi.fn(),
 	signIn: vi.fn(),
 }));
 
@@ -104,6 +110,11 @@ vi.mock("../hooks/useCloudCp", () => ({
 			listUserProviderConnections: cloudMocks.listUserProviderConnections,
 			putGitHubPAT: cloudMocks.putGitHubPAT,
 			validateSavedRepositoryAccess: cloudMocks.validateSavedRepositoryAccess,
+			startGitHubInstallation: cloudMocks.startGitHubInstallation,
+			getGitHubUser: cloudMocks.getGitHubUser,
+			listGitHubInstallations: cloudMocks.listGitHubInstallations,
+			listGitHubRepositories: cloudMocks.listGitHubRepositories,
+			createGitHubProject: cloudMocks.createGitHubProject,
 		},
 		ready: cloudMocks.cloudEnabled && cloudMocks.sessionStatus === "authenticated",
 		baseUrl: "https://cp.example.com",
@@ -290,6 +301,7 @@ beforeEach(() => {
 	bridgeMocks.getRepositoryBranch.mockReset().mockResolvedValue(undefined);
 	bridgeMocks.scanImportFolder.mockReset().mockImplementation(async ({ path }: { path: string }) => okScan(path));
 	bridgeMocks.connectProviderAuth.mockReset().mockRejectedValue(new Error("No browser auth flow for github in tests"));
+	bridgeMocks.openExternal.mockReset().mockResolvedValue(undefined);
 	apiMocks.POST.mockReset();
 	apiMocks.apiErrorMessage.mockClear();
 	cloudMocks.cloudEnabled = false;
@@ -313,6 +325,12 @@ beforeEach(() => {
 	});
 	cloudMocks.validateSavedRepositoryAccess.mockReset().mockResolvedValue({ writeAccess: true });
 	cloudMocks.listUserProviderConnections.mockReset().mockResolvedValue({ providerConnections: [] });
+	// Default: no GitHub App installation, so the connect button shows.
+	cloudMocks.startGitHubInstallation.mockReset().mockResolvedValue({ installationUrl: "https://github.com/apps/ao/installations/new", expiresAt: "" });
+	cloudMocks.getGitHubUser.mockReset().mockResolvedValue({ connected: false, installations: [] });
+	cloudMocks.listGitHubInstallations.mockReset().mockResolvedValue({ installations: [] });
+	cloudMocks.listGitHubRepositories.mockReset().mockResolvedValue({ items: [], page: { hasMore: false } });
+	cloudMocks.createGitHubProject.mockReset().mockResolvedValue({ project: { id: "cp-app" } });
 	githubDaemonMocks.getGitHubStatus.mockReset().mockResolvedValue({ connected: false });
 	githubDaemonMocks.listGitHubRepos.mockReset().mockResolvedValue({ repos: [] });
 	githubDaemonMocks.saveGitHubPAT.mockReset().mockResolvedValue(undefined);
@@ -1598,60 +1616,64 @@ describe("CreateProjectFlow project import validation", () => {
 		expect(screen.getByRole("button", { name: "Auth with GitHub" })).toHaveClass("decoration-dotted");
 	});
 
-	it("uses the control-plane GitHub credential when creating from a private repository", async () => {
+	it("creates a project from a connected GitHub App repository", async () => {
 		cloudMocks.cloudEnabled = true;
 		cloudMocks.sessionStatus = "authenticated";
-		cloudMocks.listUserProviderConnections.mockResolvedValue({
-			providerConnections: [
+		cloudMocks.listGitHubInstallations.mockResolvedValue({
+			installations: [
 				{
-					id: "github-1",
-					provider: "github",
-					label: "default",
-					config: {},
-					validationState: "valid",
-					createdAt: "2026-01-01T00:00:00Z",
-					updatedAt: "2026-01-01T00:00:00Z",
+					id: "inst-1",
+					githubInstallationId: "100",
+					accountLogin: "acme",
+					accountType: "Organization",
+					status: "active",
+					repositorySelection: "all",
+					syncStatus: "ready",
+					createdAt: "",
+					updatedAt: "",
 				},
 			],
 		});
-		githubDaemonMocks.getGitHubStatus.mockResolvedValue({ connected: true });
-		githubDaemonMocks.listGitHubRepos.mockResolvedValue({
-			repos: [
+		cloudMocks.listGitHubRepositories.mockResolvedValue({
+			items: [
 				{
+					githubRepositoryId: "555",
 					name: "private-repo",
-					full_name: "acme/private-repo",
-					private: true,
-					default_branch: "main",
-					clone_url: "https://github.com/acme/private-repo.git",
+					fullName: "acme/private-repo",
+					htmlUrl: "https://github.com/acme/private-repo",
+					defaultBranch: "main",
+					visibility: "private",
+					isPrivate: true,
+					isArchived: false,
+					access: "write",
+					grantedAt: "",
 				},
 			],
+			page: { hasMore: false },
 		});
-		cloudMocks.createProject.mockResolvedValue({ project: { id: "cp-private" } });
+		cloudMocks.createGitHubProject.mockResolvedValue({ project: { id: "cp-app-1" } });
 		const user = userEvent.setup();
 		render(<CreateProjectFlow embedded mode="choose" {...noop} />, { wrapper: CloudTestProviders });
 
 		await user.click(screen.getByRole("button", { name: "New cloud project" }));
-		const privateRepo = await screen.findByRole("option", { name: /acme\/private-repo/ });
-		await user.selectOptions(screen.getAllByRole("combobox")[0], privateRepo);
+		const repoOption = await screen.findByRole("option", { name: /acme\/private-repo/ });
+		await user.selectOptions(screen.getAllByRole("combobox")[0], repoOption);
 		expect(screen.getByLabelText("Project name")).toHaveValue("private-repo");
 		await user.click(await screen.findByRole("button", { name: "Create cloud project" }));
 
+		// The App path authorizes by repository id and never sends a repo URL or a
+		// desktop-held token.
 		await waitFor(() =>
-			expect(cloudMocks.validateSavedRepositoryAccess).toHaveBeenCalledWith({
-				repositoryUrl: "https://github.com/acme/private-repo.git",
+			expect(cloudMocks.createGitHubProject).toHaveBeenCalledWith("org-1", {
+				githubRepositoryId: "555",
+				displayName: "private-repo",
+				config: {
+					worker: { agent: "claude-code" },
+					orchestrator: { agent: "claude-code" },
+				},
 			}),
 		);
-		await waitFor(() =>
-				expect(cloudMocks.createProject).toHaveBeenCalledWith("org-1", {
-					displayName: "private-repo",
-					repositoryUrl: "https://github.com/acme/private-repo.git",
-					defaultBranch: "main",
-					config: {
-						worker: { agent: "claude-code" },
-						orchestrator: { agent: "claude-code" },
-					},
-				}),
-		);
+		expect(cloudMocks.validateSavedRepositoryAccess).not.toHaveBeenCalled();
 	});
 
 	it("asks to connect GitHub when the credential exists locally but not in the control plane", async () => {
@@ -1668,51 +1690,28 @@ describe("CreateProjectFlow project import validation", () => {
 		expect(githubDaemonMocks.listGitHubRepos).not.toHaveBeenCalled();
 	});
 
-	it("reconnects GitHub after the stored credential is revoked", async () => {
+	it("starts the GitHub App installation in the browser and never handles a secret", async () => {
 		cloudMocks.cloudEnabled = true;
 		cloudMocks.sessionStatus = "authenticated";
-		githubDaemonMocks.getGitHubStatus.mockResolvedValue({ connected: true });
-		cloudMocks.listUserProviderConnections.mockResolvedValue({
-			providerConnections: [{
-				id: "github-1",
-				provider: "github",
-				label: "default",
-				config: {},
-				validationState: "valid",
-				createdAt: "",
-				updatedAt: "",
-			}],
-		});
-		const invalidCredential = Object.assign(new Error("GitHub authorization expired."), {
-			status: 401,
-			code: "GITHUB_AUTH_INVALID",
-		});
-		githubDaemonMocks.listGitHubRepos.mockRejectedValue(invalidCredential);
-		// GitHub App exchange returns the access token plus refresh material.
-		bridgeMocks.connectProviderAuth.mockResolvedValue({
-			secret: "replacement-token",
-			refreshToken: "replacement-refresh",
-			expiresIn: 28800,
-			refreshTokenExpiresIn: 15552000,
+		cloudMocks.listGitHubInstallations.mockResolvedValue({ installations: [] });
+		cloudMocks.startGitHubInstallation.mockResolvedValue({
+			installationUrl: "https://github.com/apps/ao/installations/new",
+			expiresAt: "",
 		});
 		const user = userEvent.setup();
 		render(<CreateProjectFlow embedded mode="choose" {...noop} />, { wrapper: CloudTestProviders });
 
 		await user.click(screen.getByRole("button", { name: "New cloud project" }));
-		const reconnect = await screen.findByRole("button", { name: "Reconnect GitHub" });
-		await user.click(reconnect);
+		const connect = await screen.findByRole("button", { name: /^Connect GitHub/ });
+		await user.click(connect);
 
-		await waitFor(() => expect(bridgeMocks.connectProviderAuth).toHaveBeenCalledWith({
-			baseUrl: "https://cp.example.com",
-			orgId: "org-1",
-			provider: "github",
-		}));
-		// The refresh material is forwarded to the daemon so the token self-renews.
-		await waitFor(() => expect(githubDaemonMocks.saveGitHubPAT).toHaveBeenCalledWith(
-			"replacement-token",
-			expect.objectContaining({ refreshToken: "replacement-refresh", expiresIn: 28800, refreshTokenExpiresIn: 15552000 }),
-		));
-		await waitFor(() => expect(cloudMocks.putGitHubPAT).toHaveBeenCalledWith({ secret: "replacement-token" }));
+		// The control plane builds the install URL; the desktop only opens it. No
+		// GitHub client secret or desktop OAuth exchange is ever involved.
+		await waitFor(() => expect(cloudMocks.startGitHubInstallation).toHaveBeenCalledWith("org-1", expect.anything()));
+		await waitFor(() =>
+			expect(bridgeMocks.openExternal).toHaveBeenCalledWith("https://github.com/apps/ao/installations/new"),
+		);
+		expect(bridgeMocks.connectProviderAuth).not.toHaveBeenCalled();
 	});
 
 	it("advances to the agent step, then creates a cloud project with the selected agents", async () => {

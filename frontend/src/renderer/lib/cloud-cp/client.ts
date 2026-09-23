@@ -31,6 +31,12 @@ import type {
 	CloudCpProviderConnectionResponse,
 	CloudCpProviderConnectionsResponse,
 	CloudCpGitHubReposResponse,
+	CloudCpStartGitHubInstallationResponse,
+	CloudCpGitHubInstallationsResponse,
+	CloudCpSyncGitHubInstallationResponse,
+	CloudCpGitHubUserConnection,
+	CloudCpGitHubRepositoriesPage,
+	CloudCpCreateGitHubProjectRequest,
 	CloudCpPutAgentConnectionRequest,
 	CloudCpPutGitHubPATRequest,
 	CloudCpSendMessageRequest,
@@ -231,6 +237,32 @@ export interface CloudCpClient {
 		body: CloudCpValidateRepositoryAccessRequest,
 		options?: CloudCpRequestOptions,
 	): Promise<CloudCpValidateRepositoryAccessResponse>;
+
+	// GitHub App connect flow. See the type comments in ./types for the flow.
+	startGitHubInstallation(
+		orgId: string,
+		options?: CloudCpRequestOptions,
+	): Promise<CloudCpStartGitHubInstallationResponse>;
+	getGitHubUser(options?: CloudCpRequestOptions): Promise<CloudCpGitHubUserConnection>;
+	listGitHubInstallations(
+		orgId: string,
+		options?: CloudCpRequestOptions,
+	): Promise<CloudCpGitHubInstallationsResponse>;
+	syncGitHubInstallation(
+		orgId: string,
+		installationId: string,
+		options?: CloudCpRequestOptions,
+	): Promise<CloudCpSyncGitHubInstallationResponse>;
+	listGitHubRepositories(
+		orgId: string,
+		query?: CloudCpListQuery,
+		options?: CloudCpRequestOptions,
+	): Promise<CloudCpGitHubRepositoriesPage>;
+	createGitHubProject(
+		orgId: string,
+		body: CloudCpCreateGitHubProjectRequest,
+		options?: CloudCpMutationOptions,
+	): Promise<CloudCpProjectResponse>;
 }
 
 type QueryParams = Record<string, string | number | undefined>;
@@ -521,5 +553,26 @@ export function createCloudCpClient(options: CloudCpClientOptions): CloudCpClien
 		listGitHubRepos: (o) => requestJson("GET", "/me/github/repos", { signal: o?.signal }),
 		validateSavedRepositoryAccess: (body, o) =>
 			requestJson("POST", "/me/github-pat/validate-saved-repository", { body, signal: o?.signal }),
+
+		startGitHubInstallation: (orgId, o) =>
+			requestJson("POST", `/orgs/${seg(orgId)}/github/installations/start`, { signal: o?.signal }),
+		getGitHubUser: (o) => requestJson("GET", "/me/github/user", { signal: o?.signal }),
+		listGitHubInstallations: (orgId, o) =>
+			requestJson("GET", `/orgs/${seg(orgId)}/github/installations`, { signal: o?.signal }),
+		syncGitHubInstallation: (orgId, installationId, o) =>
+			requestJson("POST", `/orgs/${seg(orgId)}/github/installations/${seg(installationId)}/sync`, {
+				signal: o?.signal,
+			}),
+		listGitHubRepositories: (orgId, query, o) =>
+			requestJson("GET", `/orgs/${seg(orgId)}/github/repositories`, {
+				query: { limit: query?.limit, cursor: query?.cursor },
+				signal: o?.signal,
+			}),
+		createGitHubProject: (orgId, body, o) =>
+			requestJson("POST", `/orgs/${seg(orgId)}/github/projects`, {
+				body,
+				signal: o?.signal,
+				idempotencyKey: o?.idempotencyKey ?? newIdempotencyKey(),
+			}),
 	};
 }
