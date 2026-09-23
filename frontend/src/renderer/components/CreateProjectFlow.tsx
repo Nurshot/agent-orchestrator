@@ -1995,7 +1995,10 @@ function CloudProjectCard({
 					</div>
 				) : null}
 
-				{!(appConnected || useManualPat) ? (
+				{/* Show Back exactly when the agent step (which carries its own Back)
+					is not shown, so a connected user who has not picked a repo yet is
+					never left without a way back. Mirrors the agent-step gate below. */}
+				{!((usingApp && selectedRepoId !== "") || useManualPat) ? (
 					<div className={onboardingFooterActionsClass}>
 						<Button type="button" variant="outline" onClick={onBack} disabled={isCreating}>
 							{t("createProject.back", { defaultValue: "Back" })}

@@ -189,6 +189,15 @@ func (s *Server) claimGitHubInstallation(w http.ResponseWriter, r *http.Request)
 
 func (s *Server) githubSetupCallback(w http.ResponseWriter, r *http.Request) {
 	setGitHubCallbackHeaders(w)
+	s.beginGitHubInstallationOAuth(w, r)
+}
+
+// beginGitHubInstallationOAuth runs the post-installation step of the two-step
+// GitHub App flow: it validates the installation the browser reports against the
+// pending install attempt and bounces to the user-authorization page with our
+// own PKCE state. It backs both the dedicated setup callback and the OAuth
+// callback's bundled-install branch below.
+func (s *Server) beginGitHubInstallationOAuth(w http.ResponseWriter, r *http.Request) {
 	installationID, err := strconv.ParseInt(
 		strings.TrimSpace(r.URL.Query().Get("installation_id")),
 		10,
@@ -212,6 +221,20 @@ func (s *Server) githubSetupCallback(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) githubOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	setGitHubCallbackHeaders(w)
+	// A GitHub App configured to "Request user authorization (OAuth) during
+	// installation" delivers the installation context (installation_id) straight
+	// to this OAuth callback in a single redirect, bypassing the setup callback
+	// entirely. Detect that shape and run the setup step instead: mint our own
+	// PKCE OAuth state and bounce to the authorize page. GitHub auto-approves the
+	// already-authorized user and returns here in the normal code+state shape,
+	// which the branch below completes. This keeps the connect flow working
+	// whether or not that App setting is enabled, so the flow does not silently
+	// depend on a GitHub UI toggle. A code without an installation_id is the
+	// normal two-step completion.
+	if strings.TrimSpace(r.URL.Query().Get("installation_id")) != "" {
+		s.beginGitHubInstallationOAuth(w, r)
+		return
+	}
 	_, err := s.github.CompleteOAuth(
 		r.Context(),
 		strings.TrimSpace(r.URL.Query().Get("state")),
