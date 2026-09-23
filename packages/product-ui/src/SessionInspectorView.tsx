@@ -107,9 +107,22 @@ export function SessionInspectorShellView({
 
 	return (
 		<aside className={inspectorShellClass} aria-label={ariaLabel}>
-			<div className="session-inspector__topbar flex h-inspector-tabs shrink-0 items-center border-b border-border pl-1">
-				{isVisible ? (
-					<div className="session-inspector__tablist flex min-w-0 flex-1 items-center justify-start gap-1" role="tablist">
+			<div
+				className={cn(
+					"session-inspector__topbar flex h-inspector-tabs shrink-0 items-center border-b border-border-strong pl-1",
+					activeView === "browser" && "session-inspector__topbar--browser",
+				)}
+			>
+				{isVisible && tabs.length === 1 ? (
+					<span className="min-w-0 flex-1 px-2 text-sm text-passive">{tabs[0].label}</span>
+				) : isVisible ? (
+					<div
+						className={cn(
+							"session-inspector__tablist flex min-w-0 items-center justify-start gap-1",
+							activeView === "browser" ? "shrink-0" : "flex-1",
+						)}
+						role="tablist"
+					>
 						{tabs.map((tab, index) => (
 							<button
 								aria-label={tab.label}
@@ -220,6 +233,7 @@ export function SessionInspectorSummaryView({
 	activity,
 	activityTitle,
 	completion,
+	context,
 	pullRequestCards,
 	pullRequestTitle,
 	reviews,
@@ -229,6 +243,7 @@ export function SessionInspectorSummaryView({
 	activity: ReactNode;
 	activityTitle: string;
 	completion?: ReactNode;
+	context?: ReactNode;
 	pullRequestCards: ReactNode;
 	pullRequestTitle: string;
 	reviews?: ReactNode;
@@ -242,6 +257,7 @@ export function SessionInspectorSummaryView({
 	return (
 		<div role="tabpanel">
 			{workers}
+			{context}
 			<InspectorSection surface={false} title={pullRequestTitle}>
 				<div className="flex flex-col gap-1.5">{pullRequestCards}</div>
 			</InspectorSection>
