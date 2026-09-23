@@ -313,6 +313,11 @@ function scratchpadSectionStyle(isCollapsed: boolean): CSSProperties | undefined
 	return { maxHeight: "calc(50cqh - var(--space-2))" };
 }
 
+function projectsScrollerStyle(isCollapsed: boolean): CSSProperties | undefined {
+	if (isCollapsed) return undefined;
+	return { maxHeight: "100cqh" };
+}
+
 function SidebarSectionScroller({
 	children,
 	className,
@@ -517,7 +522,6 @@ export function Sidebar({
 	resizeAuxiliaryTargetRef,
 }: SidebarProps) {
 	const { t } = useTranslation();
-	const prefersReducedMotion = useReducedMotion();
 	const selection = useSelection();
 	const { state, setOpen, toggleSidebar } = useSidebar();
 	const isCollapsed = state === "collapsed";
@@ -947,19 +951,11 @@ export function Sidebar({
 						) : (
 							<>
 								{workspaces.length > 0 ? (
-									<motion.div
-										aria-hidden={!projectContentOpen || undefined}
-										className="flex min-h-0 flex-col overflow-hidden"
-										inert={!projectContentOpen}
-										initial={false}
-										animate={{ flexGrow: projectContentOpen ? 1 : 0, opacity: projectContentOpen ? 1 : 0 }}
-										transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.18, ease: [0.25, 0.46, 0.45, 0.94] }}
-										style={{ flexBasis: 0 }}
-									>
+									<AnimatedSectionBody open={projectContentOpen} className="flex-none">
 										<SidebarSectionScroller
-											className={`${SECTION_SCROLLER_CLASS} h-full min-h-0`}
+											className={SECTION_SCROLLER_CLASS}
 											testId="sidebar-projects-scroller"
-											wrapperClassName="flex-1"
+											style={projectsScrollerStyle(isCollapsed)}
 										>
 											<SidebarMenu className="relative gap-0.5 rounded-lg group-data-[collapsible=icon]:gap-1 group-data-[collapsible=icon]:rounded-none">
 												<AnimatePresence initial={false}>
@@ -1007,7 +1003,7 @@ export function Sidebar({
 												}}
 											/>
 										) : null}
-									</motion.div>
+									</AnimatedSectionBody>
 								) : null}
 								{standaloneWorkspace ? (
 									<ScratchpadSection

@@ -2136,7 +2136,7 @@ describe("Sidebar", () => {
 		expect(screen.getByRole("button", { name: "Show 4 more projects" })).toBeInTheDocument();
 	});
 
-	it("lets the project list use the full available height without a cap", async () => {
+	it("fits the project list to content up to the full available height", async () => {
 		const user = userEvent.setup();
 		const manyProjects = Array.from({ length: 14 }, (_, index) => ({
 			...workspace,
@@ -2148,14 +2148,15 @@ describe("Sidebar", () => {
 
 		const scroller = screen.getByTestId("sidebar-projects-scroller");
 		expect(scroller).toHaveClass("overflow-y-auto");
-		expect(scroller).toHaveClass("h-full");
 		expect(scroller).toContainElement(screen.getByText("Project 1"));
 		expect(scroller.style.height).toBe("");
-		expect(scroller.style.maxHeight).toBe("");
+		expect(scroller.style.maxHeight).toBe("100cqh");
 
-		// Show more reveals the remaining projects without adding a height cap.
-		await user.click(screen.getByRole("button", { name: "Show 4 more projects" }));
-		expect(scroller.style.maxHeight).toBe("");
+		// Show more stays directly beneath the project list and reveals the remainder.
+		const showMore = screen.getByRole("button", { name: "Show 4 more projects" });
+		expect(showMore.parentElement).toBe(scroller.parentElement?.parentElement);
+		await user.click(showMore);
+		expect(scroller.style.maxHeight).toBe("100cqh");
 		expect(scroller).toHaveClass("overflow-y-auto");
 	});
 
