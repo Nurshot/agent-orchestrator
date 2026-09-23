@@ -554,7 +554,7 @@ func (c *SessionsController) serveRootedPreviewFile(w http.ResponseWriter, r *ht
 }
 
 func serveOpenedPreviewFile(w http.ResponseWriter, r *http.Request, file *os.File, info fs.FileInfo, clean string) {
-	if !previewutil.IsMarkdownPath(clean) || r.URL.Query().Get("raw") == "1" {
+	if !previewutil.IsMarkdownPath(clean) || previewRawRequested(r) {
 		http.ServeContent(w, r, info.Name(), info.ModTime(), file)
 		return
 	}
@@ -573,6 +573,15 @@ func serveOpenedPreviewFile(w http.ResponseWriter, r *http.Request, file *os.Fil
 	if r.Method != http.MethodHead {
 		_, _ = w.Write(rendered) //nolint:gosec // G705: preview content is workspace-local and agent-trusted
 	}
+}
+
+func previewRawRequested(r *http.Request) bool {
+	raw := r.URL.Query().Get("raw")
+	if raw == "" {
+		return false
+	}
+	enabled, err := strconv.ParseBool(raw)
+	return err == nil && enabled
 }
 
 func (c *SessionsController) listWorkspaceFiles(w http.ResponseWriter, r *http.Request) {

@@ -48,6 +48,7 @@ export type FilesSource =
 
 export const sessionWorkspaceFilesQueryKey = (sessionId: string) => ["session-workspace-files", sessionId] as const;
 const WORKSPACE_FILES_DEGRADED_REFETCH_MS = 30_000;
+const MAX_ARTIFACT_TEXT_BYTES = 256 * 1024;
 
 async function fetchSessionWorkspaceFiles(sessionId: string, errorMessage: string): Promise<WorkspaceFilesResponse> {
 	const { data, error } = await apiClient.GET("/api/v1/sessions/{sessionId}/workspace/files", {
@@ -107,18 +108,18 @@ async function fetchSessionPRFile(sessionId: string, number: number, sourceUrl: 
 // uses for HTML artifacts, just fetched directly here instead of navigated to.
 function artifactPreviewFileUrl(sessionId: string, path: string): string {
 	const encodedPath = path.split("/").map(encodeURIComponent).join("/");
-	return `${getApiBaseUrl()}/api/v1/sessions/${encodeURIComponent(sessionId)}/preview/files/__ao_artifacts__/${encodedPath}?raw=1`;
+	return `${getApiBaseUrl()}/api/v1/sessions/${encodeURIComponent(sessionId)}/preview/files/__ao_artifacts__/${encodedPath}?raw=true`;
 }
 
 async function fetchSessionArtifactFile(sessionId: string, path: string, errorMessage: string): Promise<WorkspaceFileDetail> {
 	const response = await fetch(artifactPreviewFileUrl(sessionId, path));
 	if (!response.ok) throw new Error(errorMessage);
-	const content = await response.text();
+	const { binary, content, size, truncated } = await readArtifactTextResponse(response);
 	return {
 		additions: 0,
-		binary: false,
-		content,
-		contentTruncated: false,
+		binary,
+		content: binary ? "" : content,
+		contentTruncated: truncated,
 		deleted: false,
 		deletions: 0,
 		diff: "",
@@ -127,10 +128,74 @@ async function fetchSessionArtifactFile(sessionId: string, path: string, errorMe
 		fileFingerprint: "",
 		path,
 		sessionId,
-		size: content.length,
+		size,
 		status: "unmodified",
 		workspaceVersion: "",
 	};
+}
+
+async function readArtifactTextResponse(response: Response): Promise<{ binary: boolean; content: string; size: number; truncated: boolean }> {
+	const headerSize = Number.parseInt(response.headers.get("content-length") ?? "", 10);
+	if (!response.body && Number.isFinite(headerSize) && headerSize > MAX_ARTIFACT_TEXT_BYTES) {
+		return { binary: false, content: "", size: headerSize, truncated: true };
+	}
+	const { bytes, size, truncated } = await readBoundedResponseBytes(response, MAX_ARTIFACT_TEXT_BYTES);
+	const decoded = decodeArtifactText(bytes, truncated);
+	return { ...decoded, size, truncated };
+}
+
+async function readBoundedResponseBytes(response: Response, limit: number): Promise<{ bytes: Uint8Array; size: number; truncated: boolean }> {
+	if (!response.body) {
+		const buffer = await response.arrayBuffer();
+		const bytes = new Uint8Array(buffer);
+		return { bytes: bytes.slice(0, limit), size: bytes.byteLength, truncated: bytes.byteLength > limit };
+	}
+
+	const reader = response.body.getReader();
+	const chunks: Uint8Array[] = [];
+	let total = 0;
+	let truncated = false;
+	while (true) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		const remaining = limit - total;
+		if (value.byteLength > remaining) {
+			if (remaining > 0) chunks.push(value.slice(0, remaining));
+			total += value.byteLength;
+			truncated = true;
+			await reader.cancel();
+			break;
+		}
+		chunks.push(value);
+		total += value.byteLength;
+	}
+
+	const kept = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+	const bytes = new Uint8Array(kept);
+	let offset = 0;
+	for (const chunk of chunks) {
+		bytes.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+	return { bytes, size: total, truncated };
+}
+
+function decodeArtifactText(bytes: Uint8Array, truncated: boolean): { binary: boolean; content: string } {
+	if (bytes.includes(0)) return { binary: true, content: "" };
+	try {
+		return { binary: false, content: new TextDecoder("utf-8", { fatal: true }).decode(bytes) };
+	} catch {
+		if (truncated) {
+			for (let trim = 1; trim < 4 && trim < bytes.byteLength; trim += 1) {
+				try {
+					return { binary: false, content: new TextDecoder("utf-8", { fatal: true }).decode(bytes.slice(0, bytes.byteLength - trim)) };
+				} catch {
+					// Invalid UTF-8 away from the bounded suffix is handled below as binary.
+				}
+			}
+		}
+		return { binary: true, content: "" };
+	}
 }
 
 export function sessionArtifactFileQueryOptions(sessionId: string, path: string, errorMessage = "Unable to load artifact"): UseQueryOptions<WorkspaceFileDetail> {

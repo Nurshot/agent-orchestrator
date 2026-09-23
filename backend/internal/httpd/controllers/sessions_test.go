@@ -1945,15 +1945,17 @@ func TestSessionsAPI_PreviewFileRawMarkdownBypassesHTMLRendering(t *testing.T) {
 		t.Fatalf("rendered markdown response content-type=%q body=%q, want HTML document", headers.Get("Content-Type"), body)
 	}
 
-	body, status, headers = doRequest(t, srv, http.MethodGet, "/api/v1/sessions/ao-1/preview/files/notes.md?raw=1", "")
-	if status != http.StatusOK {
-		t.Fatalf("raw markdown preview = %d, want 200; body=%s", status, body)
-	}
-	if got := string(body); got != markdown {
-		t.Fatalf("raw markdown body = %q, want %q", got, markdown)
-	}
-	if strings.Contains(headers.Get("Content-Type"), "text/html") {
-		t.Fatalf("raw markdown content type = %q, want non-HTML", headers.Get("Content-Type"))
+	for _, raw := range []string{"1", "true"} {
+		body, status, headers = doRequest(t, srv, http.MethodGet, "/api/v1/sessions/ao-1/preview/files/notes.md?raw="+raw, "")
+		if status != http.StatusOK {
+			t.Fatalf("raw=%s markdown preview = %d, want 200; body=%s", raw, status, body)
+		}
+		if got := string(body); got != markdown {
+			t.Fatalf("raw=%s markdown body = %q, want %q", raw, got, markdown)
+		}
+		if strings.Contains(headers.Get("Content-Type"), "text/html") {
+			t.Fatalf("raw=%s markdown content type = %q, want non-HTML", raw, headers.Get("Content-Type"))
+		}
 	}
 }
 
