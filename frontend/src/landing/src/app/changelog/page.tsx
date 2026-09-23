@@ -2,7 +2,6 @@ import { COMPANY } from "@ao/shared/constants";
 import { ArrowRight, ExternalLink, Rss } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { FaGithub } from "react-icons/fa";
 import { getWeeklyUpdates } from "@/lib/changelog";
 import { ChangelogEntry } from "./components/ChangelogEntry";
 
@@ -55,7 +54,6 @@ export default function ChangelogPage() {
               href="/changelog/releases"
               className="inline-flex items-center gap-1.5 text-sm text-foreground hover:text-orange-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/70 transition-colors"
             >
-              <FaGithub className="size-4" />
               Release archive
               <ArrowRight className="size-3.5" />
             </Link>
