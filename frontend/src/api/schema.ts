@@ -938,7 +938,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start a worker task and ask the orchestrator to title it */
+        /** Start a worker task and refine its title in the background */
         post: operations["delegateTask"];
         delete?: never;
         options?: never;
@@ -1165,6 +1165,24 @@ export interface paths {
         post?: never;
         /** Unpair this phone from the daemon, removing it from the roster */
         delete: operations["unpairPushDevice"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List persisted project reports without changing delivery state */
+        get: operations["listReports"];
+        put?: never;
+        /** Persist a worker report for later orchestrator delivery */
+        post: operations["createReport"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2812,8 +2830,19 @@ export interface components {
             customModelEntry: "none" | "direct" | "configured";
             /** Format: date-time */
             fetchedAt: string;
+            inputFingerprint?: string;
+            /** Format: date-time */
+            lastSuccessAt?: null | string;
+            metadata?: {
+                [key: string]: string;
+            };
             models: components["schemas"]["AgentModelInfo"][];
+            refreshError?: string;
             refreshRecommended?: boolean;
+            /** @enum {string} */
+            refreshState?: "idle" | "queued" | "refreshing" | "error";
+            /** Format: date-time */
+            retryAt?: null | string;
             /** @enum {string} */
             selectionMode: "catalog" | "text" | "mode";
             source: string;
@@ -3456,6 +3485,17 @@ export interface components {
             /** Format: int64 */
             totalTokens: number;
         };
+        CreateReportRequest: {
+            message?: string;
+            note?: string;
+            outputs?: components["schemas"]["ReportOutputRequest"][];
+            sessionId: string;
+            /** @enum {string} */
+            state?: "checkpoint" | "needs_input" | "stuck" | "done";
+        };
+        CreateReportResponse: {
+            id: string;
+        };
         DegradedProject: {
             id: string;
             /** @enum {string} */
@@ -3764,6 +3804,9 @@ export interface components {
         ListProjectsResponse: {
             projects: components["schemas"]["ProjectSummary"][];
         };
+        ListReportsResponse: {
+            reports: components["schemas"]["ReportResponse"][];
+        };
         ListReviewsResponse: {
             /** @enum {string} */
             reviewerActivityState?: "active" | "idle" | "waiting_input" | "blocked" | "exited";
@@ -4032,7 +4075,10 @@ export interface components {
             token?: string;
         };
         PutGitHubPATRequest: {
+            expiresIn?: number;
             pat: string;
+            refreshToken?: string;
+            refreshTokenExpiresIn?: number;
         };
         RegisterPushDeviceRequest: {
             /** @description Human-friendly device label. */
@@ -4074,6 +4120,30 @@ export interface components {
             needsGitInit: boolean;
             repoPath: string;
             requiredActions: string[];
+        };
+        ReportOutputRequest: {
+            /** @enum {string} */
+            kind: "artifact" | "pr_created" | "pr_reviewed";
+            label?: string;
+            reference: string;
+        };
+        ReportOutputResponse: {
+            kind: string;
+            label?: string;
+            reference: string;
+        };
+        ReportResponse: {
+            /** Format: date-time */
+            createdAt: string;
+            id: string;
+            message?: string;
+            note?: string;
+            outputs?: components["schemas"]["ReportOutputResponse"][];
+            projectId: string;
+            /** Format: int64 */
+            repeatCount: number;
+            sessionId: string;
+            state?: string;
         };
         ResolveCommentsResponse: {
             ok: boolean;
@@ -4348,6 +4418,8 @@ export interface components {
              * @enum {string}
              */
             conversationCheckpointOrigin?: "human" | "coordination";
+            /** @description Opaque identity of an AO-authored semantic prompt accepted by the native agent. */
+            coordinationId?: string;
             /** @description AO hook sub-command that produced this state (e.g. post-tool-use). */
             event?: string;
             /** @description Latest assistant update exposed by the provider hook. */
@@ -8558,6 +8630,116 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    listReports: {
+        parameters: {
+            query: {
+                /** @description Stable project identifier. */
+                projectId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListReportsResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    createReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateReportRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateReportResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
             };
             /** @description Internal Server Error */
             500: {

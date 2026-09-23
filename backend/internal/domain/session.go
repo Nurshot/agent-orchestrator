@@ -185,6 +185,9 @@ type SessionMetadata struct {
 	// Model is the agent model this session resolved to at spawn time, including
 	// any per-spawn --model override. Empty means the agent's default model.
 	Model string `json:"model,omitempty"`
+	// Effort is the model tuning value resolved at spawn time. Empty means the
+	// provider default, including when an explicit task override cleared it.
+	Effort string `json:"effort,omitempty"`
 	// ArtifactDir is the session-owned artifact directory under AO's data dir.
 	// It is outside the git workspace and is never exposed directly on the API.
 	ArtifactDir string `json:"-"`
