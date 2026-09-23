@@ -1,6 +1,8 @@
 package sqlite
 
 import (
+	"fmt"
+	"io/fs"
 	"testing"
 	"testing/fstest"
 
@@ -8,65 +10,120 @@ import (
 )
 
 func TestMigrateRepairsRenumberedTaskProvisioningHistory(t *testing.T) {
-	db := openMigratedDatabaseCopy(t, 148)
-	legacyFS := fstest.MapFS{}
-	for legacyPath, canonicalPath := range map[string]string{
-		"migrations/0149_session_provisioning.sql": "migrations/0150_session_provisioning.sql",
-		"migrations/0150_task_preparations.sql":    "migrations/0151_task_preparations.sql",
+	for _, tt := range []struct {
+		name              string
+		baseVersion       int64
+		legacyProvision   int64
+		legacyPreparation int64
+		preapplyThrough   int64
+	}{
+		{name: "old full install", baseVersion: 148, legacyProvision: 149, legacyPreparation: 150, preapplyThrough: 150},
+		{name: "current full install", baseVersion: 149, legacyProvision: 150, legacyPreparation: 151, preapplyThrough: 151},
+		{name: "interrupted after provisioning", baseVersion: 149, legacyProvision: 150, preapplyThrough: 150},
+		{name: "old preparation only", baseVersion: 149, legacyPreparation: 150, preapplyThrough: 150},
+		{name: "current preparation only", baseVersion: 149, legacyPreparation: 151, preapplyThrough: 151},
+		{name: "old preparation only after 0155", baseVersion: 149, legacyPreparation: 150, preapplyThrough: 155},
+		{name: "current preparation only after 0155", baseVersion: 149, legacyPreparation: 151, preapplyThrough: 155},
 	} {
-		contents, err := migrationsFS.ReadFile(canonicalPath)
-		if err != nil {
-			t.Fatalf("read canonical migration %q: %v", canonicalPath, err)
-		}
-		legacyFS[legacyPath] = &fstest.MapFile{Data: contents}
-	}
-
-	gooseMu.Lock()
-	goose.SetBaseFS(legacyFS)
-	goose.SetLogger(goose.NopLogger())
-	if err := goose.SetDialect("sqlite3"); err != nil {
-		gooseMu.Unlock()
-		t.Fatalf("set goose dialect: %v", err)
-	}
-	if err := goose.Up(db, "migrations"); err != nil {
-		gooseMu.Unlock()
-		t.Fatalf("apply legacy task-provisioning migrations: %v", err)
-	}
-	gooseMu.Unlock()
-
-	if err := migrate(db); err != nil {
-		t.Fatalf("migrate legacy task-provisioning database: %v", err)
-	}
-	for table, columns := range map[string][]string{
-		"sessions": {"provision_state", "provision_error", "is_task_preparation"},
-		"review":   {"interface_mode"},
-	} {
-		for _, column := range columns {
-			var present int
-			if err := db.QueryRow(
-				`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`, table, column,
-			).Scan(&present); err != nil {
-				t.Fatalf("read %s.%s: %v", table, column, err)
+		t.Run(tt.name, func(t *testing.T) {
+			db := openMigratedDatabaseCopy(t, tt.baseVersion)
+			legacyFS := fstest.MapFS{}
+			for version := tt.baseVersion + 1; version <= tt.preapplyThrough; version++ {
+				var sourcePath, legacyPath string
+				switch version {
+				case tt.legacyProvision:
+					sourcePath = "migrations/0155_session_provisioning.sql"
+					legacyPath = fmt.Sprintf("migrations/%04d_session_provisioning.sql", version)
+				case tt.legacyPreparation:
+					sourcePath = "migrations/0156_task_preparations.sql"
+					legacyPath = fmt.Sprintf("migrations/%04d_task_preparations.sql", version)
+				default:
+					matches, err := fs.Glob(migrationsFS, fmt.Sprintf("migrations/%04d_*.sql", version))
+					if err != nil || len(matches) != 1 {
+						t.Fatalf("find migration %d: matches=%v err=%v", version, matches, err)
+					}
+					sourcePath, legacyPath = matches[0], matches[0]
+				}
+				contents, err := migrationsFS.ReadFile(sourcePath)
+				if err != nil {
+					t.Fatalf("read migration %q: %v", sourcePath, err)
+				}
+				legacyFS[legacyPath] = &fstest.MapFile{Data: contents}
 			}
-			if present != 1 {
-				t.Fatalf("%s.%s count = %d, want 1", table, column, present)
+
+			gooseMu.Lock()
+			goose.SetBaseFS(legacyFS)
+			goose.SetLogger(goose.NopLogger())
+			if err := goose.SetDialect("sqlite3"); err != nil {
+				gooseMu.Unlock()
+				t.Fatalf("set goose dialect: %v", err)
 			}
-		}
-	}
-	for _, version := range []int64{149, 150, 151} {
-		var applied int
-		if err := db.QueryRow(`
+			if err := goose.Up(db, "migrations"); err != nil {
+				gooseMu.Unlock()
+				t.Fatalf("apply historical migrations: %v", err)
+			}
+			gooseMu.Unlock()
+
+			if err := migrate(db); err != nil {
+				t.Fatalf("migrate historical database: %v", err)
+			}
+			for table, columns := range map[string][]string{
+				"sessions":            {"provision_state", "provision_error", "is_task_preparation", "effort"},
+				"review":              {"interface_mode"},
+				"agent_model_catalog": {"metadata_json"},
+			} {
+				for _, column := range columns {
+					var present int
+					if err := db.QueryRow(
+						`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`, table, column,
+					).Scan(&present); err != nil {
+						t.Fatalf("read %s.%s: %v", table, column, err)
+					}
+					if present != 1 {
+						t.Fatalf("%s.%s count = %d, want 1", table, column, present)
+					}
+				}
+			}
+			for version := int64(149); version <= 156; version++ {
+				var applied int
+				if err := db.QueryRow(`
 SELECT COALESCE((
     SELECT is_applied FROM goose_db_version
     WHERE version_id = ? ORDER BY id DESC LIMIT 1
 ), 0)`, version).Scan(&applied); err != nil {
-			t.Fatalf("read migration %d: %v", version, err)
-		}
-		if applied != 1 {
-			t.Fatalf("migration %d applied = %d, want 1", version, applied)
-		}
-	}
-	if err := migrate(db); err != nil {
-		t.Fatalf("second migration pass: %v", err)
+					t.Fatalf("read migration %d: %v", version, err)
+				}
+				if applied != 1 {
+					t.Fatalf("migration %d applied = %d, want 1", version, applied)
+				}
+			}
+
+			if _, err := db.Exec(`
+INSERT INTO projects (id, path, registered_at)
+VALUES ('catalog-a', '/tmp/catalog-a', CURRENT_TIMESTAMP),
+       ('catalog-b', '/tmp/catalog-b', CURRENT_TIMESTAMP)`); err != nil {
+				t.Fatalf("create projects for catalog CDC: %v", err)
+			}
+			if _, err := db.Exec(`
+INSERT INTO agent_model_catalog (agent_id, project_id, catalog_json, source, fetched_at)
+VALUES ('codex', '', '{}', 'test', CURRENT_TIMESTAMP)`); err != nil {
+				t.Fatalf("create global catalog: %v", err)
+			}
+			var globalEvents int
+			if err := db.QueryRow(`
+SELECT COUNT(*) FROM change_log
+WHERE event_type = 'session_updated'
+  AND json_extract(payload, '$.kind') = 'model_catalog'
+  AND project_id IN ('catalog-a', 'catalog-b')`).Scan(&globalEvents); err != nil {
+				t.Fatalf("read catalog CDC: %v", err)
+			}
+			if globalEvents != 2 {
+				t.Fatalf("global catalog CDC events = %d, want one per active project", globalEvents)
+			}
+
+			if err := migrate(db); err != nil {
+				t.Fatalf("second migration pass: %v", err)
+			}
+		})
 	}
 }

@@ -128,6 +128,7 @@ func (s *Store) PromoteTaskPreparation(ctx context.Context, id domain.SessionID,
 		ActivityLastAt:     activity.LastActivityAt,
 		SessionMode:        domain.NormalizeSessionMode(rec.Mode),
 		Model:              rec.Metadata.Model,
+		Effort:             rec.Metadata.Effort,
 		SessionPermissions: string(rec.Metadata.Permissions),
 		CreatedAt:          rec.CreatedAt,
 		UpdatedAt:          rec.UpdatedAt,
@@ -322,6 +323,28 @@ func (s *Store) RenameSession(ctx context.Context, id domain.SessionID, displayN
 	})
 	if err != nil {
 		return false, fmt.Errorf("rename session %s: %w", id, err)
+	}
+	return rows > 0, nil
+}
+
+// RenameSessionIfDisplayName applies a generated title only while the session
+// still carries AO's provisional name, so a concurrent human rename wins.
+func (s *Store) RenameSessionIfDisplayName(
+	ctx context.Context,
+	id domain.SessionID,
+	currentDisplayName, displayName string,
+	updatedAt time.Time,
+) (bool, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	rows, err := s.qw.RenameSessionIfDisplayName(ctx, gen.RenameSessionIfDisplayNameParams{
+		ID:                 id,
+		CurrentDisplayName: currentDisplayName,
+		DisplayName:        displayName,
+		UpdatedAt:          updatedAt,
+	})
+	if err != nil {
+		return false, fmt.Errorf("rename session %s if unchanged: %w", id, err)
 	}
 	return rows > 0, nil
 }
@@ -643,6 +666,7 @@ func rowToRecord(row gen.GetSessionRow) domain.SessionRecord {
 			ProviderConversationID:           row.ProviderConversationID,
 			ControllerGeneration:             row.ControllerGeneration,
 			Model:                            row.Model,
+			Effort:                           row.Effort,
 			Permissions:                      domain.PermissionMode(row.SessionPermissions),
 		},
 		CleanupGeneration: row.CleanupGeneration,
@@ -718,6 +742,7 @@ func recordToInsert(rec domain.SessionRecord, num int64) gen.InsertSessionParams
 		ProviderConversationID:           rec.Metadata.ProviderConversationID,
 		ControllerGeneration:             rec.Metadata.ControllerGeneration,
 		Model:                            rec.Metadata.Model,
+		Effort:                           rec.Metadata.Effort,
 		SessionPermissions:               string(rec.Metadata.Permissions),
 		CreatedAt:                        rec.CreatedAt,
 		UpdatedAt:                        rec.UpdatedAt,
@@ -778,6 +803,7 @@ func recordToUpdate(rec domain.SessionRecord) gen.UpdateSessionParams {
 		ProviderConversationID:           rec.Metadata.ProviderConversationID,
 		ControllerGeneration:             rec.Metadata.ControllerGeneration,
 		Model:                            rec.Metadata.Model,
+		Effort:                           rec.Metadata.Effort,
 		UpdatedAt:                        rec.UpdatedAt,
 	}
 }

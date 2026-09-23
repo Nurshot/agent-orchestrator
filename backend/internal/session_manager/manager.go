@@ -31,13 +31,14 @@ import (
 // Sentinel errors returned by the Session Manager; callers match them with
 // errors.Is.
 var (
-	ErrNotFound            = errors.New("session: not found")
-	ErrNotRestorable       = errors.New("session: not restorable (not terminal)")
-	ErrTerminated          = errors.New("session: terminated")
-	ErrAgentExited         = errors.New("session: agent exited")
-	ErrAgentNotExited      = errors.New("session: agent has not exited")
-	ErrAgentExitInProgress = errors.New("session: agent exit is already in progress")
-	ErrIncompleteHandle    = errors.New("session: incomplete teardown handle")
+	ErrNotFound                      = errors.New("session: not found")
+	ErrSemanticAcceptanceUnsupported = errors.New("session: semantic message acceptance unsupported")
+	ErrNotRestorable                 = errors.New("session: not restorable (not terminal)")
+	ErrTerminated                    = errors.New("session: terminated")
+	ErrAgentExited                   = errors.New("session: agent exited")
+	ErrAgentNotExited                = errors.New("session: agent has not exited")
+	ErrAgentExitInProgress           = errors.New("session: agent exit is already in progress")
+	ErrIncompleteHandle              = errors.New("session: incomplete teardown handle")
 	// ErrProjectNotResolvable means the spawn's project has no usable repo
 	// (unregistered, archived, or missing a path). The API maps it to a 400.
 	ErrProjectNotResolvable = errors.New("session: project repo not resolvable")
@@ -903,7 +904,11 @@ func (m *Manager) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Sess
 	if err != nil {
 		return domain.SessionRecord{}, 0, 0, fmt.Errorf("spawn: %w", err)
 	}
-	defer releaseHarness()
+	defer func() {
+		if releaseHarness != nil {
+			releaseHarness()
+		}
+	}()
 	releaseWorkspaceGate := m.acquireWorkspaceGate(cfg.ProjectID)
 	defer releaseWorkspaceGate()
 	// Reject an unknown harness before any durable state is created. Doing this
@@ -991,6 +996,7 @@ func (m *Manager) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Sess
 		seed := seedRecord(cfg, project.Config, m.clock())
 		if mode == domain.SessionModeChat {
 			seed.Metadata.Model = cfg.AgentConfig.Model
+			seed.Metadata.Effort = cfg.AgentConfig.Effort
 		}
 		rec, err = m.store.CreateSession(ctx, seed)
 		if err != nil {
@@ -1026,6 +1032,7 @@ func (m *Manager) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Sess
 		seed.ID = id
 		if mode == domain.SessionModeChat {
 			seed.Metadata.Model = cfg.AgentConfig.Model
+			seed.Metadata.Effort = cfg.AgentConfig.Effort
 		}
 		if asyncChat {
 			seed.ProvisionState = domain.SessionProvisionProvisioning
@@ -1053,7 +1060,7 @@ func (m *Manager) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Sess
 	// The attachments are named now (spawnAttachmentRefs is derived, not read
 	// from disk) so the opening prompt is complete before the files land.
 	if asyncChat {
-		return m.beginAsyncChatSpawn(ctx, asyncChatSpawn{
+		started, promptBytes, systemPromptBytes, err := m.beginAsyncChatSpawn(ctx, asyncChatSpawn{
 			cfg:               cfg,
 			project:           project,
 			projectKind:       projectKind,
@@ -1064,7 +1071,12 @@ func (m *Manager) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Sess
 			promptBytes:       promptBytes,
 			systemPromptBytes: systemPromptBytes,
 			preparation:       prep,
+			releaseHarness:    releaseHarness,
 		})
+		if err == nil {
+			releaseHarness = nil // background start now owns the installer guard
+		}
+		return started, promptBytes, systemPromptBytes, err
 	}
 
 	var ws ports.WorkspaceInfo
@@ -1227,7 +1239,8 @@ func (m *Manager) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Sess
 		// The user-visible resolved selection is Model for regular harnesses and
 		// Mode for adapters whose catalog is a mode list (e.g. Amp). If an explicit
 		// Model override exists it wins; otherwise fall back to the resolved Mode.
-		Model: resolvedModelForMetadata(cfg.Harness, agentConfig, adapterConfig),
+		Model:  resolvedModelForMetadata(cfg.Harness, agentConfig, adapterConfig),
+		Effort: agentConfig.Effort,
 	}
 	if prompt != "" {
 		metadata.LatestUserPromptAt = m.clock()
@@ -2467,12 +2480,20 @@ func (m *Manager) ResumeAgentWithMode(ctx context.Context, id domain.SessionID) 
 	if err != nil {
 		return RestoreResult{}, fmt.Errorf("resume agent %s: %w", id, err)
 	}
-	defer releaseHarness()
+	defer func() {
+		if releaseHarness != nil {
+			releaseHarness()
+		}
+	}()
 	if rec.IsTerminated {
 		return RestoreResult{}, fmt.Errorf("resume agent %s: %w", id, ErrTerminated)
 	}
 	if rec.ProvisionState == domain.SessionProvisionFailed {
-		return m.retryFailedChatSpawn(ctx, rec)
+		result, handedOff, err := m.retryFailedChatSpawn(ctx, rec, releaseHarness)
+		if handedOff {
+			releaseHarness = nil
+		}
+		return result, err
 	}
 	if m.SessionStatusReadiness(rec) == "unavailable" {
 		m.beginStatusRecovery(id)
@@ -3775,6 +3796,98 @@ func (m *Manager) Send(ctx context.Context, id domain.SessionID, message string,
 	return m.send(ctx, id, message, "")
 }
 
+// SendSemantic delivers an internal message and returns only after the target
+// agent has accepted that exact message. Chat uses its native accepted-turn
+// boundary. Supported TUIs correlate the durable id through UserPromptSubmit;
+// a successful pane write alone never satisfies this method.
+func (m *Manager) SendSemantic(ctx context.Context, id domain.SessionID, message, clientMessageID string) error {
+	rec, ok, err := m.store.GetSession(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrNotFound
+	}
+	if domain.NormalizeSessionMode(rec.Mode) == domain.SessionModeChat {
+		handled, sendErr := m.sendChat(ctx, id, message, clientMessageID)
+		if !handled {
+			return ErrSemanticAcceptanceUnsupported
+		}
+		return sendErr
+	}
+	if !m.harnessSemanticAcceptance(rec.Harness) {
+		return ErrSemanticAcceptanceUnsupported
+	}
+	if semanticMessageAccepted(rec, clientMessageID) {
+		return nil
+	}
+	wrapped := domain.WrapReportDelivery(clientMessageID, message)
+	if err := m.send(ctx, id, wrapped, clientMessageID); err != nil {
+		return err
+	}
+	deadline := time.NewTimer(10 * time.Second)
+	defer deadline.Stop()
+	ticker := time.NewTicker(m.sendConfirm.pollInterval)
+	defer ticker.Stop()
+	for {
+		current, found, readErr := m.store.GetSession(ctx, id)
+		if readErr != nil {
+			return readErr
+		}
+		if !found || current.IsTerminated || current.Activity.State == domain.ActivityExited {
+			return ErrTerminated
+		}
+		if semanticMessageAccepted(current, clientMessageID) {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-deadline.C:
+			return fmt.Errorf("%w: prompt submission was not observed", ErrSemanticAcceptanceUnsupported)
+		case <-ticker.C:
+		}
+	}
+}
+
+func (m *Manager) harnessSemanticAcceptance(harness domain.AgentHarness) bool {
+	if m.agents == nil {
+		return false
+	}
+	agent, ok := m.agents.Agent(harness)
+	if !ok {
+		return false
+	}
+	signaler, ok := agent.(ports.SemanticMessageAcceptanceSignaler)
+	return ok && signaler.EmitsSemanticMessageAcceptance()
+}
+
+func semanticMessageAccepted(rec domain.SessionRecord, clientMessageID string) bool {
+	return clientMessageID != "" &&
+		rec.Metadata.ConversationCheckpointState == domain.ConversationCheckpointCoordination &&
+		rec.Metadata.ConversationCheckpointGeneration == rec.Metadata.RuntimeLaunchID &&
+		rec.Metadata.ConversationCheckpointTurnID == clientMessageID
+}
+
+// InterruptTUI requests cancellation through the session's owned runtime.
+func (m *Manager) InterruptTUI(ctx context.Context, id domain.SessionID) error {
+	rec, ok, err := m.store.GetSession(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrNotFound
+	}
+	if domain.NormalizeSessionMode(rec.Mode) == domain.SessionModeChat || !m.harnessSemanticAcceptance(rec.Harness) {
+		return ErrSemanticAcceptanceUnsupported
+	}
+	interrupter, ok := m.runtime.(runtimeInterrupter)
+	if !ok || rec.Metadata.RuntimeHandleID == "" {
+		return ErrSemanticAcceptanceUnsupported
+	}
+	return interrupter.Interrupt(ctx, ports.RuntimeHandle{ID: rec.Metadata.RuntimeHandleID})
+}
+
 // send carries an optional idempotency key used by durable transition-message
 // retries. Ordinary callers leave it empty; the outbox preserves the key across
 // restart, rollback, and even a second overlapping handoff.
@@ -3802,7 +3915,8 @@ func (m *Manager) send(ctx context.Context, id domain.SessionID, message, client
 		return err
 	}
 	var afterWrite func(context.Context) error
-	if strings.TrimSpace(message) != "" {
+	_, internalReportDelivery := domain.ReportDeliveryID(message)
+	if strings.TrimSpace(message) != "" && !internalReportDelivery {
 		if recorder, ok := m.store.(latestUserPromptRecorder); ok {
 			afterWrite = func(writeCtx context.Context) error {
 				if _, recordErr := recorder.RecordSessionLatestUserPrompt(writeCtx, id, boundedConversationFact(message), m.clock()); recordErr != nil {

@@ -39,6 +39,7 @@ type asyncChatSpawn struct {
 	promptBytes       int
 	systemPromptBytes int
 	preparation       *taskPreparation
+	releaseHarness    func()
 	retry             bool
 }
 
@@ -97,6 +98,9 @@ func (m *Manager) beginAsyncChatSpawn(ctx context.Context, in asyncChatSpawn) (d
 	m.asyncChatSpawnsMu.Unlock()
 	m.runInBackground(func() {
 		defer func() {
+			if in.releaseHarness != nil {
+				in.releaseHarness()
+			}
 			cancel()
 			m.asyncChatSpawnsMu.Lock()
 			if m.asyncChatSpawns[id] == run {
@@ -267,30 +271,30 @@ func (m *Manager) failAsyncChatSpawn(ctx context.Context, id domain.SessionID, c
 
 // retryFailedChatSpawn reuses the published session and durable turn queue.
 // Queueing the opening brief again would send the user's task twice.
-func (m *Manager) retryFailedChatSpawn(ctx context.Context, rec domain.SessionRecord) (RestoreResult, error) {
+func (m *Manager) retryFailedChatSpawn(ctx context.Context, rec domain.SessionRecord, releaseHarness func()) (RestoreResult, bool, error) {
 	if rec.Kind != domain.KindWorker || domain.NormalizeSessionMode(rec.Mode) != domain.SessionModeChat || m.chat == nil {
-		return RestoreResult{}, fmt.Errorf("retry start %s: %w", rec.ID, ports.ErrChatUnsupported)
+		return RestoreResult{}, false, fmt.Errorf("retry start %s: %w", rec.ID, ports.ErrChatUnsupported)
 	}
 	if m.chat.HasLiveChatController(rec.ID) {
 		if err := m.chat.DrainChatQueue(ctx, rec.ID); err != nil {
-			return RestoreResult{}, err
+			return RestoreResult{}, false, err
 		}
 		ready, err := m.setProvisionState(ctx, rec.ID, domain.SessionProvisionReady, "")
-		return RestoreResult{Session: ready, Mode: RestoreModeNative}, err
+		return RestoreResult{Session: ready, Mode: RestoreModeNative}, false, err
 	}
 	if rec.Metadata.ProviderConversationID != "" {
 		var err error
 		rec, err = m.setProvisionState(ctx, rec.ID, domain.SessionProvisionProvisioning, "")
 		if err != nil {
-			return RestoreResult{}, err
+			return RestoreResult{}, false, err
 		}
-		fail := func(cause error) (RestoreResult, error) {
+		fail := func(cause error) (RestoreResult, bool, error) {
 			cleanupCtx, cancel := spawnRollbackContext(ctx)
 			defer cancel()
 			if _, err := m.setProvisionState(cleanupCtx, rec.ID, domain.SessionProvisionFailed, cause.Error()); err != nil {
-				return RestoreResult{}, errors.Join(cause, err)
+				return RestoreResult{}, false, errors.Join(cause, err)
 			}
-			return RestoreResult{}, cause
+			return RestoreResult{}, false, cause
 		}
 		resumed, err := m.resumeAgentRecordWithPolicy(ctx, "retry start", rec, false, false)
 		if err != nil {
@@ -303,15 +307,15 @@ func (m *Manager) retryFailedChatSpawn(ctx context.Context, rec domain.SessionRe
 		if err != nil {
 			return fail(err)
 		}
-		return resumed, nil
+		return resumed, false, nil
 	}
 	project, err := m.loadProject(ctx, rec.ProjectID)
 	if err != nil {
-		return RestoreResult{}, err
+		return RestoreResult{}, false, err
 	}
 	systemPrompt, err := m.buildSystemPrompt(ctx, rec.Kind, rec.ProjectID)
 	if err != nil {
-		return RestoreResult{}, err
+		return RestoreResult{}, false, err
 	}
 	config := restoredAgentConfig(rec, project.Config)
 	if rec.Metadata.Model != "" {
@@ -332,12 +336,12 @@ func (m *Manager) retryFailedChatSpawn(ctx context.Context, rec domain.SessionRe
 	}
 	retried, _, _, err := m.beginAsyncChatSpawn(ctx, asyncChatSpawn{
 		cfg: cfg, project: project, projectKind: projectKind,
-		record: rec, branch: branch, systemPrompt: systemPrompt, retry: true,
+		record: rec, branch: branch, systemPrompt: systemPrompt, retry: true, releaseHarness: releaseHarness,
 	})
 	if err != nil {
-		return RestoreResult{}, err
+		return RestoreResult{}, false, err
 	}
-	return RestoreResult{Session: retried, Mode: RestoreModeSavedPrompt}, nil
+	return RestoreResult{Session: retried, Mode: RestoreModeSavedPrompt}, true, nil
 }
 
 func (m *Manager) cleanupAsyncChatWorkspace(ctx context.Context, id domain.SessionID, ws ports.WorkspaceInfo, workspaceProject *ports.WorkspaceProjectInfo) {

@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
 	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
 	chatsvc "github.com/aoagents/agent-orchestrator/backend/internal/service/chat"
+	reportsvc "github.com/aoagents/agent-orchestrator/backend/internal/service/report"
 	"github.com/aoagents/agent-orchestrator/backend/internal/storage/sqlite"
 	"github.com/aoagents/agent-orchestrator/backend/internal/storage/sqlite/sqlitetest"
 )
@@ -91,6 +93,64 @@ func TestSendWhileProvisioningQueuesInOrder(t *testing.T) {
 	// reads "stopped" hides the composer the user is meant to keep typing into.
 	if snapshot.Controller != ports.ChatControllerConnecting {
 		t.Fatalf("controller state = %q, want connecting", snapshot.Controller)
+	}
+}
+
+func TestProvisioningSendPiggybacksReportsOnlyOnRecordedTurn(t *testing.T) {
+	st, workerID := openProvisioningStore(t, domain.SessionProvisionReady)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	orchestrator, err := st.CreateSession(ctx, domain.SessionRecord{
+		ProjectID: testProject, Kind: domain.KindOrchestrator,
+		Harness: domain.HarnessCodex, Mode: domain.SessionModeChat,
+		ProvisionState: domain.SessionProvisionProvisioning,
+		CreatedAt:      now, UpdatedAt: now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	createReport := func(id string) {
+		t.Helper()
+		if _, err := st.CreateReport(ctx, domain.ReportRecord{
+			ID: id, SessionID: workerID, ProjectID: testProject,
+			State: domain.ReportCheckpoint, Note: id,
+			CreatedAt: now, AvailableAt: now.Add(time.Hour),
+			DeliveryState: domain.ReportPending, RepeatCount: 1,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	createReport("first-report")
+	svc := provisioningService(t, st)
+	svc.SetReportCoordinator(reportsvc.NewCoordinator(reportsvc.CoordinatorDeps{
+		Store: st, Now: func() time.Time { return now }, NewToken: func() string { return "report-claim" },
+	}))
+	message := ports.ChatUserMessage{Text: "start", Origin: domain.MessageOriginHuman, ClientMessageID: "client-1"}
+	turn, err := svc.Send(ctx, orchestrator.ID, message)
+	if err != nil || turn.State != domain.TurnStateQueued {
+		t.Fatalf("queued send = %+v, err = %v", turn, err)
+	}
+	snapshot, err := svc.Snapshot(ctx, orchestrator.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Messages) != 1 || !strings.Contains(snapshot.Messages[0].Text, "<ao-worker-reports>") ||
+		!strings.Contains(snapshot.Messages[0].Text, "first-report") {
+		t.Fatalf("queued message missing piggyback: %+v", snapshot.Messages)
+	}
+	first, found, err := st.GetReport(ctx, "first-report")
+	if err != nil || !found || first.DeliveryState != domain.ReportAcknowledged {
+		t.Fatalf("first report = %+v, found = %v, err = %v", first, found, err)
+	}
+
+	createReport("second-report")
+	duplicate, err := svc.Send(ctx, orchestrator.ID, message)
+	if err != nil || duplicate.ID != "" {
+		t.Fatalf("duplicate send = %+v, err = %v", duplicate, err)
+	}
+	second, found, err := st.GetReport(ctx, "second-report")
+	if err != nil || !found || second.DeliveryState != domain.ReportPending {
+		t.Fatalf("duplicate acknowledged an unrecorded report: %+v, found = %v, err = %v", second, found, err)
 	}
 }
 

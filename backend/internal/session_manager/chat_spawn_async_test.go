@@ -39,6 +39,13 @@ type blockingWorkspacePublishStore struct {
 	release chan struct{}
 }
 
+type countingHarnessUseGate struct{ active int }
+
+func (g *countingHarnessUseGate) TryBeginHarnessUse(domain.AgentHarness) (func(), bool) {
+	g.active++
+	return func() { g.active-- }, true
+}
+
 func (s *blockingWorkspacePublishStore) SetSessionProvisionedWorkspace(
 	ctx context.Context,
 	id domain.SessionID,
@@ -107,6 +114,68 @@ func TestSpawnAsyncChat_AnswersBeforeWorkspaceAndController(t *testing.T) {
 	}
 }
 
+func TestSpawnAsyncChatSeedsEffortBeforeBackgroundTitle(t *testing.T) {
+	for _, prepared := range []bool{false, true} {
+		name := "fresh"
+		if prepared {
+			name = "prepared"
+		}
+		t.Run(name, func(t *testing.T) {
+			launcher := &recordingLauncher{}
+			m, st, _ := newChatManager(launcher)
+			m.dataDir = t.TempDir()
+			m.browserCapabilities = browsersvc.NewAuthority()
+			deferred := deferredBackground(m)
+			project := st.projects[string(chatTestProject)]
+			project.Config.AgentConfig.Effort = "high"
+			st.projects[string(chatTestProject)] = project
+
+			cfg := asyncChatSpawnConfig("do the thing")
+			if prepared {
+				token, err := m.PrepareTaskWorkspace(context.Background(), project)
+				if err != nil {
+					t.Fatal(err)
+				}
+				(*deferred)[0]()
+				cfg.TaskPreparation = token
+			}
+			rec, _, _, err := m.Spawn(context.Background(), cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rec.Metadata.Effort != "high" {
+				t.Fatalf("effort before controller start = %q, want high", rec.Metadata.Effort)
+			}
+			if _, err := m.RunBackgroundTask(context.Background(), rec.ID, "title only", "do the thing"); err != nil {
+				t.Fatal(err)
+			}
+			if len(launcher.background) != 1 || launcher.background[0].Effort != "high" {
+				t.Fatalf("background title task = %#v, want high effort", launcher.background)
+			}
+		})
+	}
+}
+
+func TestAsyncChatSpawnHoldsHarnessGateThroughControllerStart(t *testing.T) {
+	launcher := &recordingLauncher{}
+	m, _, _ := newChatManager(launcher)
+	m.browserCapabilities = browsersvc.NewAuthority()
+	deferred := deferredBackground(m)
+	gate := &countingHarnessUseGate{}
+	m.SetHarnessUseGate(gate)
+
+	if _, _, _, err := m.Spawn(context.Background(), asyncChatSpawnConfig("do the thing")); err != nil {
+		t.Fatal(err)
+	}
+	if gate.active != 1 {
+		t.Fatalf("harness uses before background start = %d, want 1", gate.active)
+	}
+	(*deferred)[0]()
+	if len(launcher.started) != 1 || gate.active != 0 {
+		t.Fatalf("controller starts = %d, harness uses after start = %d", len(launcher.started), gate.active)
+	}
+}
+
 // A start that fails after the API answered must leave the session — and the
 // messages queued into it — in place, with a reason the user can read.
 func TestSpawnAsyncChat_FailedStartKeepsSessionAndReason(t *testing.T) {
@@ -143,6 +212,8 @@ func TestResumeFailedAsyncChatSpawnRetriesSameSessionAndQueue(t *testing.T) {
 	m, st, _ := newChatManager(launcher)
 	m.browserCapabilities = browsersvc.NewAuthority()
 	deferred := deferredBackground(m)
+	gate := &countingHarnessUseGate{}
+	m.SetHarnessUseGate(gate)
 	ws := m.workspace.(*fakeWorkspace)
 	ws.createErr = errors.New("temporary git failure")
 	rec, _, _, err := m.Spawn(context.Background(), asyncChatSpawnConfig("do the thing"))
@@ -162,10 +233,16 @@ func TestResumeFailedAsyncChatSpawnRetriesSameSessionAndQueue(t *testing.T) {
 	if retried.Session.ID != rec.ID || retried.Session.ProvisionState != domain.SessionProvisionProvisioning {
 		t.Fatalf("retry result = %+v, want same provisioning session", retried.Session)
 	}
+	if gate.active != 1 {
+		t.Fatalf("harness uses before retry background start = %d, want 1", gate.active)
+	}
 	if len(launcher.queued) != 1 {
 		t.Fatalf("opening prompt queued %d times, want once", len(launcher.queued))
 	}
 	(*deferred)[1]()
+	if gate.active != 0 {
+		t.Fatalf("harness uses after retry background start = %d, want 0", gate.active)
+	}
 	if got := st.sessions[rec.ID].ProvisionState; got != domain.SessionProvisionReady {
 		t.Fatalf("retry provision state = %q, want ready", got)
 	}
