@@ -41,6 +41,35 @@ func TestTaskPreparationIsClaimedWithoutCreatingAnotherWorktree(t *testing.T) {
 	if st.sessions[spawned.ID].IsTaskPreparation {
 		t.Fatal("claimed session remained hidden")
 	}
+	if got := st.sessions[spawned.ID].ProvisionState.WithDefault(); got != domain.SessionProvisionReady {
+		t.Fatalf("synchronous task provision state = %q, want ready", got)
+	}
+}
+
+func TestSynchronousSpawnWaitsForInFlightPreparation(t *testing.T) {
+	m, st, _, ws := newManager()
+	deferred := deferredBackground(m)
+	token, err := m.PrepareTaskWorkspace(context.Background(), st.projects["mer"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, _, _, err := m.Spawn(context.Background(), ports.SpawnConfig{
+			ProjectID: "mer", Kind: domain.KindWorker, TaskPreparation: token,
+		})
+		done <- err
+	}()
+	(*deferred)[0]()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if ws.createCount != 1 || ws.destroyed != 0 {
+		t.Fatalf("worktrees created = %d, destroyed = %d; want one retained", ws.createCount, ws.destroyed)
+	}
+	if got := st.sessions["mer-1"].ProvisionState.WithDefault(); got != domain.SessionProvisionReady {
+		t.Fatalf("provision state = %q, want ready", got)
+	}
 }
 
 func TestCancelTaskPreparationRemovesWorkspaceAndRow(t *testing.T) {
@@ -165,5 +194,43 @@ func TestStartupCleansInterruptedTaskPreparation(t *testing.T) {
 	}
 	if _, ok := st.sessions["mer-1"]; ok {
 		t.Fatal("interrupted preparation row still exists")
+	}
+}
+
+func TestStartupDropsInterruptedPreparationWithoutCreatingWorkspace(t *testing.T) {
+	m, st, _, ws := newManager()
+	delete(st.projects, "mer")
+	ws.createErr = errors.New("repository moved")
+	st.sessions["mer-1"] = domain.SessionRecord{
+		ID: "mer-1", ProjectID: "mer", Kind: domain.KindWorker,
+		IsTaskPreparation: true,
+		Metadata:          domain.SessionMetadata{Branch: "ao/mer-1/root"},
+	}
+
+	if err := m.CleanupInterruptedTaskPreparations(context.Background()); err != nil {
+		t.Fatalf("startup cleanup blocked daemon: %v", err)
+	}
+	if ws.createCount != 0 {
+		t.Fatalf("workspace creates = %d, want zero", ws.createCount)
+	}
+	if _, ok := st.sessions["mer-1"]; ok {
+		t.Fatal("interrupted preparation row still exists")
+	}
+}
+
+func TestStartupCleanupFailureDoesNotBlockDaemon(t *testing.T) {
+	m, st, _, ws := newManager()
+	ws.destroyErr = errors.New("worktree is busy")
+	st.sessions["mer-1"] = domain.SessionRecord{
+		ID: "mer-1", ProjectID: "mer", Kind: domain.KindWorker,
+		IsTaskPreparation: true,
+		Metadata:          domain.SessionMetadata{Branch: "ao/mer-1/root", WorkspacePath: "/ws/mer-1"},
+	}
+
+	if err := m.CleanupInterruptedTaskPreparations(context.Background()); err != nil {
+		t.Fatalf("cleanup failure blocked daemon startup: %v", err)
+	}
+	if _, ok := st.sessions["mer-1"]; !ok {
+		t.Fatal("failed cleanup lost the hidden row needed for a later retry")
 	}
 }

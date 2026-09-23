@@ -39,6 +39,7 @@ type asyncChatSpawn struct {
 	promptBytes       int
 	systemPromptBytes int
 	preparation       *taskPreparation
+	retry             bool
 }
 
 type asyncChatSpawnRun struct {
@@ -51,6 +52,9 @@ type asyncChatSpawnRun struct {
 func (m *Manager) beginAsyncChatSpawn(ctx context.Context, in asyncChatSpawn) (domain.SessionRecord, int, int, error) {
 	id := in.record.ID
 	rollback := func() {
+		if in.retry {
+			return // the session and its existing queue already belong to the user
+		}
 		if in.preparation == nil {
 			m.rollbackSpawnSeedRowAfterFailure(ctx, id)
 			return
@@ -110,6 +114,16 @@ func (m *Manager) completeAsyncChatSpawn(ctx context.Context, in asyncChatSpawn)
 	var ws ports.WorkspaceInfo
 	var workspaceProject *ports.WorkspaceProjectInfo
 	var err error
+	if in.retry && in.record.Metadata.WorkspacePath != "" {
+		ws = workspaceInfo(in.record)
+		if in.projectKind == domain.ProjectKindWorkspace {
+			var rows []ports.WorkspaceRepoInfo
+			rows, _, err = m.workspaceProjectRows(ctx, in.record)
+			if err == nil {
+				workspaceProject = &ports.WorkspaceProjectInfo{Root: ws, Worktrees: rows}
+			}
+		}
+	}
 	if in.preparation != nil {
 		ws, workspaceProject, err = m.awaitTaskPreparation(ctx, in.preparation)
 		if err != nil && ctx.Err() != nil {
@@ -161,16 +175,6 @@ func (m *Manager) completeAsyncChatSpawn(ctx context.Context, in asyncChatSpawn)
 		}
 		m.logAsyncChatSpawnStage(id, "spawn_attachments", stageStarted)
 	}
-	// Anything the user attached while this was starting was written canonically
-	// only, because there was no worktree to put it in. Replay it now, before the
-	// controller can read the turn that references those paths.
-	stageStarted = time.Now()
-	if err := m.restoreAttachments(ctx, id, ws); err != nil {
-		m.logger.Warn("spawn: materialize attachments staged while provisioning",
-			"sessionID", id, "error", err)
-	}
-	m.logAsyncChatSpawnStage(id, "attachment_restore", stageStarted)
-
 	// Publish the worktree now rather than at the controller commit. Until the
 	// row carries it, every workspace-scoped read answers
 	// SESSION_WORKSPACE_NOT_FOUND, and the provider start that follows is long
@@ -190,6 +194,14 @@ func (m *Manager) completeAsyncChatSpawn(ctx context.Context, in asyncChatSpawn)
 		return
 	}
 	m.logAsyncChatSpawnStage(id, "workspace_publish", stageStarted)
+	// A concurrent StageAttachments call must either see this workspace path and
+	// write directly into it, or land in canonical storage before this replay.
+	stageStarted = time.Now()
+	if err := m.restoreAttachments(ctx, id, ws); err != nil {
+		m.logger.Warn("spawn: materialize attachments staged while provisioning",
+			"sessionID", id, "error", err)
+	}
+	m.logAsyncChatSpawnStage(id, "attachment_restore", stageStarted)
 
 	record, err := m.getRecord(ctx, id)
 	if err != nil {
@@ -251,6 +263,65 @@ func (m *Manager) failAsyncChatSpawn(ctx context.Context, id domain.SessionID, c
 	if _, err := m.setProvisionState(cleanupCtx, id, domain.SessionProvisionFailed, cause.Error()); err != nil {
 		m.logger.Error("spawn: record failed start", "sessionID", id, "error", err)
 	}
+}
+
+// retryFailedChatSpawn reuses the published session and durable turn queue.
+// Queueing the opening brief again would send the user's task twice.
+func (m *Manager) retryFailedChatSpawn(ctx context.Context, rec domain.SessionRecord) (RestoreResult, error) {
+	if rec.Kind != domain.KindWorker || domain.NormalizeSessionMode(rec.Mode) != domain.SessionModeChat || m.chat == nil {
+		return RestoreResult{}, fmt.Errorf("retry start %s: %w", rec.ID, ports.ErrChatUnsupported)
+	}
+	if m.chat.HasLiveChatController(rec.ID) {
+		if err := m.chat.DrainChatQueue(ctx, rec.ID); err != nil {
+			return RestoreResult{}, err
+		}
+		ready, err := m.setProvisionState(ctx, rec.ID, domain.SessionProvisionReady, "")
+		return RestoreResult{Session: ready, Mode: RestoreModeNative}, err
+	}
+	if rec.Metadata.ProviderConversationID != "" {
+		resumed, err := m.resumeAgentRecordWithPolicy(ctx, "retry start", rec, false, false)
+		if err != nil {
+			return RestoreResult{}, err
+		}
+		if err := m.chat.DrainChatQueue(ctx, rec.ID); err != nil {
+			return RestoreResult{}, err
+		}
+		resumed.Session, err = m.setProvisionState(ctx, rec.ID, domain.SessionProvisionReady, "")
+		return resumed, err
+	}
+	project, err := m.loadProject(ctx, rec.ProjectID)
+	if err != nil {
+		return RestoreResult{}, err
+	}
+	systemPrompt, err := m.buildSystemPrompt(ctx, rec.Kind, rec.ProjectID)
+	if err != nil {
+		return RestoreResult{}, err
+	}
+	config := restoredAgentConfig(rec, project.Config)
+	if rec.Metadata.Model != "" {
+		config.Model = rec.Metadata.Model
+	}
+	if rec.Metadata.Permissions != "" {
+		config.Permissions = rec.Metadata.Permissions
+	}
+	cfg := ports.SpawnConfig{
+		ProjectID: rec.ProjectID, IssueID: rec.IssueID, Kind: rec.Kind,
+		Harness: rec.Harness, RequestedMode: domain.SessionModeChat,
+		AgentConfig: config, AgentConfigResolved: true, Async: true,
+	}
+	projectKind := projectKindForSession(project, rec.ProjectID)
+	branch := rec.Metadata.Branch
+	if branch == "" {
+		branch = DefaultSpawnBranch(rec.ID, rec.Kind, sessionPrefix(project), projectKind, m.dataDir)
+	}
+	retried, _, _, err := m.beginAsyncChatSpawn(ctx, asyncChatSpawn{
+		cfg: cfg, project: project, projectKind: projectKind,
+		record: rec, branch: branch, systemPrompt: systemPrompt, retry: true,
+	})
+	if err != nil {
+		return RestoreResult{}, err
+	}
+	return RestoreResult{Session: retried, Mode: RestoreModeSavedPrompt}, nil
 }
 
 func (m *Manager) cleanupAsyncChatWorkspace(ctx context.Context, id domain.SessionID, ws ports.WorkspaceInfo, workspaceProject *ports.WorkspaceProjectInfo) {
@@ -329,16 +400,20 @@ func (m *Manager) cancelAsyncChatSpawn(ctx context.Context, id domain.SessionID)
 	m.asyncChatSpawnsMu.Lock()
 	run := m.asyncChatSpawns[id]
 	m.asyncChatSpawnsMu.Unlock()
-	if run == nil {
-		return nil
+	if run != nil {
+		run.cancel()
+		select {
+		case <-run.done:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
-	run.cancel()
-	select {
-	case <-run.done:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
+	rec, ok, err := m.store.GetSession(ctx, id)
+	if err != nil || !ok || !rec.ProvisionState.IsProvisioning() {
+		return err
 	}
+	_, err = m.setProvisionState(ctx, id, domain.SessionProvisionFailed, "Session start was cancelled")
+	return err
 }
 
 func (m *Manager) clearProvisionedWorkspace(ctx context.Context, id domain.SessionID, workspacePath string) {

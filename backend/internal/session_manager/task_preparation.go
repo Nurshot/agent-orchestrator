@@ -237,36 +237,20 @@ func (m *Manager) CleanupInterruptedTaskPreparations(ctx context.Context) error 
 	if err != nil {
 		return fmt.Errorf("list task preparations: %w", err)
 	}
-	var failures []error
 	for _, rec := range recs {
 		if !rec.IsTaskPreparation {
 			continue
 		}
 		if err := m.cleanupTaskPreparationRecord(ctx, rec); err != nil {
-			failures = append(failures, fmt.Errorf("session %s: %w", rec.ID, err))
+			m.logger.Warn("interrupted task preparation cleanup failed", "sessionID", rec.ID, "error", err)
 		}
 	}
-	return errors.Join(failures...)
+	return nil
 }
 
 func (m *Manager) cleanupTaskPreparationRecord(ctx context.Context, rec domain.SessionRecord) error {
 	ws := workspaceInfo(rec)
-	if ws.Path == "" && rec.Metadata.Branch != "" {
-		project, err := m.loadProject(ctx, rec.ProjectID)
-		if err != nil {
-			return err
-		}
-		ws, workspaceProject, err := m.createSessionWorkspace(ctx, project, ports.SpawnConfig{
-			ProjectID: rec.ProjectID,
-			Kind:      domain.KindWorker,
-		}, rec.ID, rec.Metadata.Branch, nil)
-		if err != nil {
-			return err
-		}
-		if !m.destroySpawnWorkspace(ctx, ws, workspaceProject) {
-			return errors.New("remove interrupted prepared worktree")
-		}
-	} else if ws.Path != "" {
+	if ws.Path != "" {
 		if rows, ok, err := m.workspaceProjectRows(ctx, rec); err != nil {
 			return err
 		} else if ok {

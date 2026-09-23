@@ -1178,7 +1178,9 @@ describe("ChatWorkspace timeline", () => {
 		expect(screen.getByTestId("chat-conversation-panel")).not.toHaveAttribute("inert");
 	});
 
-	it("keeps a failed start and its queued messages instead of reporting a crash", () => {
+	it("offers retry for a failed start without reporting a crash", async () => {
+		const user = userEvent.setup();
+		const resume = vi.fn();
 		render(
 			<ChatWorkspace
 				snapshot={{ ...chatFixtureSettled, controller: { state: "stopped" } }}
@@ -1187,7 +1189,7 @@ describe("ChatWorkspace timeline", () => {
 					provisionState: "failed",
 					provisionError: "spawn mer-1: create workspace: branch already checked out",
 				}}
-				onResumeAgent={vi.fn()}
+				onResumeAgent={resume}
 			/>,
 		);
 
@@ -1195,6 +1197,8 @@ describe("ChatWorkspace timeline", () => {
 		expect(banner).toHaveTextContent("This session could not be started");
 		expect(banner).toHaveTextContent("branch already checked out");
 		expect(screen.queryByText("The agent controller stopped")).not.toBeInTheDocument();
+		await user.click(screen.getByRole("button", { name: "Retry start" }));
+		expect(resume).toHaveBeenCalledOnce();
 	});
 
 	it("shows connecting during the controller gap, then restores the composer when ready", () => {

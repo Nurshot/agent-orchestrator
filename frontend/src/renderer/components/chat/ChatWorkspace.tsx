@@ -1952,8 +1952,16 @@ function ControllerBanner({
 							</span>
 						) : null}
 						<span className="text-[11px] leading-snug text-muted-foreground">
-							Nothing you typed was lost: your messages are still queued here.
+							Your messages are saved here and will be sent if you retry.
 						</span>
+						{resumeError ? (
+							<span className="text-[11px] leading-snug text-destructive">{resumeError}</span>
+						) : null}
+						{onResume ? (
+							<Button type="button" size="sm" variant="outline" onClick={onResume} disabled={resuming}>
+								{resuming ? "Retrying…" : "Retry start"}
+							</Button>
+						) : null}
 					</>
 				) : controller.error ? (
 					<span className="text-[11px] leading-snug text-muted-foreground">{controller.error}</span>

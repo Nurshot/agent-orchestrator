@@ -987,7 +987,11 @@ func (m *Manager) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Sess
 	if prep != nil {
 		rec = prep.record
 	} else {
-		rec, err = m.store.CreateSession(ctx, seedRecord(cfg, project.Config, m.clock()))
+		seed := seedRecord(cfg, project.Config, m.clock())
+		if mode == domain.SessionModeChat {
+			seed.Metadata.Model = cfg.AgentConfig.Model
+		}
+		rec, err = m.store.CreateSession(ctx, seed)
 		if err != nil {
 			return domain.SessionRecord{}, 0, 0, wrapSpawnStageEarly(ErrSpawnCreate, err)
 		}
@@ -1004,10 +1008,27 @@ func (m *Manager) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Sess
 		}
 		return domain.SessionRecord{}, 0, 0, wrapSpawnStage(id, ErrSpawnSystemPrompt, err)
 	}
+	asyncChat := cfg.Async && mode == domain.SessionModeChat && cfg.Kind == domain.KindWorker && m.chat != nil
 	if prep != nil {
+		// A synchronous spawn can be promoted as ready only after the hidden
+		// preparation has finished publishing its worktree. Otherwise its late
+		// publication loses the provisioning-state fence and deletes the worktree.
+		if !asyncChat {
+			if _, _, err := m.awaitTaskPreparation(ctx, prep); err != nil && ctx.Err() != nil {
+				cleanupCtx, cancel := spawnRollbackContext(ctx)
+				m.discardClaimedTaskPreparation(cleanupCtx, prep)
+				cancel()
+				return domain.SessionRecord{}, 0, 0, wrapSpawnStage(id, ErrWorkspaceCreate, err)
+			}
+		}
 		seed := seedRecord(cfg, project.Config, m.clock())
 		seed.ID = id
-		seed.ProvisionState = domain.SessionProvisionProvisioning
+		if mode == domain.SessionModeChat {
+			seed.Metadata.Model = cfg.AgentConfig.Model
+		}
+		if asyncChat {
+			seed.ProvisionState = domain.SessionProvisionProvisioning
+		}
 		rec, err = m.promoteTaskPreparation(ctx, prep, seed)
 		if err != nil {
 			cleanupCtx, cancel := spawnRollbackContext(ctx)
@@ -1030,7 +1051,7 @@ func (m *Manager) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Sess
 	// work, run in the background while the user already has the session open.
 	// The attachments are named now (spawnAttachmentRefs is derived, not read
 	// from disk) so the opening prompt is complete before the files land.
-	if cfg.Async && mode == domain.SessionModeChat && cfg.Kind == domain.KindWorker && m.chat != nil {
+	if asyncChat {
 		return m.beginAsyncChatSpawn(ctx, asyncChatSpawn{
 			cfg:               cfg,
 			project:           project,
@@ -2446,6 +2467,9 @@ func (m *Manager) ResumeAgentWithMode(ctx context.Context, id domain.SessionID) 
 	defer releaseHarness()
 	if rec.IsTerminated {
 		return RestoreResult{}, fmt.Errorf("resume agent %s: %w", id, ErrTerminated)
+	}
+	if rec.ProvisionState == domain.SessionProvisionFailed {
+		return m.retryFailedChatSpawn(ctx, rec)
 	}
 	if m.SessionStatusReadiness(rec) == "unavailable" {
 		m.beginStatusRecovery(id)

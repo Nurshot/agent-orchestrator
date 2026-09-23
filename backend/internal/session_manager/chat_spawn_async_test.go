@@ -138,6 +138,99 @@ func TestSpawnAsyncChat_FailedStartKeepsSessionAndReason(t *testing.T) {
 	}
 }
 
+func TestResumeFailedAsyncChatSpawnRetriesSameSessionAndQueue(t *testing.T) {
+	launcher := &recordingLauncher{}
+	m, st, _ := newChatManager(launcher)
+	m.browserCapabilities = browsersvc.NewAuthority()
+	deferred := deferredBackground(m)
+	ws := m.workspace.(*fakeWorkspace)
+	ws.createErr = errors.New("temporary git failure")
+	rec, _, _, err := m.Spawn(context.Background(), asyncChatSpawnConfig("do the thing"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	(*deferred)[0]()
+	if st.sessions[rec.ID].ProvisionState != domain.SessionProvisionFailed {
+		t.Fatal("initial start did not fail")
+	}
+
+	ws.createErr = nil
+	retried, err := m.ResumeAgentWithMode(context.Background(), rec.ID)
+	if err != nil {
+		t.Fatalf("retry failed start: %v", err)
+	}
+	if retried.Session.ID != rec.ID || retried.Session.ProvisionState != domain.SessionProvisionProvisioning {
+		t.Fatalf("retry result = %+v, want same provisioning session", retried.Session)
+	}
+	if len(launcher.queued) != 1 {
+		t.Fatalf("opening prompt queued %d times, want once", len(launcher.queued))
+	}
+	(*deferred)[1]()
+	if got := st.sessions[rec.ID].ProvisionState; got != domain.SessionProvisionReady {
+		t.Fatalf("retry provision state = %q, want ready", got)
+	}
+	if len(launcher.started) != 1 || len(launcher.drained) != 1 {
+		t.Fatalf("controllers started = %d, queues drained = %d", len(launcher.started), len(launcher.drained))
+	}
+}
+
+func TestResumeFailedAsyncChatSpawnReusesPublishedWorkspace(t *testing.T) {
+	launcher := &recordingLauncher{}
+	m, st, _ := newChatManager(launcher)
+	m.browserCapabilities = browsersvc.NewAuthority()
+	deferred := deferredBackground(m)
+	st.sessions["mer-1"] = domain.SessionRecord{
+		ID: "mer-1", ProjectID: chatTestProject, Kind: domain.KindWorker,
+		Harness: domain.HarnessCodex, Mode: domain.SessionModeChat,
+		ProvisionState: domain.SessionProvisionFailed,
+		Metadata:       domain.SessionMetadata{Branch: "ao/mer-1/root", WorkspacePath: t.TempDir()},
+	}
+	ws := m.workspace.(*fakeWorkspace)
+	ws.createErr = errors.New("must not create another worktree")
+
+	if _, err := m.ResumeAgentWithMode(context.Background(), "mer-1"); err != nil {
+		t.Fatal(err)
+	}
+	(*deferred)[0]()
+	if ws.createCount != 0 {
+		t.Fatalf("workspace creates = %d, want reuse", ws.createCount)
+	}
+	if got := st.sessions["mer-1"].ProvisionState; got != domain.SessionProvisionReady {
+		t.Fatalf("provision state = %q, want ready", got)
+	}
+}
+
+func TestResumeFailedAsyncChatSpawnAdoptsLiveController(t *testing.T) {
+	launcher := &recordingLauncher{live: true}
+	m, st, _ := newChatManager(launcher)
+	st.sessions["mer-1"] = domain.SessionRecord{
+		ID: "mer-1", ProjectID: chatTestProject, Kind: domain.KindWorker,
+		Harness: domain.HarnessCodex, Mode: domain.SessionModeChat,
+		ProvisionState: domain.SessionProvisionFailed,
+	}
+
+	result, err := m.ResumeAgentWithMode(context.Background(), "mer-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Session.ProvisionState != domain.SessionProvisionReady || len(launcher.started) != 0 || len(launcher.drained) != 1 {
+		t.Fatalf("adoption = %+v, controllers started = %d, queues drained = %d", result.Session, len(launcher.started), len(launcher.drained))
+	}
+}
+
+func TestCancelAsyncChatSpawnClearsStaleStartingState(t *testing.T) {
+	m, st, _ := newChatManager(&recordingLauncher{})
+	st.sessions["mer-1"] = domain.SessionRecord{
+		ID: "mer-1", ProvisionState: domain.SessionProvisionProvisioning,
+	}
+	if err := m.cancelAsyncChatSpawn(context.Background(), "mer-1"); err != nil {
+		t.Fatal(err)
+	}
+	if got := st.sessions["mer-1"].ProvisionState; got != domain.SessionProvisionFailed {
+		t.Fatalf("provision state = %q, want failed", got)
+	}
+}
+
 // An empty brief queues no turn, so the row still matches the seed-state
 // predicate that spawn rollback deletes on. Once the id has been handed to a
 // client, deleting it would turn an open session into a 404.
@@ -270,6 +363,9 @@ func TestSpawnAsyncChat_KillFencesWorkspacePublicationAndControllerStart(t *test
 	stored := st.sessions[rec.ID]
 	if !stored.IsTerminated {
 		t.Fatal("killed session was resurrected")
+	}
+	if stored.ProvisionState.IsProvisioning() {
+		t.Fatal("killed session still reads as starting")
 	}
 	if stored.Metadata.WorkspacePath != "" {
 		t.Fatalf("killed session retained workspace %q", stored.Metadata.WorkspacePath)
@@ -421,5 +517,44 @@ func TestStageAttachments_DuringProvisioningLandsInTheWorktree(t *testing.T) {
 	}
 	if string(body) != "not really a png" {
 		t.Fatalf("attachment content = %q", body)
+	}
+}
+
+func TestStageAttachments_AtWorkspacePublicationLandsInTheWorktree(t *testing.T) {
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st := newFakeStore()
+	st.projects[string(chatTestProject)] = domain.ProjectRecord{
+		ID: string(chatTestProject), Config: testRoleAgents(),
+	}
+	blockingStore := &blockingWorkspacePublishStore{
+		fakeStore: st,
+		entered:   make(chan context.Context, 1),
+		release:   make(chan struct{}),
+	}
+	m := New(Deps{
+		Runtime: &fakeRuntime{}, Agents: fakeAgents{},
+		Workspace: &fakeWorkspace{path: workspaceDir}, Store: blockingStore,
+		Messenger: &fakeMessenger{}, Chat: &recordingLauncher{},
+		Lifecycle: &fakeLCM{store: st}, DataDir: dataDir,
+		LookPath: func(string) (string, error) { return "/bin/true", nil },
+	})
+	m.browserCapabilities = browsersvc.NewAuthority()
+	deferred := deferredBackground(m)
+	rec, _, _, err := m.Spawn(context.Background(), asyncChatSpawnConfig("look at this"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() { (*deferred)[0](); close(done) }()
+	<-blockingStore.entered
+	refs, err := m.StageAttachments(context.Background(), rec.ID, []ports.SpawnAttachment{{Ext: ".png", Data: []byte("image")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	close(blockingStore.release)
+	<-done
+	if _, err := os.Stat(filepath.Join(workspaceDir, filepath.FromSlash(refs[0]))); err != nil {
+		t.Fatalf("attachment staged at publication is missing from worktree: %v", err)
 	}
 }
