@@ -30,4 +30,4 @@ require (
 	golang.org/x/text v0.40.0 // indirect
 )
 
-replace github.com/aoagents/agent-orchestrator/backend => github.com/Untrivial-ai/agent-orchestrator/backend v0.0.0-20260918063518-01efbd23902f
+replace github.com/aoagents/agent-orchestrator/backend => github.com/Untrivial-ai/agent-orchestrator/backend v0.0.0-20260923145540-7b2a988f381c
