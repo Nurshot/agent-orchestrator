@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
 	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
@@ -30,6 +31,23 @@ func asyncChatSpawnConfig(prompt string) ports.SpawnConfig {
 		RequestedMode: domain.SessionModeChat,
 		Async:         true,
 	}
+}
+
+type blockingWorkspacePublishStore struct {
+	*fakeStore
+	entered chan context.Context
+	release chan struct{}
+}
+
+func (s *blockingWorkspacePublishStore) SetSessionProvisionedWorkspace(
+	ctx context.Context,
+	id domain.SessionID,
+	branch, workspacePath, workspaceRepoPath string,
+	now time.Time,
+) (bool, error) {
+	s.entered <- ctx
+	<-s.release
+	return s.fakeStore.SetSessionProvisionedWorkspace(ctx, id, branch, workspacePath, workspaceRepoPath, now)
 }
 
 // The point of the asynchronous path: the caller gets an addressable session
@@ -178,6 +196,89 @@ func TestSpawnAsyncChat_PublishesTheWorktreeBeforeTheController(t *testing.T) {
 	}
 	if stored.IsTerminated {
 		t.Fatal("failed asynchronous session was hidden as terminated")
+	}
+}
+
+func TestSpawnAsyncChat_DaemonShutdownCancelsAndWaitsForWorker(t *testing.T) {
+	launcher := &recordingLauncher{}
+	m, _, _ := newChatManager(launcher)
+	m.browserCapabilities = browsersvc.NewAuthority()
+	daemonCtx, cancelDaemon := context.WithCancel(context.Background())
+	m.backgroundContext = daemonCtx
+	deferred := deferredBackground(m)
+	ws := m.workspace.(*fakeWorkspace)
+
+	if _, _, _, err := m.Spawn(context.Background(), asyncChatSpawnConfig("do the thing")); err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	cancelDaemon()
+	go (*deferred)[0]()
+	waitCtx, cancelWait := context.WithTimeout(context.Background(), time.Second)
+	defer cancelWait()
+	if err := m.WaitBackgroundWorkers(waitCtx); err != nil {
+		t.Fatalf("wait background workers: %v", err)
+	}
+	if len(launcher.started) != 0 {
+		t.Fatal("controller started after daemon shutdown")
+	}
+	if ws.destroyed != 1 {
+		t.Fatalf("destroyed workspaces = %d, want 1", ws.destroyed)
+	}
+}
+
+func TestSpawnAsyncChat_KillFencesWorkspacePublicationAndControllerStart(t *testing.T) {
+	launcher := &recordingLauncher{}
+	m, st, _ := newChatManager(launcher)
+	m.browserCapabilities = browsersvc.NewAuthority()
+	blockingStore := &blockingWorkspacePublishStore{
+		fakeStore: st,
+		entered:   make(chan context.Context, 1),
+		release:   make(chan struct{}),
+	}
+	m.store = blockingStore
+	deferred := deferredBackground(m)
+	ws := m.workspace.(*fakeWorkspace)
+
+	rec, _, _, err := m.Spawn(context.Background(), asyncChatSpawnConfig("do the thing"))
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	go (*deferred)[0]()
+	workerCtx := <-blockingStore.entered
+	type killResult struct {
+		freed bool
+		err   error
+	}
+	killed := make(chan killResult, 1)
+	go func() {
+		freed, killErr := m.Kill(context.Background(), rec.ID)
+		killed <- killResult{freed: freed, err: killErr}
+	}()
+	select {
+	case <-workerCtx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("Kill did not cancel the provisioning worker")
+	}
+	close(blockingStore.release)
+	result := <-killed
+	if result.err != nil {
+		t.Fatalf("kill: %v", result.err)
+	}
+	if result.freed {
+		t.Fatal("Kill reported freeing a workspace already reclaimed by provisioning")
+	}
+	stored := st.sessions[rec.ID]
+	if !stored.IsTerminated {
+		t.Fatal("killed session was resurrected")
+	}
+	if stored.Metadata.WorkspacePath != "" {
+		t.Fatalf("killed session retained workspace %q", stored.Metadata.WorkspacePath)
+	}
+	if len(launcher.started) != 0 {
+		t.Fatal("controller started after Kill")
+	}
+	if ws.destroyed != 1 {
+		t.Fatalf("destroyed workspaces = %d, want 1", ws.destroyed)
 	}
 }
 

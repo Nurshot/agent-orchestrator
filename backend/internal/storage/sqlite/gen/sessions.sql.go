@@ -1111,7 +1111,9 @@ UPDATE sessions SET
     workspace_path = ?2,
     workspace_repo_path = ?3,
     updated_at = ?4
-WHERE id = ?5 AND provision_state = 'provisioning'
+WHERE id = ?5
+  AND provision_state = 'provisioning'
+  AND is_terminated = 0
 `
 
 type SetSessionProvisionedWorkspaceParams struct {

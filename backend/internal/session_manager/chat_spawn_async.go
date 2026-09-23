@@ -41,6 +41,11 @@ type asyncChatSpawn struct {
 	preparation       *taskPreparation
 }
 
+type asyncChatSpawnRun struct {
+	cancel context.CancelFunc
+	done   chan struct{}
+}
+
 // beginAsyncChatSpawn publishes the session, records the opening prompt in the
 // durable queue, and hands the rest to the background.
 func (m *Manager) beginAsyncChatSpawn(ctx context.Context, in asyncChatSpawn) (domain.SessionRecord, int, int, error) {
@@ -71,11 +76,21 @@ func (m *Manager) beginAsyncChatSpawn(ctx context.Context, in asyncChatSpawn) (d
 		}
 	}
 	in.record = rec
+	bg, cancel := context.WithTimeout(m.backgroundContext, asyncChatSpawnBudget)
+	run := &asyncChatSpawnRun{cancel: cancel, done: make(chan struct{})}
+	m.asyncChatSpawnsMu.Lock()
+	m.asyncChatSpawns[id] = run
+	m.asyncChatSpawnsMu.Unlock()
 	m.runInBackground(func() {
-		// The HTTP request that started this is already answered; its context is
-		// gone. The work continues under the daemon's lifetime instead.
-		bg, cancel := context.WithTimeout(context.WithoutCancel(ctx), asyncChatSpawnBudget)
-		defer cancel()
+		defer func() {
+			cancel()
+			m.asyncChatSpawnsMu.Lock()
+			if m.asyncChatSpawns[id] == run {
+				delete(m.asyncChatSpawns, id)
+			}
+			close(run.done)
+			m.asyncChatSpawnsMu.Unlock()
+		}()
 		m.completeAsyncChatSpawn(bg, in)
 	})
 	return rec, in.promptBytes, in.systemPromptBytes, nil
@@ -116,13 +131,19 @@ func (m *Manager) completeAsyncChatSpawn(ctx context.Context, in asyncChatSpawn)
 		m.failAsyncChatSpawn(ctx, id, wrapSpawnStage(id, ErrWorkspaceCreate, err))
 		return
 	}
+	if err := ctx.Err(); err != nil {
+		m.cleanupAsyncChatWorkspace(ctx, id, ws, workspaceProject)
+		return
+	}
 	m.logAsyncChatSpawnStage(id, "workspace_create", stageStarted)
 	stageStarted = time.Now()
 	if err := m.provisionWorkspace(ctx, in.project, ws.Path); err != nil {
-		if m.destroySpawnWorkspace(ctx, ws, workspaceProject) {
-			m.clearProvisionedWorkspace(ctx, id, ws.Path)
-		}
+		m.cleanupAsyncChatWorkspace(ctx, id, ws, workspaceProject)
 		m.failAsyncChatSpawn(ctx, id, wrapSpawnStage(id, ErrWorkspaceProvision, err))
+		return
+	}
+	if err := ctx.Err(); err != nil {
+		m.cleanupAsyncChatWorkspace(ctx, id, ws, workspaceProject)
 		return
 	}
 	m.logAsyncChatSpawnStage(id, "workspace_provision", stageStarted)
@@ -131,9 +152,7 @@ func (m *Manager) completeAsyncChatSpawn(ctx context.Context, in asyncChatSpawn)
 		// The prompt already references these by name (spawnAttachmentRefs); this
 		// is where the bytes land, before the agent can read them.
 		if _, err := m.writeSpawnAttachments(ctx, id, ws.Path, in.cfg.Attachments); err != nil {
-			if m.destroySpawnWorkspace(ctx, ws, workspaceProject) {
-				m.clearProvisionedWorkspace(ctx, id, ws.Path)
-			}
+			m.cleanupAsyncChatWorkspace(ctx, id, ws, workspaceProject)
 			m.failAsyncChatSpawn(ctx, id, wrapSpawnStage(id, ErrSpawnAttachments, err))
 			return
 		}
@@ -159,18 +178,27 @@ func (m *Manager) completeAsyncChatSpawn(ctx context.Context, in asyncChatSpawn)
 	// that is perfectly fine. It also means an interrupted start leaves a row
 	// that knows which worktree to clean up.
 	stageStarted = time.Now()
-	if _, err := m.store.SetSessionProvisionedWorkspace(
-		ctx, id, ws.Branch, ws.Path, ws.RepoPath, m.clock()); err != nil {
-		m.logger.Warn("spawn: publish provisioned workspace", "sessionID", id, "error", err)
+	updated, err := m.store.SetSessionProvisionedWorkspace(
+		ctx, id, ws.Branch, ws.Path, ws.RepoPath, m.clock())
+	if err != nil {
+		m.cleanupAsyncChatWorkspace(ctx, id, ws, workspaceProject)
+		m.failAsyncChatSpawn(ctx, id, err)
+		return
+	}
+	if !updated || ctx.Err() != nil {
+		m.cleanupAsyncChatWorkspace(ctx, id, ws, workspaceProject)
+		return
 	}
 	m.logAsyncChatSpawnStage(id, "workspace_publish", stageStarted)
 
 	record, err := m.getRecord(ctx, id)
 	if err != nil {
-		if m.destroySpawnWorkspace(ctx, ws, workspaceProject) {
-			m.clearProvisionedWorkspace(ctx, id, ws.Path)
-		}
+		m.cleanupAsyncChatWorkspace(ctx, id, ws, workspaceProject)
 		m.failAsyncChatSpawn(ctx, id, err)
+		return
+	}
+	if err := ctx.Err(); err != nil {
+		m.cleanupAsyncChatWorkspace(ctx, id, ws, workspaceProject)
 		return
 	}
 	stageStarted = time.Now()
@@ -225,6 +253,14 @@ func (m *Manager) failAsyncChatSpawn(ctx context.Context, id domain.SessionID, c
 	}
 }
 
+func (m *Manager) cleanupAsyncChatWorkspace(ctx context.Context, id domain.SessionID, ws ports.WorkspaceInfo, workspaceProject *ports.WorkspaceProjectInfo) {
+	cleanupCtx, cancel := spawnRollbackContext(ctx)
+	defer cancel()
+	if m.destroySpawnWorkspace(cleanupCtx, ws, workspaceProject) {
+		m.clearProvisionedWorkspace(cleanupCtx, id, ws.Path)
+	}
+}
+
 func (m *Manager) setProvisionState(
 	ctx context.Context,
 	id domain.SessionID,
@@ -261,11 +297,48 @@ func (m *Manager) FailInterruptedProvisioning(ctx context.Context) error {
 // runInBackground runs work outside the caller's request. The seam exists so
 // tests can observe a completed spawn without sleeping.
 func (m *Manager) runInBackground(work func()) {
+	m.backgroundWorkers.Add(1)
+	tracked := func() {
+		defer m.backgroundWorkers.Done()
+		work()
+	}
 	if m.runBackground != nil {
-		m.runBackground(work)
+		m.runBackground(tracked)
 		return
 	}
-	go work()
+	go tracked()
+}
+
+// WaitBackgroundWorkers waits for daemon-owned spawn and task-preparation work
+// after the daemon context has been cancelled.
+func (m *Manager) WaitBackgroundWorkers(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		m.backgroundWorkers.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (m *Manager) cancelAsyncChatSpawn(ctx context.Context, id domain.SessionID) error {
+	m.asyncChatSpawnsMu.Lock()
+	run := m.asyncChatSpawns[id]
+	m.asyncChatSpawnsMu.Unlock()
+	if run == nil {
+		return nil
+	}
+	run.cancel()
+	select {
+	case <-run.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (m *Manager) clearProvisionedWorkspace(ctx context.Context, id domain.SessionID, workspacePath string) {

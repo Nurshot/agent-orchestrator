@@ -98,6 +98,29 @@ func TestTaskPreparationPromotionPreservesWorkspace(t *testing.T) {
 	}
 }
 
+func TestProvisionedWorkspaceRejectsTerminatedSession(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	seedProject(t, s, "mer")
+	rec := sampleRecord("mer")
+	rec.ProvisionState = domain.SessionProvisionProvisioning
+	created, err := s.CreateSession(ctx, rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	created.IsTerminated = true
+	if err := s.UpdateSession(ctx, created); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := s.SetSessionProvisionedWorkspace(ctx, created.ID, "ao/mer-1/root", "/late", "/repo", created.UpdatedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated {
+		t.Fatal("terminated session accepted a late workspace publication")
+	}
+}
+
 func TestDeleteTaskPreparationRemovesItsCDC(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

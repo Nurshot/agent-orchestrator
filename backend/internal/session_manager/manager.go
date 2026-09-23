@@ -416,7 +416,10 @@ type Manager struct {
 	taskPreparationTTL          time.Duration
 	// runBackground runs an asynchronous spawn's remaining work. Nil means a
 	// plain goroutine; tests substitute a synchronous runner.
-	runBackground func(func())
+	runBackground     func(func())
+	backgroundWorkers sync.WaitGroup
+	asyncChatSpawnsMu sync.Mutex
+	asyncChatSpawns   map[domain.SessionID]*asyncChatSpawnRun
 	// openTranscriptFile is os.Open in production. The narrow seam lets tests
 	// deterministically prove that a post-stop transcript read failure falls
 	// back without advertising the provider path.
@@ -791,6 +794,7 @@ func New(d Deps) *Manager {
 		reconcileWorkers:               d.ReconcileWorkers,
 		defaultBranchRefreshTimeout:    defaultBranchRefreshTimeout,
 		taskPreparations:               make(map[domain.TaskPreparationToken]*taskPreparation),
+		asyncChatSpawns:                make(map[domain.SessionID]*asyncChatSpawnRun),
 		taskPreparationTTL:             defaultTaskPreparationTTL,
 		openTranscriptFile:             os.Open,
 		lookPath:                       d.LookPath,
@@ -1937,6 +1941,9 @@ func (m *Manager) Kill(ctx context.Context, id domain.SessionID) (bool, error) {
 	// a wedged git or runtime call cannot pin the goroutine forever.
 	ctx, cancelTeardown := context.WithTimeout(context.WithoutCancel(ctx), killTeardownBudget)
 	defer cancelTeardown()
+	if err := m.cancelAsyncChatSpawn(ctx, id); err != nil {
+		return false, fmt.Errorf("kill %s: cancel provisioning: %w", id, err)
+	}
 
 	if err := m.beginAgentOperation(ctx, id, agentOperationKill); err != nil {
 		if errors.Is(err, errAgentOperationInProgress) {

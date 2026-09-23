@@ -279,7 +279,9 @@ UPDATE sessions SET
     workspace_path = sqlc.arg(workspace_path),
     workspace_repo_path = sqlc.arg(workspace_repo_path),
     updated_at = sqlc.arg(updated_at)
-WHERE id = sqlc.arg(id) AND provision_state = 'provisioning';
+WHERE id = sqlc.arg(id)
+  AND provision_state = 'provisioning'
+  AND is_terminated = 0;
 
 -- name: SetSessionProvisionState :execrows
 -- Publish start-up progress for an asynchronous Chat spawn. Deliberately narrow:
