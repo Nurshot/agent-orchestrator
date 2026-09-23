@@ -346,11 +346,12 @@ export function ShellTopbar({
 }
 
 function PutEditsBackButton({ sessionId, title }: { sessionId: string; title: string }) {
+	const { t } = useTranslation();
 	const reapply = useReapplyPreservedEdits();
 	const [pending, setPending] = useState(false);
 	return (
 		<TopbarButton
-			aria-label={`Put saved edits back for ${title}`}
+			aria-label={t("shell.putEditsBackNamed", { title })}
 			disabled={pending}
 			onClick={() => {
 				setPending(true);
@@ -359,7 +360,7 @@ function PutEditsBackButton({ sessionId, title }: { sessionId: string; title: st
 			style={noDragStyle}
 			variant="secondary"
 		>
-			{pending ? "Putting saved edits back" : "Put saved edits back"}
+			{pending ? t("shell.puttingEditsBack") : t("shell.putEditsBack")}
 		</TopbarButton>
 	);
 }

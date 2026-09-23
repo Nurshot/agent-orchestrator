@@ -112,6 +112,7 @@ export function ArchivedSessionCardAdapter({
 	session: WorkspaceSession;
 	usage?: SessionUsageSummary;
 }) {
+	const { t } = useTranslation();
 	const reapply = useReapplyPreservedEdits();
 	const [puttingBack, setPuttingBack] = useState(false);
 	const branch = session.branch ?? "";
@@ -127,13 +128,13 @@ export function ArchivedSessionCardAdapter({
 				<span className="inline-flex items-center gap-1">
 					{session.hasPreservedEdits ? (
 						<button
-							aria-label={`Put saved edits back for ${session.title}`}
+							aria-label={t("shell.putEditsBackNamed", { title: session.title })}
 							className="inline-flex h-control-board-sm items-center rounded-md px-2 text-2xs text-passive transition-colors hover:bg-interactive-hover hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent/50 disabled:cursor-not-allowed disabled:opacity-35"
 							disabled={puttingBack || isRestoreDisabled}
 							onClick={putEditsBack}
 							type="button"
 						>
-							{puttingBack ? "Putting saved edits back" : "Put saved edits back"}
+							{puttingBack ? t("shell.puttingEditsBack") : t("shell.putEditsBack")}
 						</button>
 					) : null}
 					<ArchiveRestoreButton
