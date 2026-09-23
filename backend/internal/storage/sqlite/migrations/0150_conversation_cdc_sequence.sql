@@ -4,6 +4,9 @@
 -- chat prose. A client that already holds that row can refresh the live page.
 -- A client that does not understand the new fields still sees conversationId
 -- and refreshes the conversation the way it did before.
+--
+-- Both the session row and the reviewer row from 0149 stay. This migration
+-- only adds the sequence fields to those payloads.
 
 -- +goose Up
 -- +goose StatementBegin
@@ -25,6 +28,18 @@ BEGIN
            NEW.updated_at
     FROM conversations c
     JOIN sessions s ON s.id = c.current_session_id
+    WHERE c.id = NEW.conversation_id
+    UNION ALL
+    SELECT s.project_id, s.id, 'session_updated',
+           json_object('id', s.id, 'sessionId', s.id, 'reviewId', r.id, 'conversationId', c.id,
+                       'itemSequence', NEW.sequence, 'itemRevision', NEW.revision,
+                       'headSequence', c.latest_sequence,
+                       'activity', s.activity_state,
+                       'isTerminated', json(CASE WHEN s.is_terminated THEN 'true' ELSE 'false' END)),
+           NEW.updated_at
+    FROM conversations c
+    JOIN review r ON r.id = c.current_review_id
+    JOIN sessions s ON s.id = r.session_id
     WHERE c.id = NEW.conversation_id;
 END;
 
@@ -42,6 +57,18 @@ BEGIN
            NEW.updated_at
     FROM conversations c
     JOIN sessions s ON s.id = c.current_session_id
+    WHERE c.id = NEW.conversation_id
+    UNION ALL
+    SELECT s.project_id, s.id, 'session_updated',
+           json_object('id', s.id, 'sessionId', s.id, 'reviewId', r.id, 'conversationId', c.id,
+                       'itemSequence', NEW.sequence, 'itemRevision', NEW.revision,
+                       'headSequence', c.latest_sequence,
+                       'activity', s.activity_state,
+                       'isTerminated', json(CASE WHEN s.is_terminated THEN 'true' ELSE 'false' END)),
+           NEW.updated_at
+    FROM conversations c
+    JOIN review r ON r.id = c.current_review_id
+    JOIN sessions s ON s.id = r.session_id
     WHERE c.id = NEW.conversation_id;
 END;
 
@@ -50,7 +77,7 @@ AFTER INSERT ON conversation_messages
 BEGIN
     INSERT INTO change_log (project_id, session_id, event_type, payload, created_at)
     SELECT s.project_id, s.id, 'session_updated',
-           json_object('id', s.id, 'sessionId', s.id, 'conversationId', NEW.conversation_id,
+           json_object('id', s.id, 'sessionId', s.id, 'conversationId', c.id,
                        'itemSequence', NEW.sequence, 'itemRevision', NEW.revision,
                        'headSequence', c.latest_sequence,
                        'activity', s.activity_state,
@@ -58,6 +85,18 @@ BEGIN
            NEW.updated_at
     FROM conversations c
     JOIN sessions s ON s.id = c.current_session_id
+    WHERE c.id = NEW.conversation_id
+    UNION ALL
+    SELECT s.project_id, s.id, 'session_updated',
+           json_object('id', s.id, 'sessionId', s.id, 'reviewId', r.id, 'conversationId', c.id,
+                       'itemSequence', NEW.sequence, 'itemRevision', NEW.revision,
+                       'headSequence', c.latest_sequence,
+                       'activity', s.activity_state,
+                       'isTerminated', json(CASE WHEN s.is_terminated THEN 'true' ELSE 'false' END)),
+           NEW.updated_at
+    FROM conversations c
+    JOIN review r ON r.id = c.current_review_id
+    JOIN sessions s ON s.id = r.session_id
     WHERE c.id = NEW.conversation_id;
 END;
 
@@ -75,6 +114,18 @@ BEGIN
            NEW.updated_at
     FROM conversations c
     JOIN sessions s ON s.id = c.current_session_id
+    WHERE c.id = NEW.conversation_id
+    UNION ALL
+    SELECT s.project_id, s.id, 'session_updated',
+           json_object('id', s.id, 'sessionId', s.id, 'reviewId', r.id, 'conversationId', c.id,
+                       'itemSequence', NEW.sequence, 'itemRevision', NEW.revision,
+                       'headSequence', c.latest_sequence,
+                       'activity', s.activity_state,
+                       'isTerminated', json(CASE WHEN s.is_terminated THEN 'true' ELSE 'false' END)),
+           NEW.updated_at
+    FROM conversations c
+    JOIN review r ON r.id = c.current_review_id
+    JOIN sessions s ON s.id = r.session_id
     WHERE c.id = NEW.conversation_id;
 END;
 -- +goose StatementEnd
@@ -97,6 +148,16 @@ BEGIN
            NEW.updated_at
     FROM conversations c
     JOIN sessions s ON s.id = c.current_session_id
+    WHERE c.id = NEW.conversation_id
+    UNION ALL
+    SELECT s.project_id, s.id, 'session_updated',
+           json_object('id', s.id, 'sessionId', s.id, 'reviewId', r.id, 'conversationId', c.id,
+                       'activity', s.activity_state,
+                       'isTerminated', json(CASE WHEN s.is_terminated THEN 'true' ELSE 'false' END)),
+           NEW.updated_at
+    FROM conversations c
+    JOIN review r ON r.id = c.current_review_id
+    JOIN sessions s ON s.id = r.session_id
     WHERE c.id = NEW.conversation_id;
 END;
 
@@ -112,6 +173,16 @@ BEGIN
            NEW.updated_at
     FROM conversations c
     JOIN sessions s ON s.id = c.current_session_id
+    WHERE c.id = NEW.conversation_id
+    UNION ALL
+    SELECT s.project_id, s.id, 'session_updated',
+           json_object('id', s.id, 'sessionId', s.id, 'reviewId', r.id, 'conversationId', c.id,
+                       'activity', s.activity_state,
+                       'isTerminated', json(CASE WHEN s.is_terminated THEN 'true' ELSE 'false' END)),
+           NEW.updated_at
+    FROM conversations c
+    JOIN review r ON r.id = c.current_review_id
+    JOIN sessions s ON s.id = r.session_id
     WHERE c.id = NEW.conversation_id;
 END;
 
@@ -120,12 +191,22 @@ AFTER INSERT ON conversation_messages
 BEGIN
     INSERT INTO change_log (project_id, session_id, event_type, payload, created_at)
     SELECT s.project_id, s.id, 'session_updated',
-           json_object('id', s.id, 'sessionId', s.id, 'conversationId', NEW.conversation_id,
+           json_object('id', s.id, 'sessionId', s.id, 'conversationId', c.id,
                        'activity', s.activity_state,
                        'isTerminated', json(CASE WHEN s.is_terminated THEN 'true' ELSE 'false' END)),
            NEW.updated_at
     FROM conversations c
     JOIN sessions s ON s.id = c.current_session_id
+    WHERE c.id = NEW.conversation_id
+    UNION ALL
+    SELECT s.project_id, s.id, 'session_updated',
+           json_object('id', s.id, 'sessionId', s.id, 'reviewId', r.id, 'conversationId', c.id,
+                       'activity', s.activity_state,
+                       'isTerminated', json(CASE WHEN s.is_terminated THEN 'true' ELSE 'false' END)),
+           NEW.updated_at
+    FROM conversations c
+    JOIN review r ON r.id = c.current_review_id
+    JOIN sessions s ON s.id = r.session_id
     WHERE c.id = NEW.conversation_id;
 END;
 
@@ -141,6 +222,16 @@ BEGIN
            NEW.updated_at
     FROM conversations c
     JOIN sessions s ON s.id = c.current_session_id
+    WHERE c.id = NEW.conversation_id
+    UNION ALL
+    SELECT s.project_id, s.id, 'session_updated',
+           json_object('id', s.id, 'sessionId', s.id, 'reviewId', r.id, 'conversationId', c.id,
+                       'activity', s.activity_state,
+                       'isTerminated', json(CASE WHEN s.is_terminated THEN 'true' ELSE 'false' END)),
+           NEW.updated_at
+    FROM conversations c
+    JOIN review r ON r.id = c.current_review_id
+    JOIN sessions s ON s.id = r.session_id
     WHERE c.id = NEW.conversation_id;
 END;
 -- +goose StatementEnd
