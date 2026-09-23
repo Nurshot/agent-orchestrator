@@ -314,7 +314,7 @@ func prepareWorkspace(
 		// repo. Extra repos reuse the session's checkout-grant token, so they work
 		// for repositories the installation can access; arbitrary private
 		// third-party repos need per-repo grants (a follow-up).
-		cloneExtraRepos(ctx, logger, checkoutGrant.Token, bootstrap.Launch.ExtraRepos, dataDir)
+		cloneExtraRepos(ctx, logger, checkoutGrant.Token, bootstrap.Launch.ExtraRepos, workspace)
 	}
 	if err := worker.EnsureWorkspaceReviewBase(
 		ctx, worker.ExecGitRunner{}, workspace, bootstrap.Launch.DefaultBranch,
@@ -324,28 +324,29 @@ func prepareWorkspace(
 	return nil
 }
 
-// cloneExtraRepos clones each additional dev-kit repository into a worker-owned
-// directory beside the primary checkout. It is best-effort: every failure is
-// logged and skipped so the session always starts on its primary repo. Repos
-// land under <dataDir>/repos/<name>; surfacing them to the agent's workspace is
-// a follow-up that needs per-provider path validation.
-func cloneExtraRepos(ctx context.Context, logger *slog.Logger, token string, repos []worker.RepoRef, dataDir string) {
+// cloneExtraRepos clones each additional dev-kit repository as a sibling of the
+// primary checkout, so the agent (whose working directory is the primary repo)
+// can reach it at ../<name>. It is best-effort: every failure is logged and
+// skipped so the session always starts on its primary repo. The launcher
+// (workerexec) computes the same paths via worker.ExtraRepoPath and lists them
+// in the agent's system prompt.
+func cloneExtraRepos(ctx context.Context, logger *slog.Logger, token string, repos []worker.RepoRef, workspace string) {
 	if len(repos) == 0 {
 		return
 	}
-	root := filepath.Join(dataDir, "repos")
-	if err := os.MkdirAll(root, 0o755); err != nil {
+	parent := filepath.Dir(workspace)
+	if err := os.MkdirAll(parent, 0o755); err != nil {
 		logger.Warn("multi-repo: cannot create extra-repos directory", "error", err)
 		return
 	}
 	for _, repo := range repos {
-		dest := filepath.Join(root, extraRepoDirName(repo.URL))
+		dest := worker.ExtraRepoPath(workspace, repo.URL)
 		args := []string{"clone", "--origin", "origin", "--no-tags"}
 		if strings.TrimSpace(repo.Branch) != "" {
 			args = append(args, "--branch", repo.Branch)
 		}
 		args = append(args, "--", authenticatedCloneURL(repo.URL, token), dest)
-		if _, err := (worker.ExecGitRunner{}).Run(ctx, root, nil, args...); err != nil {
+		if _, err := (worker.ExecGitRunner{}).Run(ctx, parent, nil, args...); err != nil {
 			logger.Warn("multi-repo: extra repo clone failed (non-fatal)", "repo", repo.URL, "error", err)
 			continue
 		}
@@ -365,27 +366,6 @@ func authenticatedCloneURL(repoURL, token string) string {
 	}
 	parsed.User = url.UserPassword("x-access-token", token)
 	return parsed.String()
-}
-
-// extraRepoDirName derives a safe local directory name from a repo URL.
-func extraRepoDirName(repoURL string) string {
-	trimmed := strings.TrimSuffix(strings.Trim(repoURL, "/"), ".git")
-	name := trimmed
-	if idx := strings.LastIndex(trimmed, "/"); idx >= 0 {
-		name = trimmed[idx+1:]
-	}
-	name = strings.Map(func(r rune) rune {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
-			return r
-		default:
-			return '-'
-		}
-	}, name)
-	if name == "" || name == "." || name == ".." {
-		return "repo"
-	}
-	return name
 }
 
 func startInteractiveAgent(
