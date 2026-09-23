@@ -287,6 +287,55 @@ func (s *Service) CompleteOAuth(
 	return installation, nil
 }
 
+// CompleteInstallationOAuth handles GitHub's combined installation and user
+// authorization callback. In this mode (the App requests user authorization
+// during installation) GitHub returns the OAuth code directly to the callback,
+// so there is no second authorization redirect and therefore no PKCE verifier.
+// The original installation state remains the single-use correlation key while
+// the durable attempt advances to the oauth phase, then the normal completion
+// (authority checks, token exchange, installation upsert) runs.
+func (s *Service) CompleteInstallationOAuth(
+	ctx context.Context,
+	state, code string,
+	installationID int64,
+) (domain.GitHubInstallation, error) {
+	if state == "" || code == "" || installationID <= 0 {
+		return domain.GitHubInstallation{}, postgres.ErrInvalid
+	}
+	stateHash := HashState(state)
+	if err := s.store.ValidateGitHubInstallState(ctx, stateHash); err != nil {
+		return domain.GitHubInstallation{}, err
+	}
+	providerInstallation, err := s.client.GetInstallation(ctx, installationID)
+	if err != nil {
+		return domain.GitHubInstallation{}, err
+	}
+	if !InstallationSupportsAuthorityProof(providerInstallation) {
+		return domain.GitHubInstallation{}, postgres.ErrForbidden
+	}
+	// No PKCE verifier: GitHub already performed the authorization during
+	// installation, so we never issued a code_challenge. Store an empty verifier
+	// and reuse the install state as the oauth state so CompleteOAuth can find
+	// the attempt.
+	associatedData := []byte(strconv.FormatInt(installationID, 10))
+	ciphertext, nonce, err := Encrypt(s.stateKey, nil, associatedData)
+	if err != nil {
+		return domain.GitHubInstallation{}, err
+	}
+	if _, err := s.store.BeginGitHubOAuth(
+		ctx,
+		stateHash,
+		toDomainInstallation(providerInstallation),
+		stateHash,
+		ciphertext,
+		nonce,
+		time.Now().UTC().Add(s.installTTL),
+	); err != nil {
+		return domain.GitHubInstallation{}, err
+	}
+	return s.CompleteOAuth(ctx, state, code)
+}
+
 func (s *Service) ListInstallations(
 	ctx context.Context,
 	principal domain.Principal,

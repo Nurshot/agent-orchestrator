@@ -1468,6 +1468,17 @@ function CloudProjectCard({
 	// installation exists; it drives which create call and repo source we use.
 	const usingApp = appConnected && !useManualPat;
 
+	// If the selected repository disappears from the installation (access revoked,
+	// archived, or removed from the App's repo list), drop the stale selection so
+	// we never submit a githubRepositoryId the installation no longer grants.
+	useEffect(() => {
+		if (!usingApp || selectedRepoId === "" || githubAppRepos.data === undefined) return;
+		if (!githubAppRepos.data.some((repo) => repo.githubRepositoryId === selectedRepoId)) {
+			setSelectedRepoId("");
+			setRepositoryUrl("");
+		}
+	}, [usingApp, selectedRepoId, githubAppRepos.data]);
+
 	const urlError = projectSubmitted && !isHttpsRepositoryUrl(repositoryUrl) ? t("createProject.cloudInvalidUrl") : null;
 	const nameError = nameSubmitted && projectName.trim() === "" ? t("createProject.cloudDisplayNameRequired", { defaultValue: "Project name is required" }) : null;
 
@@ -1701,9 +1712,15 @@ function CloudProjectCard({
 							type="button"
 							className="text-[12px] font-medium text-muted-foreground underline decoration-dotted underline-offset-4 transition-colors hover:text-foreground"
 							onClick={() => {
+								// Reset the fields that belong to the other mode so a value picked
+								// under the App path (repo URL, its default branch, the selected id)
+								// never leaks into the manual path, and vice versa.
 								setUseManualPat((v) => !v);
 								setGithubToken("");
 								setGithubTokenError(null);
+								setSelectedRepoId("");
+								setRepositoryUrl("");
+								setDefaultBranch("main");
 							}}
 						>
 							{useManualPat ? "Auth with GitHub" : "Manually setup"}

@@ -684,7 +684,7 @@ export interface CloudCpGitHubUserInstallation {
 	unavailableReason?: string;
 }
 
-/** GET /me/github/user */
+/** GET /github/user */
 export interface CloudCpGitHubUserConnection {
 	connected: boolean;
 	login?: string;
