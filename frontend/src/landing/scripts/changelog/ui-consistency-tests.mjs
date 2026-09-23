@@ -65,6 +65,7 @@ test("every changelog feed entry uses the weekly UI contract", async () => {
 			issues.push(`expected 1-4 major features, found ${majorHeadings.length}`);
 		}
 		if (body.find("img").length > 1) issues.push("more than one product image");
+		if (body.find("hr").length > 0) issues.push("contains a horizontal divider");
 		for (const prLink of body.find("a[href*='/pull/']").toArray()) {
 			const link = $(prLink);
 			if (!link.hasClass("underline") || /(?:^|\s)bg-/.test(link.attr("class") ?? "")) {

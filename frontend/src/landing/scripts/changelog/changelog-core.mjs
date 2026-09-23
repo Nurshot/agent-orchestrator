@@ -326,7 +326,7 @@ export function renderWeeklyDraft({ pullRequests, startDate, endDate }) {
 	}
 
 	if (fixes.length > 0) {
-		sections.push("", "---", "", "## Bug fixes", "", ...groupedBullets(fixes));
+		sections.push("", "## Bug fixes", "", ...groupedBullets(fixes));
 	}
 
 	sections.push(
@@ -389,7 +389,7 @@ export function renderHistoricalWeek({ changes, startDate, endDate, totalCommits
 		sections.push("", "## Improvements", "", ...groupedBullets(improvements));
 	}
 	if (fixes.length > 0) {
-		sections.push("", "---", "", "## Bug fixes", "", ...groupedBullets(fixes));
+		sections.push("", "## Bug fixes", "", ...groupedBullets(fixes));
 	}
 	if (categorized.length === 0) {
 		sections.push(

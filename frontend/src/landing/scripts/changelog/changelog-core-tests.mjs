@@ -84,6 +84,7 @@ test("renders a reviewable weekly MDX draft", () => {
 	assert.match(result.content, /## Bug fixes/);
 	assert.match(result.content, /### Product/);
 	assert.match(result.content, /View detailed releases on GitHub/);
+	assert.equal(result.content.match(/^---$/gm)?.length, 2);
 	assert.equal(result.counts.included, 2);
 });
 
