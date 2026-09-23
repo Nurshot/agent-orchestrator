@@ -28,6 +28,7 @@ type BrowserdOptions struct {
 	SessionID   string
 	Logger      *slog.Logger
 	NewEngine   func(root, sessionID string) vmbrowser.EngineLike
+	NewViewer   func(root, sessionID string, arbiter *vmbrowser.ControlArbiter) *vmbrowser.ViewerController
 	IdleTimeout time.Duration
 }
 
@@ -57,15 +58,23 @@ func startBrowserd(ctx context.Context, opts BrowserdOptions) (map[string]string
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return nil, nil, fmt.Errorf("create browser root: %w", err)
 	}
-	newEngine := opts.NewEngine
-	if newEngine == nil {
-		newEngine = defaultBrowserEngine
+	arbiter := vmbrowser.NewControlArbiter(nil)
+	var engine vmbrowser.EngineLike
+	var viewer *vmbrowser.ViewerController
+	if opts.NewEngine == nil {
+		engine, viewer = defaultBrowserRuntime(root, opts.SessionID, arbiter)
+	} else {
+		engine = opts.NewEngine(root, opts.SessionID)
+		if opts.NewViewer != nil {
+			viewer = opts.NewViewer(root, opts.SessionID, arbiter)
+		}
 	}
-	engine := newEngine(root, opts.SessionID)
 	service := vmbrowser.NewService(vmbrowser.ServiceOptions{
 		SessionID:          opts.SessionID,
 		CapabilityVerifier: verifier,
 		Engine:             engine,
+		Viewer:             viewer,
+		Arbiter:            arbiter,
 		Logger:             opts.Logger,
 	})
 
@@ -117,6 +126,9 @@ func watchBrowserIdle(
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			if service.ViewerAttached() {
+				continue
+			}
 			last := service.LastActivity()
 			// Zero means no command was ever served: idle since start.
 			if !last.IsZero() && time.Since(last) < idleTimeout {
@@ -134,7 +146,10 @@ func watchBrowserIdle(
 
 // defaultBrowserEngine builds the production engine: supervised Chromium
 // under the browser root plus the pinned agent-browser binary.
-func defaultBrowserEngine(root, sessionID string) vmbrowser.EngineLike {
+func defaultBrowserRuntime(
+	root, sessionID string,
+	arbiter *vmbrowser.ControlArbiter,
+) (vmbrowser.EngineLike, *vmbrowser.ViewerController) {
 	chromiumPath := os.Getenv(chromiumPathEnv)
 	if chromiumPath == "" {
 		chromiumPath = "/usr/bin/chromium"
@@ -148,10 +163,22 @@ func defaultBrowserEngine(root, sessionID string) vmbrowser.EngineLike {
 		UserDataDir: filepath.Join(root, "profile"),
 		Logger:      slog.Default(),
 	})
-	return vmbrowser.NewEngine(chromium, nil, vmbrowser.EngineOptions{
+	engine := vmbrowser.NewEngine(chromium, nil, vmbrowser.EngineOptions{
 		BinaryPath: binaryPath,
 		Root:       root,
 		SessionID:  sessionID,
 		Logger:     slog.Default(),
 	})
+	viewer := vmbrowser.NewViewerController(vmbrowser.ViewerControllerOptions{
+		Chromium: chromium,
+		Engine:   engine,
+		Arbiter:  arbiter,
+		Logger:   slog.Default(),
+	})
+	return engine, viewer
+}
+
+func defaultBrowserEngine(root, sessionID string) vmbrowser.EngineLike {
+	engine, _ := defaultBrowserRuntime(root, sessionID, vmbrowser.NewControlArbiter(nil))
+	return engine
 }

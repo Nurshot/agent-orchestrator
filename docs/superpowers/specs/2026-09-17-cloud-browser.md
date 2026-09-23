@@ -4,6 +4,11 @@ Status: proposed (brainstormed 2026-09-17, supersedes the staging in
 `cloud-browser-handoff.md` from session 19; that document remains the context
 dump and evidence record).
 
+Stage 2 viewer transport and shared-control behavior are superseded by
+`docs/superpowers/specs/2026-09-23-cloud-browser-live-viewer.md`. In
+particular, frames and live input use a direct, non-durable WebSocket path and
+never use the durable worker request queue.
+
 Sources read for this spec:
 
 - `cloud-browser-handoff.md` (session 19 worktree, untracked there)

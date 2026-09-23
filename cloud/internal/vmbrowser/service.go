@@ -3,6 +3,7 @@ package vmbrowser
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"math"
@@ -11,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/google/uuid"
 
 	"github.com/aoagents/agent-orchestrator/backend/pkg/browsercontract"
@@ -30,6 +32,8 @@ type ServiceOptions struct {
 	SessionID          string
 	CapabilityVerifier string
 	Engine             EngineLike
+	Viewer             *ViewerController
+	Arbiter            *ControlArbiter
 	Logger             *slog.Logger
 	authority          *browsercontract.Authority
 }
@@ -40,6 +44,7 @@ type Service struct {
 	opts                    ServiceOptions
 	authority               *browsercontract.Authority
 	lastActivityNanoseconds atomic.Int64
+	viewerConnections       atomic.Int64
 }
 
 // NewService creates the service for exactly one session.
@@ -58,8 +63,11 @@ func (s *Service) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST "+browsercontract.RouteCommands, s.handleCommand)
 	mux.HandleFunc("GET "+browsercontract.RouteStatus, s.handleStatus)
+	mux.HandleFunc("GET "+ViewerStreamRoute, s.handleViewerStream)
 	return mux
 }
+
+const ViewerStreamRoute = "/api/v1/browser/viewer-stream"
 
 // Connected reports whether the backing engine has served or could serve.
 func (s *Service) Connected() (bool, time.Time) {
@@ -77,6 +85,10 @@ func (s *Service) LastActivity() time.Time {
 		return time.Time{}
 	}
 	return time.Unix(0, nanos).UTC()
+}
+
+func (s *Service) ViewerAttached() bool {
+	return s.viewerConnections.Load() > 0
 }
 
 func (s *Service) touchActivity() {
@@ -121,7 +133,29 @@ func (s *Service) handleCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.touchActivity()
+	mutating := browserActionMutates(action, in.Args)
+	var release func()
+	if mutating && s.opts.Arbiter != nil {
+		var err error
+		release, err = s.opts.Arbiter.AcquireAgent(r.Context())
+		if err != nil {
+			if errors.Is(err, ErrUserControlActive) {
+				err = &CommandError{Code: "BROWSER_USER_CONTROL_ACTIVE", Message: "The user is controlling the browser"}
+			}
+			s.writeCommandError(w, r, err, requestID)
+			return
+		}
+		if s.opts.Viewer != nil {
+			s.opts.Viewer.AgentActionStarted(action)
+		}
+	}
 	result, err := s.dispatch(r.Context(), action, in.Args)
+	if release != nil {
+		release()
+		if s.opts.Viewer != nil {
+			s.opts.Viewer.AgentActionFinished(action, in.Args, result)
+		}
+	}
 	if err != nil {
 		s.writeCommandError(w, r, err, requestID)
 		return
@@ -132,6 +166,31 @@ func (s *Service) handleCommand(w http.ResponseWriter, r *http.Request) {
 		Action:    action,
 		Result:    result,
 	})
+}
+
+func (s *Service) handleViewerStream(w http.ResponseWriter, r *http.Request) {
+	requestID := uuid.NewString()
+	if !s.authorized(s.opts.SessionID, r.Header.Get(browsercontract.CapabilityHeader)) {
+		s.writeError(w, http.StatusForbidden, "forbidden", "BROWSER_CAPABILITY_INVALID", "Browser capability is invalid", requestID)
+		return
+	}
+	if s.opts.Viewer == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "unavailable", "BROWSER_VIEWER_UNAVAILABLE", "Browser viewer is not available", requestID)
+		return
+	}
+	connection, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		CompressionMode: websocket.CompressionDisabled, InsecureSkipVerify: true,
+	})
+	if err != nil {
+		return
+	}
+	defer connection.CloseNow()
+	s.viewerConnections.Add(1)
+	s.touchActivity()
+	defer s.viewerConnections.Add(-1)
+	if err := s.opts.Viewer.Serve(r.Context(), connection); err != nil && r.Context().Err() == nil {
+		_ = connection.Close(websocket.StatusPolicyViolation, "browser viewer closed")
+	}
 }
 
 func (s *Service) handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -178,12 +237,27 @@ func (s *Service) writeCommandError(w http.ResponseWriter, _ *http.Request, err 
 	case "STALE_REFERENCE", "TAB_NOT_FOUND":
 		status = http.StatusConflict
 		typeName = "conflict"
+	case "BROWSER_USER_CONTROL_ACTIVE":
+		status = http.StatusConflict
+		typeName = "conflict"
 	case "BROWSER_TARGET_UNAVAILABLE", "BROWSER_AUTOMATION_UNAVAILABLE", "AGENT_BROWSER_NOT_INSTALLED",
 		"AGENT_BROWSER_START_FAILED", "AGENT_BROWSER_OUTPUT_TOO_LARGE", "BROWSER_AUTOMATION_INVALID_OUTPUT":
 		status = http.StatusServiceUnavailable
 		typeName = "unavailable"
 	}
 	s.writeError(w, status, typeName, commandErr.Code, commandErr.Message, requestID)
+}
+
+func browserActionMutates(action string, args map[string]any) bool {
+	switch action {
+	case "snapshot", "get", "tabs", "wait", "console", "errors", "screenshot":
+		return false
+	case "dialog":
+		operation, _ := args["operation"].(string)
+		return !strings.EqualFold(strings.TrimSpace(operation), "status")
+	default:
+		return true
+	}
 }
 
 func (s *Service) writeError(w http.ResponseWriter, status int, typeName, code, message, requestID string) {

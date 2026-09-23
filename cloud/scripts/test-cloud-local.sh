@@ -336,8 +336,8 @@ if mode == "create":
             "secret": "ao-cloud-smoke-development-only",
         },
         token=token,
-	)["providerConnection"]
-	state_file.write_text(json.dumps({
+    )["providerConnection"]
+    state_file.write_text(json.dumps({
         "token": token,
         "orgId": org_id,
         "harness": connection["provider"],
@@ -348,9 +348,9 @@ elif mode == "prepare":
     org_id = state["orgId"]
     prompt = f"prepared-session-smoke-{time.time_ns()}"
     commit_key = f"commit-preparation-{time.time_ns()}"
-	started = time.time()
-	prepared = request(
-		"POST",
+    started = time.time()
+    prepared = request(
+        "POST",
         f"/api/cloud/v1/orgs/{org_id}/session-preparations",
         body={
             "projectId": state["projectId"],
@@ -535,7 +535,7 @@ elif mode == "start":
         idempotency_key=f"session-{time.time_ns()}",
         expected=201,
     )["session"]
-	milestones = {
+    milestones = {
         "sessionAcceptedMs": round((time.monotonic() - startup_started) * 1000)
     }
     early_message_key = f"early-message-{time.time_ns()}"
@@ -603,9 +603,9 @@ elif mode == "start":
     )
     if ".ao-cloud-smoke-api" not in {item.get("path") for item in listing["items"]}:
         raise RuntimeError(f"workspace listing omitted the written file: {listing!r}")
-	wait_for_agent_terminal_ticket(org_id, session["id"], token)
-	state.update({"sessionId": session["id"], "timing": milestones})
-	state_file.write_text(json.dumps(state))
+    wait_for_agent_terminal_ticket(org_id, session["id"], token)
+    state.update({"sessionId": session["id"], "timing": milestones})
+    state_file.write_text(json.dumps(state))
 elif mode == "verify":
     state = json.loads(state_file.read_text())
     token = state["token"]
@@ -1218,6 +1218,20 @@ wait_for_process_marker() {
 }
 # The orchestrator harness launches with the coordination prompt in its argv.
 wait_for_process_marker "$first_worker" "AO Orchestrator Role"
+if [[ "${AO_CLOUD_BROWSER_VIEWER_E2E:-}" == "1" ]]; then
+	(
+		cd "$repository_root"
+		go run ./scripts/browser-viewer-smoke.go \
+			"http://127.0.0.1:${AO_CLOUD_PORT}" "$state_file" "$first_worker"
+	)
+	assert_chromium_running "$first_worker"
+	wait_for_sql_true "$org" \
+		"SELECT NOT EXISTS (
+			SELECT 1 FROM ao_worker_requests
+			WHERE session_id = '${session}' AND kind LIKE 'browser.%'
+		)" \
+		"Live browser media or input entered the durable worker request queue."
+fi
 exercise_browser_proxy "$first_worker"
 spawn_output="$(
 	docker exec "$first_worker" ao spawn \

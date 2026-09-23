@@ -61,6 +61,7 @@ import {
 } from "lucide-react";
 import { apiClient, apiErrorMessage } from "../lib/api-client";
 import { useBrowserView, type BrowserViewModel } from "../hooks/useBrowserView";
+import { useCloudBrowserView } from "../hooks/useCloudBrowserView";
 import { useTabScrollEdges } from "../hooks/useTabScrollEdges";
 import { formatBrowserAnnotationMessage, type BrowserAnnotationSubmitPayload } from "../../shared/browser-annotations";
 import type { BrowserProfile } from "../../shared/browser-profiles";
@@ -86,6 +87,7 @@ import { useBrowserDownloads } from "../hooks/useBrowserDownloads";
 import { BrowserDownloadsList } from "./BrowserDownloadsList";
 import { isWebLink, openLinkInSystemBrowser } from "../lib/external-link-policy";
 import { aoBridge } from "../lib/bridge";
+import { CloudBrowserSurface } from "./CloudBrowserSurface";
 
 // One-click viewport width presets for responsive testing — height is shown
 // for reference but not enforced (only width drives CSS breakpoints, and
@@ -357,26 +359,56 @@ export function BrowserPanel({
 	onTogglePopOut,
 	topbarHost,
 }: BrowserPanelProps) {
+	return session.cloud ? (
+		<CloudSessionBrowserPanel
+			active={active}
+			onTogglePopOut={onTogglePopOut}
+			poppedOut={poppedOut}
+			session={session}
+			topbarHost={topbarHost}
+		/>
+	) : (
+		<LocalSessionBrowserPanel
+			active={active}
+			onTogglePopOut={onTogglePopOut}
+			poppedOut={poppedOut}
+			session={session}
+			topbarHost={topbarHost}
+		/>
+	);
+}
+
+function LocalSessionBrowserPanel(props: BrowserPanelProps) {
 	const browserView = useBrowserView({
-		sessionId: session.id,
-		active,
-		poppedOut,
-		previewUrl: session.previewUrl,
-		previewRevision: session.previewRevision,
+		sessionId: props.session.id,
+		active: props.active,
+		poppedOut: props.poppedOut,
+		previewUrl: props.session.previewUrl,
+		previewRevision: props.session.previewRevision,
 	});
+	return <ConnectedBrowserPanel {...props} browserView={browserView} />;
+}
+
+function CloudSessionBrowserPanel(props: BrowserPanelProps) {
+	const browserView = useCloudBrowserView({
+		orgId: props.session.cloud?.orgId,
+		sessionId: props.session.id,
+		active: props.active,
+	});
+	return <ConnectedBrowserPanel {...props} browserView={browserView} />;
+}
+
+function ConnectedBrowserPanel({ browserView, ...props }: BrowserPanelProps & { browserView: BrowserViewModel }) {
+	const { session } = props;
 	const annotationQueue = useBrowserAnnotationQueue({
 		sessionId: session.id,
 		navUrl: browserView.navState.url,
 	});
 	return (
 		<BrowserPanelView
-			active={active}
+			{...props}
 			annotationQueue={annotationQueue}
 			browserView={browserView}
-			onTogglePopOut={onTogglePopOut}
-			poppedOut={poppedOut}
-			session={session}
-			topbarHost={topbarHost}
 		/>
 	);
 }
@@ -419,6 +451,7 @@ export function BrowserPanelView({
 		annotationState = { count: 0, screenshotCount: 0, hasDraft: false },
 		setAnnotationMode,
 		annotationAction = async () => undefined,
+		cloudSurface,
 	} = browserView;
 	const [urlInput, setUrlInput] = useState(navState.url);
 	const [urlCopied, setUrlCopied] = useState(false);
@@ -428,8 +461,8 @@ export function BrowserPanelView({
 	const [urlEditing, setUrlEditing] = useState(false);
 	const { beginPicking, cancelPicking, enqueue, error, failPicking, queuedCount, retryQueued, status } =
 		annotationQueue;
-	const hasNativeBrowser = Boolean(window.ao?.browser);
-	const showStaticPreview = !hasNativeBrowser && navState.url !== "";
+	const hasNativeBrowser = !cloudSurface && Boolean(window.ao?.browser);
+	const showStaticPreview = !cloudSurface && !hasNativeBrowser && navState.url !== "";
 	const canAnnotate = Boolean(window.ao?.browser && viewId && navState.url);
 	const canRetryAnnotation = status === "error" && queuedCount > 0;
 	const [devicePreset, setDevicePreset] = useState<string | null>(null);
@@ -537,11 +570,11 @@ export function BrowserPanelView({
 	);
 
 	useEffect(() => {
-		if (!viewId) return;
+		if (!viewId || !hasNativeBrowser) return;
 		if (active) window.ao?.browser.notifyPanelUsed(viewId);
 		else window.ao?.browser.notifyPanelBlur(viewId);
 		return () => window.ao?.browser.notifyPanelBlur(viewId);
-	}, [active, viewId]);
+	}, [active, hasNativeBrowser, viewId]);
 
 	useEffect(
 		() =>
@@ -1130,7 +1163,7 @@ export function BrowserPanelView({
 			data-browser-native-page={navState.url ? "live" : "empty"}
 			data-testid="browser-panel"
 			onBlurCapture={(event: FocusEvent<HTMLDivElement>) => {
-				if (!viewId || event.currentTarget.contains(event.relatedTarget)) return;
+				if (!viewId || !hasNativeBrowser || event.currentTarget.contains(event.relatedTarget)) return;
 				// Focus moving into the portaled omnibox is still browser chrome — do
 				// not drop the shortcut target or ⌘T/⌘W will create/close terminals.
 				if (topbarHost && event.relatedTarget instanceof Node && topbarHost.contains(event.relatedTarget)) {
@@ -1150,10 +1183,10 @@ export function BrowserPanelView({
 				window.ao?.browser.notifyPanelBlur(viewId);
 			}}
 			onFocusCapture={() => {
-				if (viewId) window.ao?.browser.notifyPanelUsed(viewId);
+				if (viewId && hasNativeBrowser) window.ao?.browser.notifyPanelUsed(viewId);
 			}}
 			onPointerDownCapture={() => {
-				if (viewId) window.ao?.browser.notifyPanelUsed(viewId);
+				if (viewId && hasNativeBrowser) window.ao?.browser.notifyPanelUsed(viewId);
 			}}
 			role="tabpanel"
 		>
@@ -1531,7 +1564,7 @@ export function BrowserPanelView({
 					// cascade layer and can never override plain author CSS. Gate that CSS
 					// rule with this data attribute instead, so there's exactly one place
 					// deciding opacity.
-					data-placeholder={!hasNativeBrowser || navState.url === "" ? "true" : undefined}
+					data-placeholder={cloudSurface || !hasNativeBrowser || navState.url === "" ? "true" : undefined}
 					data-testid="browser-viewport"
 				>
 					{/* Only the native-view slot is width-constrained for a device
@@ -1546,10 +1579,12 @@ export function BrowserPanelView({
 							className="browser-panel__slot absolute inset-0 min-h-px min-w-px"
 							data-testid="browser-device-frame"
 							ref={slotRef}
-						/>
+						>
+							{cloudSurface ? <CloudBrowserSurface model={cloudSurface} /> : null}
+						</div>
 					</div>
 					{showStaticPreview ? <StaticPreview url={navState.url} /> : null}
-					{navState.url === "" ? (
+					{!cloudSurface && navState.url === "" ? (
 						<div className="pointer-events-none absolute inset-0 grid place-items-center p-5 text-center font-mono text-xs text-passive">
 							<p>{t("browser.emptyUrl")}</p>
 						</div>

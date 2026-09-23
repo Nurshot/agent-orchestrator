@@ -23,6 +23,11 @@ const navigateMock = vi.hoisted(() => vi.fn());
 const openShellTerminalMock = vi.hoisted(() => vi.fn());
 const closeShellTerminalMock = vi.hoisted(() => vi.fn());
 const cloudResumeMock = vi.hoisted(() => vi.fn(async () => ({ session: {} })));
+const cloudSendMessageMock = vi.hoisted(() => vi.fn<(
+	orgId: string,
+	sessionId: string,
+	input: { clientSequence: number; text: string },
+) => Promise<{ event: object }>>(async () => ({ event: {} })));
 const nativeFullScreenMock = vi.hoisted(() => vi.fn(() => false));
 const interfaceTransitionMock = vi.hoisted(() => ({
 	start: vi.fn(),
@@ -80,7 +85,7 @@ vi.mock("../hooks/useWindowFullScreen", () => ({
 vi.mock("../hooks/useCloudCp", () => ({
 	useCloudCp: () => ({
 		baseUrl: "https://cloud.example.test",
-		client: { resumeSession: cloudResumeMock },
+		client: { resumeSession: cloudResumeMock, sendSessionMessage: cloudSendMessageMock },
 		ready: true,
 	}),
 }));
@@ -489,6 +494,7 @@ vi.mock("./SessionFileWorkspace", () => ({
 			begin: (target: { path: string; scope: string; side: string; surface: string }) => void;
 			draft: string;
 			setDraft: (draft: string) => void;
+			submit: () => Promise<void>;
 			target: { path: string } | null;
 		};
 		initialEditing?: boolean;
@@ -500,20 +506,46 @@ vi.mock("./SessionFileWorkspace", () => ({
 		<div data-editing={String(Boolean(initialEditing))} data-mode={initialMode} data-split={String(split)} data-testid="session-file-workspace">
 			{path}
 			<button onClick={() => annotation.begin({ path, scope: scope ?? "combined", side: "file", surface: "focused" })} type="button">header feedback</button>
-			{annotation.target ? <input aria-label="feedback draft" onChange={(event) => annotation.setDraft(event.target.value)} value={annotation.draft} /> : null}
+			{annotation.target ? (
+				<>
+					<input aria-label="feedback draft" onChange={(event) => annotation.setDraft(event.target.value)} value={annotation.draft} />
+					<button onClick={() => void annotation.submit()} type="button">send file feedback</button>
+				</>
+			) : null}
 		</div>
 	),
 }));
 vi.mock("./CloudWorkspaceDiff", () => ({
-	CloudFileContentPane: ({ path }: { path: string }) => <div data-testid="cloud-file-workspace">{path}</div>,
+	CloudFileContentPane: ({ annotation, path }: {
+		annotation: {
+			begin: (target: { path: string; scope: string; side: string; surface: string }) => void;
+			draft: string;
+			setDraft: (draft: string) => void;
+			submit: () => Promise<void>;
+			target: { path: string } | null;
+		};
+		path: string;
+	}) => (
+		<div data-testid="cloud-file-workspace">
+			{path}
+			<button onClick={() => annotation.begin({ path, scope: "combined", side: "file", surface: "focused" })} type="button">cloud file feedback</button>
+			{annotation.target ? (
+				<>
+					<input aria-label="cloud feedback draft" onChange={(event) => annotation.setDraft(event.target.value)} value={annotation.draft} />
+					<button onClick={() => void annotation.submit()} type="button">send cloud file feedback</button>
+				</>
+			) : null}
+		</div>
+	),
 	CloudWorkspaceDiff: ({ onOpenFile }: { onOpenFile?: (path: string) => void }) => (
 		<button onClick={() => onOpenFile?.("src/cloud.ts")} type="button">open cloud file</button>
 	),
 }));
-const { browserDestroy, browserViewOptions, browserViewState } = vi.hoisted(() => ({
+const { browserDestroy, browserViewOptions, browserViewState, cloudBrowserViewOptions } = vi.hoisted(() => ({
 	browserDestroy: vi.fn(),
 	browserViewOptions: { current: undefined as { active: boolean; sessionId: string; terminated: boolean } | undefined },
 	browserViewState: { url: "", agentBrowserActive: false },
+	cloudBrowserViewOptions: { current: undefined as { active: boolean; orgId?: string; sessionId: string } | undefined },
 }));
 vi.mock("../hooks/useBrowserView", () => ({
 	useBrowserView: (options: { active: boolean; sessionId: string; terminated: boolean }) => {
@@ -543,6 +575,37 @@ vi.mock("../hooks/useBrowserView", () => ({
 			annotationMode: false,
 			setAnnotationMode: vi.fn(),
 			destroy: browserDestroy,
+		};
+	},
+}));
+vi.mock("../hooks/useCloudBrowserView", () => ({
+	useCloudBrowserView: (options: { active: boolean; orgId?: string; sessionId: string }) => {
+		cloudBrowserViewOptions.current = options;
+		return {
+			viewId: `cloud-browser:${options.sessionId}`,
+			navState: {
+				viewId: `cloud-browser:${options.sessionId}`,
+				url: "",
+				title: "",
+				canGoBack: false,
+				canGoForward: false,
+				isLoading: false,
+			},
+			slotRef: vi.fn(),
+			navigate: vi.fn(),
+			goBack: vi.fn(),
+			goForward: vi.fn(),
+			reload: vi.fn(),
+			stop: vi.fn(),
+			tabs: [],
+			activeTabId: "",
+			tabNotice: "",
+			agentBrowserActive: false,
+			selectTab: vi.fn(),
+			closeTab: vi.fn(),
+			annotationMode: false,
+			setAnnotationMode: vi.fn(),
+			destroy: vi.fn(),
 		};
 	},
 }));
@@ -744,6 +807,7 @@ describe("SessionView", () => {
 		useTerminalResetStore.setState({ baselineEpoch: {}, nonces: {}, reconnecting: {} });
 		browserDestroy.mockReset();
 		browserViewOptions.current = undefined;
+		cloudBrowserViewOptions.current = undefined;
 		browserViewState.url = "";
 		browserViewState.agentBrowserActive = false;
 		shellTerminalsState.data = [];
@@ -761,6 +825,8 @@ describe("SessionView", () => {
 		closeShellTerminalMock.mockReset();
 		cloudResumeMock.mockReset();
 		cloudResumeMock.mockResolvedValue({ session: {} });
+		cloudSendMessageMock.mockReset();
+		cloudSendMessageMock.mockResolvedValue({ event: {} });
 		interfaceTransitionMock.start.mockReset();
 		interfaceTransitionMock.refreshStatus.mockReset();
 		interfaceTransitionMock.refreshStatus.mockImplementation(
@@ -2866,6 +2932,26 @@ describe("SessionView", () => {
 		expect(browserViewOptions.current).toMatchObject({ sessionId: "sess-1", terminated: true });
 	});
 
+	it("activates the cloud browser stream instead of the local browser view", () => {
+		const worker = workerSession("sess-1");
+		worker.cloud = {
+			orgId: "org-1",
+			sandboxProvider: "docker",
+			desiredState: "running",
+			observedState: "running",
+		};
+
+		render(<SessionView sessionId="sess-1" />);
+		fireEvent.click(screen.getByRole("tab", { name: "Browser" }));
+
+		expect(browserViewOptions.current).toMatchObject({ sessionId: "sess-1", active: false });
+		expect(cloudBrowserViewOptions.current).toEqual({
+			active: true,
+			orgId: "org-1",
+			sessionId: "sess-1",
+		});
+	});
+
 	it("mounts the inspector open by default", () => {
 		render(<SessionView sessionId="sess-1" />);
 
@@ -3397,6 +3483,29 @@ describe("SessionView", () => {
 		fireEvent.click(screen.getByRole("button", { name: "header feedback" }));
 
 		expect(screen.queryByRole("textbox", { name: "feedback draft" })).not.toBeInTheDocument();
+	});
+
+	it("sends cloud file feedback with a positive client sequence", async () => {
+		workerSession("sess-1").cloud = { orgId: "cloud-org", sandboxProvider: "docker" };
+		act(() => useUiStore.getState().setInspectorOpen("sess-1", true));
+		render(<SessionView sessionId="sess-1" />);
+
+		fireEvent.click(screen.getByRole("button", { name: "open files" }));
+		fireEvent.click(screen.getByRole("button", { name: "open cloud file" }));
+		fireEvent.click(screen.getByRole("button", { name: "cloud file feedback" }));
+		await userEvent.type(screen.getByRole("textbox", { name: "cloud feedback draft" }), "Check this path");
+		fireEvent.click(screen.getByRole("button", { name: "send cloud file feedback" }));
+
+		await waitFor(() => expect(cloudSendMessageMock).toHaveBeenCalledOnce());
+		expect(cloudSendMessageMock).toHaveBeenCalledWith(
+			"cloud-org",
+			"sess-1",
+			expect.objectContaining({
+				clientSequence: expect.any(Number),
+				text: expect.stringContaining("Check this path"),
+			}),
+		);
+		expect(cloudSendMessageMock.mock.calls[0]?.[2].clientSequence).toBeGreaterThan(0);
 	});
 
 	it("applies the Files split preference to a diff opened in the center", () => {

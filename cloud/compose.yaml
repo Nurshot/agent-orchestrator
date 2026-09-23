@@ -55,6 +55,8 @@ services:
       # transport. Callers may still set either value explicitly when testing
       # the durable-only path.
       AO_CLOUD_TERMINAL_STREAM: "${AO_CLOUD_TERMINAL_STREAM:-1}"
+      AO_CLOUD_BROWSER_VIEWER: "${AO_CLOUD_BROWSER_VIEWER:-1}"
+      AO_CLOUD_BROWSER_VIEWER_ORIGINS: "${AO_CLOUD_BROWSER_VIEWER_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}"
       AO_CLOUD_TERMINAL_RELAY: "${AO_CLOUD_TERMINAL_RELAY:-1}"
       AO_CLOUD_PROVIDER_SECRET_KEY: "${AO_CLOUD_PROVIDER_SECRET_KEY:?AO_CLOUD_PROVIDER_SECRET_KEY is required}"
       AO_CLOUD_PUBLIC_URL: http://control-plane:8080

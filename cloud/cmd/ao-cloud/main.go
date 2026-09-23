@@ -163,6 +163,7 @@ func newSandboxReconciler(
 	return reconcile.New(store, sandboxresolve.New(nodeOpsProvider, dockerProvider, coderProvider), reconcile.Options{
 		PublicURL:              cfg.PublicURL,
 		TerminalStreamEnabled:  cfg.TerminalStreamEnabled,
+		BrowserViewerEnabled:   cfg.BrowserViewerEnabled,
 		WorkerBinary:           workerBinary,
 		WorkerHelperBinary:     workerHelperBinary,
 		Interval:               cfg.ReconcileInterval,
@@ -401,6 +402,8 @@ func run(logger *slog.Logger) error {
 		WebhookMaxBody:            cfg.GitHub.WebhookMaxBody,
 		TerminalStreamEnabled:     cfg.TerminalStreamEnabled,
 		TerminalRelayEnabled:      cfg.TerminalRelayEnabled,
+		BrowserViewerEnabled:      cfg.BrowserViewerEnabled,
+		BrowserViewerOrigins:      cfg.BrowserViewerOrigins,
 	}
 	if cfg.Environment == "development" &&
 		os.Getenv("AO_CLOUD_DEVELOPMENT_SKIP_CREDENTIAL_VALIDATION") == "true" {
@@ -412,6 +415,9 @@ func run(logger *slog.Logger) error {
 		logger.Info("experimental terminal relay enabled",
 			"terminal_stream_enabled", cfg.TerminalStreamEnabled,
 			"mode", "local_same_replica")
+	}
+	if cfg.BrowserViewerEnabled {
+		logger.Info("cloud browser viewer enabled", "mode", "local_same_replica")
 	}
 	// The work-wait long-poll and terminal streaming both ride a Postgres NOTIFY
 	// listener. Run it wherever workers connect so WaitForWork can be woken on

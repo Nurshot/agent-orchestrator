@@ -92,6 +92,8 @@ type Store interface {
 	FailWorkerRequest(context.Context, string, string, string, string, int64, int, string, string) error
 	IssueTerminalTicket(context.Context, domain.Principal, string, string, string, time.Duration) (string, []string, error)
 	OpenTerminal(context.Context, string, string, time.Duration) (domain.TerminalSession, error)
+	IssueBrowserViewerTicket(context.Context, domain.Principal, string, string, time.Duration) (string, []string, error)
+	OpenBrowserViewerTicket(context.Context, string) (domain.AccessTicket, error)
 	RefreshTerminalInteraction(context.Context, domain.TerminalSession, time.Duration) error
 	QueueTerminalInput(context.Context, domain.TerminalSession, string, []byte) error
 	QueueTerminalResize(context.Context, domain.TerminalSession, uint16, uint16) error
@@ -173,6 +175,9 @@ type Server struct {
 	terminalStreamEnabled   bool
 	terminalRelayEnabled    bool
 	terminalStreams         *terminalStreams
+	browserViewerEnabled    bool
+	browserViewerOrigins    []string
+	browserStreams          *browserStreams
 	workWaiters             *workWaiters
 	// workerBinariesBySHA serves the content-addressed worker/helper binaries
 	// so a worker with a stale baked copy can heal itself to this exact build.
@@ -210,6 +215,8 @@ type Options struct {
 	WebhookMaxBody            int64
 	TerminalStreamEnabled     bool
 	TerminalRelayEnabled      bool
+	BrowserViewerEnabled      bool
+	BrowserViewerOrigins      []string
 }
 
 func New(options Options) *Server {
@@ -290,6 +297,9 @@ func New(options Options) *Server {
 		terminalStreamEnabled:     options.TerminalStreamEnabled,
 		terminalRelayEnabled:      options.TerminalRelayEnabled,
 		terminalStreams:           newTerminalStreams(),
+		browserViewerEnabled:      options.BrowserViewerEnabled,
+		browserViewerOrigins:      append([]string(nil), options.BrowserViewerOrigins...),
+		browserStreams:            newBrowserStreams(),
 		workWaiters:               newWorkWaiters(),
 	}
 	server.workerBinariesBySHA = indexWorkerBinaries(options.WorkerBinary, options.WorkerHelperBinary)
@@ -397,10 +407,12 @@ func New(options Options) *Server {
 			router.Post("/worker/transport/{requestId}/fail", server.workerFailTransport)
 			router.Post("/worker/terminals/{terminalId}/output", server.workerTerminalOutput)
 			router.Get("/worker/terminals/{terminalId}/stream", server.workerTerminalStream)
+			router.Get("/worker/sessions/{sessionId}/browser-stream", server.workerBrowserStream)
 			router.Post("/worker/terminals/{terminalId}/exit", server.workerTerminalExit)
 			router.Post("/worker/terminals/agent", server.workerEnsureAgentTerminal)
 		})
 		router.Get("/terminal", server.connectTerminal)
+		router.Get("/orgs/{orgId}/sessions/{sessionId}/browser-view/stream", server.connectBrowserViewer)
 		router.Route("/orgs/{orgId}", func(router chi.Router) {
 			router.Use(server.authenticate)
 			if server.github != nil {
@@ -444,6 +456,7 @@ func New(options Options) *Server {
 			router.Get("/sessions/{sessionId}/chat-events", server.replayClientEvents)
 			router.Get("/sessions/{sessionId}/events", server.streamClientEvents)
 			router.Post("/sessions/{sessionId}/terminal-ticket", server.createTerminalTicket)
+			router.Post("/sessions/{sessionId}/browser-view-ticket", server.createBrowserViewerTicket)
 			for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
 				router.MethodFunc(method, "/sessions/{sessionId}/browser/{origin}", server.proxyBrowser)
 				router.MethodFunc(method, "/sessions/{sessionId}/browser/{origin}/*", server.proxyBrowser)

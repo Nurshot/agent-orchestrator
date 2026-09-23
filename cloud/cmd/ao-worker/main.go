@@ -60,6 +60,7 @@ var workerCapabilities = []string{
 	"workspace.files",
 	"terminal.workspace",
 	"terminal.agent",
+	"browser.viewer",
 }
 
 func main() {
@@ -212,7 +213,11 @@ func run(logger *slog.Logger) error {
 	// perceived connection path independent from clone latency without letting
 	// a prompt run in an empty workspace.
 	transportSupervisor.HoldAgentInputUntilWorkspaceReady()
-	results := make(chan error, 5)
+	backgrounds := 5
+	if os.Getenv("AO_CLOUD_BROWSER_VIEWER") == "1" && browserdEnv["AO_BROWSER_API_URL"] != "" {
+		backgrounds++
+	}
+	results := make(chan error, backgrounds)
 	go func() { results <- client.heartbeatLoop(runCtx, logger) }()
 	go func() { results <- transportSupervisor.Run(runCtx) }()
 	go func() {
@@ -226,13 +231,19 @@ func run(logger *slog.Logger) error {
 	go func() {
 		results <- runReviewBridge(runCtx, reviewSocketPath, client, logger)
 	}()
+	if backgrounds == 6 {
+		go func() {
+			results <- workertransport.RunBrowserStream(
+				runCtx, client, bootstrap.SessionID,
+				browserdEnv["AO_BROWSER_API_URL"], browserdEnv["AO_BROWSER_CAPABILITY"], logger,
+			)
+		}()
+	}
 	if err := <-started; err != nil {
 		cancel()
-		<-results
-		<-results
-		<-results
-		<-results
-		<-results
+		for range backgrounds {
+			<-results
+		}
 		return fmt.Errorf("start workspace transport: %w", err)
 	}
 	if err := client.publishEvent(ctx, "worker.ready", map[string]any{
@@ -298,10 +309,9 @@ func run(logger *slog.Logger) error {
 	}()
 	first := <-results
 	cancel()
-	<-results
-	<-results
-	<-results
-	<-results
+	for range backgrounds - 1 {
+		<-results
+	}
 	if ctx.Err() != nil {
 		logger.Info("worker shutting down")
 		return nil
@@ -894,6 +904,21 @@ func (c *client) DialTerminalStream(
 		HTTPHeader: header,
 	})
 	return conn, err
+}
+
+func (c *client) DialBrowserStream(ctx context.Context, sessionID string) (*websocket.Conn, error) {
+	streamURL := c.baseURL + "/worker/sessions/" + url.PathEscape(sessionID) + "/browser-stream"
+	if strings.HasPrefix(streamURL, "http") {
+		streamURL = "ws" + strings.TrimPrefix(streamURL, "http")
+	}
+	header := http.Header{}
+	if token := c.currentToken(); token != "" {
+		header.Set("Authorization", "Worker "+token)
+	}
+	connection, _, err := websocket.Dial(ctx, streamURL, &websocket.DialOptions{
+		HTTPClient: c.http, HTTPHeader: header, CompressionMode: websocket.CompressionDisabled,
+	})
+	return connection, err
 }
 
 func (c *client) ensureAgentTerminal(

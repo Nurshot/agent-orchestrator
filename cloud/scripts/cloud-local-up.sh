@@ -44,8 +44,47 @@ export AO_CLOUD_DOCKER_GID
 AO_CLOUD_DOCKER_GID="$(ao_docker_socket_gid)"
 export AO_CLOUD_DEVELOPMENT_SKIP_CREDENTIAL_VALIDATION="true"
 
+case "$(uname -m)" in
+	x86_64) export AO_CLOUD_LOCAL_TARGET_ARCH=amd64 ;;
+	aarch64|arm64) export AO_CLOUD_LOCAL_TARGET_ARCH=arm64 ;;
+	*)
+		echo "Unsupported local Cloud architecture: $(uname -m)" >&2
+		exit 1
+		;;
+esac
+export AO_CLOUD_LOCAL_BUILD_PLATFORM="linux/${AO_CLOUD_LOCAL_TARGET_ARCH}"
+export AO_CLOUD_LOCAL_DOCKERFILE="$repository_root/Dockerfile"
+if ! docker buildx version >/dev/null 2>&1; then
+	AO_CLOUD_LOCAL_DOCKERFILE="$cloud_state_directory/Dockerfile.classic"
+	python3 - "$repository_root/Dockerfile" "$AO_CLOUD_LOCAL_DOCKERFILE" <<'PY'
+import pathlib
+import sys
+
+source, destination = map(pathlib.Path, sys.argv[1:])
+text = source.read_text()
+text = text.replace(
+    "RUN --mount=type=cache,target=/go/pkg/mod go mod download",
+    "RUN go mod download",
+)
+text = text.replace(
+    "RUN --mount=type=cache,target=/go/pkg/mod \\\n"
+    "    --mount=type=cache,target=/root/.cache/go-build \\\n"
+    "    CGO_ENABLED=0",
+    "RUN CGO_ENABLED=0",
+)
+if "--mount=type=cache" in text:
+    raise SystemExit("classic-builder Dockerfile still contains cache mounts")
+destination.write_text(text)
+PY
+fi
+export AO_CLOUD_LOCAL_DOCKERFILE
+
 compose() {
-	docker compose --project-directory "$repository_root" "$@"
+	docker compose \
+		--project-directory "$repository_root" \
+		--file "$repository_root/compose.yaml" \
+		--file "$repository_root/compose.local.yaml" \
+		"$@"
 }
 
 wait_for_ready() {
