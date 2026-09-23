@@ -495,11 +495,12 @@ func (c *SessionsController) PreviewOrigin(w http.ResponseWriter, r *http.Reques
 		envelope.WriteAPIError(w, r, http.StatusNotFound, "not_found", "NO_PREVIEW_ENTRY", "No preview entry point found in session workspace", nil)
 		return true
 	}
-	asset := previewOriginAssetPath(entry.Path, r.URL.Path)
 	switch entry.Scope {
 	case previewutil.StoredEntryScopeArtifact:
+		asset := previewOriginArtifactAssetPath(entry.Path, r.URL.Path)
 		c.serveRootedPreviewFile(w, r, sess.Metadata.ArtifactDir, asset)
 	default:
+		asset := previewOriginAssetPath(entry.Path, r.URL.Path)
 		c.serveRootedPreviewFile(w, r, sess.Metadata.WorkspacePath, asset)
 	}
 	return true
@@ -538,6 +539,14 @@ func previewOriginAssetPath(entry, requestPath string) string {
 	}
 	requested = strings.TrimPrefix(requested, root+"/")
 	return path.Join(root, requested)
+}
+
+func previewOriginArtifactAssetPath(entry, requestPath string) string {
+	requested := strings.TrimPrefix(path.Clean("/"+requestPath), "/")
+	if rel, ok := previewutil.ArtifactEntryRelative(requested); ok {
+		return previewOriginAssetPath(entry, rel)
+	}
+	return previewOriginAssetPath(entry, requestPath)
 }
 
 // serveWorkspacePreviewFile is the single serving path for both the legacy API

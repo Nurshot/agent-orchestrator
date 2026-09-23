@@ -1493,6 +1493,17 @@ func TestSessionsAPI_GetExposesArtifactFilesAndServesHTMLArtifact(t *testing.T) 
 	if !bytes.Contains(servedBody, []byte("artifact preview")) {
 		t.Fatalf("served artifact body = %q, want html artifact content", servedBody)
 	}
+	directPreviewPath, err := url.Parse(resp.Session.ArtifactFiles[0].PreviewURL)
+	if err != nil {
+		t.Fatalf("parse html artifact previewUrl: %v", err)
+	}
+	directBody, directStatus, _ := doPreviewOriginRequest(t, srv, resp.Session.ArtifactFiles[0].PreviewURL, directPreviewPath.EscapedPath())
+	if directStatus != http.StatusOK {
+		t.Fatalf("GET direct artifact preview path = %d, want 200; body=%s", directStatus, directBody)
+	}
+	if !bytes.Contains(directBody, []byte("artifact preview")) {
+		t.Fatalf("direct artifact body = %q, want html artifact content", directBody)
+	}
 }
 
 func TestSessionsAPI_SetReviewerAllowsConfigWithoutHarness(t *testing.T) {
