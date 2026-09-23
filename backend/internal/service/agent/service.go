@@ -322,10 +322,12 @@ func (s *Service) Models(ctx context.Context, agentID, _ string, refresh bool) (
 			needsRecovery := cached.RefreshState == "refreshing"
 			retriesExhausted := modelCatalogRetriesExhausted(cached)
 			cached.Catalog.RefreshRecommended = !retriesExhausted && (due || needsRecovery || cached.RefreshState == "error" || cached.RefreshState == "queued")
-			if !retriesExhausted && (due || needsRecovery) && (cached.RetryAt.IsZero() || !s.now().Before(cached.RetryAt)) {
-				go func() { _, _ = s.RevalidateModels(s.ctx, agentID, "") }()
-			} else if !due || retriesExhausted {
+			if retriesExhausted {
 				go s.revalidateChangedInputs(agentID, cached.BinaryVersion)
+			} else if !due {
+				time.AfterFunc(10*time.Millisecond, func() {
+					s.revalidateChangedInputs(agentID, cached.BinaryVersion)
+				})
 			}
 			return cached.Catalog, nil
 		}
