@@ -1688,7 +1688,13 @@ describe("CreateProjectFlow project import validation", () => {
 			code: "GITHUB_AUTH_INVALID",
 		});
 		githubDaemonMocks.listGitHubRepos.mockRejectedValue(invalidCredential);
-		bridgeMocks.connectProviderAuth.mockResolvedValue("replacement-token");
+		// GitHub App exchange returns the access token plus refresh material.
+		bridgeMocks.connectProviderAuth.mockResolvedValue({
+			secret: "replacement-token",
+			refreshToken: "replacement-refresh",
+			expiresIn: 28800,
+			refreshTokenExpiresIn: 15552000,
+		});
 		const user = userEvent.setup();
 		render(<CreateProjectFlow embedded mode="choose" {...noop} />, { wrapper: CloudTestProviders });
 
@@ -1701,7 +1707,11 @@ describe("CreateProjectFlow project import validation", () => {
 			orgId: "org-1",
 			provider: "github",
 		}));
-		await waitFor(() => expect(githubDaemonMocks.saveGitHubPAT).toHaveBeenCalledWith("replacement-token"));
+		// The refresh material is forwarded to the daemon so the token self-renews.
+		await waitFor(() => expect(githubDaemonMocks.saveGitHubPAT).toHaveBeenCalledWith(
+			"replacement-token",
+			expect.objectContaining({ refreshToken: "replacement-refresh", expiresIn: 28800, refreshTokenExpiresIn: 15552000 }),
+		));
 		await waitFor(() => expect(cloudMocks.putGitHubPAT).toHaveBeenCalledWith({ secret: "replacement-token" }));
 	});
 

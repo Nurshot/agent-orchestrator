@@ -11474,8 +11474,14 @@ components:
       type: object
     PutGitHubPATRequest:
       properties:
+        expiresIn:
+          type: integer
         pat:
           type: string
+        refreshToken:
+          type: string
+        refreshTokenExpiresIn:
+          type: integer
       required:
       - pat
       type: object

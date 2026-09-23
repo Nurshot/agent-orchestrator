@@ -1452,15 +1452,19 @@ function CloudProjectCard({
 		setGithubOAuthBusy(true);
 		setGithubOAuthError(null);
 		try {
-			const token = await aoBridge.cloud.connectProviderAuth({
+			const result = await aoBridge.cloud.connectProviderAuth({
 				baseUrl,
 				orgId: org.id,
 				provider: "github",
 			});
-			if (typeof token === "string" && token) {
+			const secret = typeof result === "string" ? result : result?.secret;
+			// For a GitHub App token the result carries refresh material; persist it
+			// on the daemon so the token renews itself instead of expiring in ~8h.
+			const oauth = typeof result === "object" && result ? result : undefined;
+			if (secret) {
 				await Promise.all([
-					saveGitHubPAT(token),
-					client.putGitHubPAT({ secret: token }),
+					saveGitHubPAT(secret, oauth),
+					client.putGitHubPAT({ secret }),
 				]);
 			}
 			await Promise.all([
