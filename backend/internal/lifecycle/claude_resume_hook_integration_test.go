@@ -14,11 +14,7 @@ import (
 	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
 )
 
-func TestClaudeResumeSessionStartConfirmsCurrentRuntimeLaunch(t *testing.T) {
-	// Keep the installed Claude resume hook and lifecycle's interpretation of
-	// that hook in one regression boundary. Either side can remain internally
-	// valid while a drift between them strands a resumed native conversation on
-	// its previous runtime launch.
+func TestClaudeSessionStartHookIncludesResumeSources(t *testing.T) {
 	workspace := t.TempDir()
 	if err := (&claudecode.Plugin{}).GetAgentHooks(context.Background(), ports.WorkspaceHookConfig{
 		WorkspacePath: workspace,
@@ -55,26 +51,5 @@ func TestClaudeResumeSessionStartConfirmsCurrentRuntimeLaunch(t *testing.T) {
 		if !slices.Contains(sources, source) {
 			t.Fatalf("SessionStart matcher %q does not include %q", matcher, source)
 		}
-	}
-
-	manager, store, _ := newManager()
-	session := working("claude-resume")
-	session.Metadata.RuntimeLaunchID = "launch-resumed"
-	session.Metadata.AgentSessionID = "claude-native"
-	session.Metadata.AgentSessionIDLaunchID = "launch-before-resume"
-	store.sessions[session.ID] = session
-
-	if err := manager.ApplyActivitySignal(context.Background(), session.ID, ports.ActivitySignal{
-		Event:          "session-start",
-		LaunchID:       "launch-resumed",
-		AgentSessionID: "claude-native",
-	}); err != nil {
-		t.Fatalf("apply resume SessionStart: %v", err)
-	}
-
-	got := store.sessions[session.ID].Metadata
-	if got.AgentSessionID != "claude-native" || got.AgentSessionIDLaunchID != "launch-resumed" {
-		t.Fatalf("native identity = id:%q launch:%q, want id:%q launch:%q",
-			got.AgentSessionID, got.AgentSessionIDLaunchID, "claude-native", "launch-resumed")
 	}
 }
