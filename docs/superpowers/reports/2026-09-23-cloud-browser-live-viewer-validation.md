@@ -87,11 +87,17 @@ After those fixes:
 - The painted canvas fingerprint changed from `652ff856d0b69bff` to
   `c92a5db147fe85b3`, proving that the native canvas pixels changed.
 
-The host locked before evidence capture. Wayland correctly returned the lock
-surface instead of application content, and renderer capture was unavailable
-while locked. No misleading screenshot was committed. A fresh real-app capture
-on an unlocked compositor remains required before publishing the visible
-change.
+An unlocked Wayland capture was inspected before commit. It shows the real
+fullscreen Electron dev app, the active Cloud session terminal, and the live
+Browser inspector together. The browser page visibly contains the desktop
+typed value, the verified pointer action, and the session-side status update.
+The accompanying 36.2-second recording was also inspected at an interaction
+frame.
+
+- Screenshot: `docs/screenshots/pr-5543/cloud-browser-live-viewer.png`
+- Recording: `docs/screenshots/pr-5543/cloud-browser-live-viewer.mp4`
+- Canvas fingerprint before session-side update: `72f8c3d4`
+- Canvas fingerprint after session-side update: `f097387d`
 
 ## Regression results
 
@@ -141,7 +147,6 @@ test tooling created by this validation were removed.
 
 ## Remaining validation
 
-1. Capture the real unlocked desktop window for review evidence.
-2. Run the normal application path against one configured hosted provider.
-3. Record hosted cold-attach, warm-browser attach, input, reconnect, and crash
+1. Run the normal application path against one configured hosted provider.
+2. Record hosted cold-attach, warm-browser attach, input, reconnect, and crash
    recovery distributions by provider and region.

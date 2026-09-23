@@ -13,3 +13,15 @@ redacted from the media.
 ![Reopened Cloud task composer in the native desktop app.](reconnect-grace.png)
 
 [Close and reopen recording](reconnect-grace.mp4)
+
+## Shared browser viewer
+
+The screenshot shows one real Cloud session in the native desktop app. The
+terminal is active on the left, and the Browser inspector on the right is
+painting the same Chromium process inside the worker. Desktop pointer input
+changed the button to `Verified`, desktop keyboard input filled the text field,
+and a session-side update changed the status copy and the painted canvas.
+
+![Live shared browser in the native desktop app.](cloud-browser-live-viewer.png)
+
+[Live shared-browser recording](cloud-browser-live-viewer.mp4)
