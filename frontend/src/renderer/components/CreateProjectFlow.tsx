@@ -27,7 +27,8 @@ import type { components } from "../../api/schema";
 import type { ImportFolderScan } from "../../preload";
 import { useCloudCp } from "../hooks/useCloudCp";
 import { useCloudSandboxProviders } from "../hooks/useCloudSandboxProviders";
-import { CoderTemplatePicker } from "./CoderTemplatePicker";
+import { AdditionalRepositoriesPicker, CoderTemplatePicker } from "./CoderTemplatePicker";
+import { SearchablePicker } from "./SearchablePicker";
 import { buildCoderRequestOptions, useCoderSessionOptionsStore } from "../stores/coder-session-options-store";
 import { useCloudGate } from "../hooks/useCloudGate";
 import { useCloudOrg } from "../hooks/useCloudOrg";
@@ -38,6 +39,7 @@ import { apiClient, apiErrorMessage } from "../lib/api-client";
 import { cloudAgentInfos } from "../lib/cloud-agents";
 import { aoBridge } from "../lib/bridge";
 import { CloudCpError } from "../lib/cloud-cp";
+import type { CloudCpGitHubAppRepository } from "../lib/cloud-cp/types";
 import { getGitHubStatus, isGitHubAuthInvalidError, listGitHubRepos, saveGitHubPAT } from "../lib/github-daemon";
 import { useCloudSession } from "../lib/cloud-session";
 import { useCredentialDialogStore } from "../stores/credential-dialog-store";
@@ -1362,6 +1364,8 @@ function CloudProjectCard({
 	const sandboxProviders = useCloudSandboxProviders();
 	const coderAvailable = sandboxProviders.available.includes("coder");
 	const resetCoderOptions = useCoderSessionOptionsStore((s) => s.reset);
+	const extraRepos = useCoderSessionOptionsStore((s) => s.extraRepos);
+	const setExtraRepos = useCoderSessionOptionsStore((s) => s.setExtraRepos);
 	useEffect(() => {
 		resetCoderOptions();
 		return () => resetCoderOptions();
@@ -1446,24 +1450,57 @@ function CloudProjectCard({
 		enabled: org !== undefined,
 		staleTime: 0,
 		refetchOnMount: "always",
+		refetchInterval: (query) => {
+			const installations = query.state.data ?? [];
+			return installations.some(
+				(installation) => installation.status === "active" && installation.syncStatus !== "ready",
+			)
+				? 2500
+				: false;
+		},
 		queryFn: async () => {
 			if (!org) return [];
 			const { installations } = await client.listGitHubInstallations(org.id);
 			return installations;
 		},
 	});
-	const appConnected = githubInstallations.data?.some((installation) => installation.status === "active") ?? false;
+	const activeInstallations = githubInstallations.data?.filter((installation) => installation.status === "active") ?? [];
+	const installationNeedingSync =
+		activeInstallations.find((installation) => installation.syncStatus === "retry" || installation.syncStatus === "failed") ??
+		activeInstallations.find((installation) => installation.syncStatus !== "ready");
+	const appConnected = activeInstallations.length > 0;
+	const appRepositoriesReady = activeInstallations.some((installation) => installation.syncStatus === "ready");
+	const allActiveInstallationsReady = appConnected && installationNeedingSync === undefined;
+	const appRepositorySyncFailed = activeInstallations.some(
+		(installation) => installation.syncStatus === "retry" || installation.syncStatus === "failed",
+	);
+	const readyInstallationKey = activeInstallations
+		.filter((installation) => installation.syncStatus === "ready")
+		.map((installation) => installation.id)
+		.sort()
+		.join(":");
 
 	const githubAppRepos = useQuery({
 		queryKey: ["cloud-github-app-repos", baseUrl, org?.id],
-		enabled: appConnected && org !== undefined,
+		enabled: appRepositoriesReady && org !== undefined,
 		staleTime: 30_000,
-		queryFn: async () => {
+		queryFn: async ({ signal }) => {
 			if (!org) return [];
-			const { items } = await client.listGitHubRepositories(org.id, { limit: 100 });
-			return items.filter((repo) => repo.revokedAt === undefined && !repo.isArchived);
+			const repositories: CloudCpGitHubAppRepository[] = [];
+			let cursor: string | undefined;
+			for (;;) {
+				const response = await client.listGitHubRepositories(org.id, { limit: 100, cursor }, { signal });
+				repositories.push(...response.items.filter((repo) => repo.revokedAt === undefined && !repo.isArchived));
+				if (!response.page.hasMore) return repositories;
+				if (!response.page.nextCursor || response.page.nextCursor === cursor) throw new Error("GitHub repository pagination stopped unexpectedly");
+				cursor = response.page.nextCursor;
+			}
 		},
 	});
+	useEffect(() => {
+		if (readyInstallationKey === "") return;
+		void queryClient.invalidateQueries({ queryKey: ["cloud-github-app-repos", baseUrl, org?.id] });
+	}, [baseUrl, org?.id, queryClient, readyInstallationKey]);
 	// The App path is active whenever the user is not in manual-PAT mode and an
 	// installation exists; it drives which create call and repo source we use.
 	const usingApp = appConnected && !useManualPat;
@@ -1525,7 +1562,9 @@ function CloudProjectCard({
 	// connectGitHub runs the secure GitHub App flow: the control plane builds the
 	// install/authorize URL (it holds the client id and secret), the browser
 	// completes it against the CP's own callback, and we poll the CP until the
-	// installation is recorded. No GitHub credential ever touches the desktop.
+	// installation is recorded, then ask it to enumerate the granted
+	// repositories before we read them. No GitHub credential ever touches the
+	// desktop.
 	const connectGitHub = async () => {
 		if (githubOAuthBusy) return;
 		if (!org) {
@@ -1538,15 +1577,25 @@ function CloudProjectCard({
 		setGithubOAuthBusy(true);
 		setGithubOAuthError(null);
 		try {
+			const { installations: installationsBeforeConnect } = await client.listGitHubInstallations(org.id, { signal: abort.signal });
+			const previousUpdatedAtByID = new Map(
+				installationsBeforeConnect.map((installation) => [installation.id, installation.updatedAt]),
+			);
 			const { installationUrl } = await client.startGitHubInstallation(org.id, { signal: abort.signal });
 			await aoBridge.app.openExternal(installationUrl);
 			// Poll for the installation the CP records once the user finishes in the
 			// browser. Bounded so a browser left open does not spin forever.
 			const deadline = Date.now() + 5 * 60_000;
+			let connectedInstallation;
 			for (;;) {
 				await sleepWithAbort(2500, abort.signal);
 				const { installations } = await client.listGitHubInstallations(org.id, { signal: abort.signal });
-				if (installations.some((installation) => installation.status === "active")) break;
+				connectedInstallation = installations.find(
+					(installation) =>
+						installation.status === "active" &&
+						previousUpdatedAtByID.get(installation.id) !== installation.updatedAt,
+				);
+				if (connectedInstallation !== undefined) break;
 				if (Date.now() > deadline) {
 					setGithubOAuthError(
 						t("createProject.githubConnectTimeout", {
@@ -1556,10 +1605,12 @@ function CloudProjectCard({
 					return;
 				}
 			}
-			await Promise.all([
-				queryClient.invalidateQueries({ queryKey: ["cloud-github-installations"] }),
-				queryClient.invalidateQueries({ queryKey: ["cloud-github-app-repos"] }),
-			]);
+			// OAuth completion queues a durable sync, but the active installation is
+			// visible before the worker necessarily finishes. Use the authenticated sync
+			// endpoint when needed so the repository query cannot observe empty grants.
+			if (connectedInstallation.syncStatus !== "ready") {
+				await client.syncGitHubInstallation(org.id, connectedInstallation.id, { signal: abort.signal });
+			}
 		} catch (err) {
 			if (abort.signal.aborted) return;
 			// If the AO Cloud session lapsed mid-connect, the control plane returns
@@ -1576,7 +1627,31 @@ function CloudProjectCard({
 				setGithubOAuthError(err instanceof Error ? err.message : t("createProject.githubAuthFailed", { defaultValue: "GitHub authentication failed" }));
 			}
 		} finally {
+			if (!abort.signal.aborted) {
+				await Promise.allSettled([
+					queryClient.invalidateQueries({ queryKey: ["cloud-github-installations"] }),
+					queryClient.invalidateQueries({ queryKey: ["cloud-github-app-repos"] }),
+				]);
+			}
 			if (connectAbortRef.current === abort) connectAbortRef.current = null;
+			setGithubOAuthBusy(false);
+		}
+	};
+
+	const retryGitHubRepositorySync = async () => {
+		if (!org || !installationNeedingSync || githubOAuthBusy) return;
+		setGithubOAuthBusy(true);
+		setGithubOAuthError(null);
+		try {
+			await client.syncGitHubInstallation(org.id, installationNeedingSync.id);
+		} catch (err) {
+			if (err instanceof CloudCpError && err.status === 401) onAuthRequired();
+			setGithubOAuthError(err instanceof Error ? err.message : t("createProject.githubReposFailed", { defaultValue: "Failed to load repositories." }));
+		} finally {
+			await Promise.allSettled([
+				queryClient.invalidateQueries({ queryKey: ["cloud-github-installations"] }),
+				queryClient.invalidateQueries({ queryKey: ["cloud-github-app-repos"] }),
+			]);
 			setGithubOAuthBusy(false);
 		}
 	};
@@ -1785,16 +1860,17 @@ function CloudProjectCard({
 						<>
 							{usingApp ? (
 								<div className="space-y-2">
-									<div className="relative">
-										<span className="pointer-events-none absolute inset-y-0 left-3 flex w-4 items-center justify-center text-[var(--color-text-import-muted)]">
-											<GitHubIcon className="size-4" aria-hidden="true" />
-										</span>
-										<select
-											className="w-full appearance-none rounded-md border border-border bg-[var(--color-bg-import-card)] py-2 pl-10 pr-8 text-[13px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
-											disabled={isCreating || githubAppRepos.isLoading}
-											value={selectedRepoId}
-											onChange={(event) => {
-												const nextId = event.target.value;
+									<SearchablePicker
+										ariaLabel={t("createProject.selectRepository", { defaultValue: "Select a repository" })}
+										fixedScroll
+										placeholder={!appRepositoriesReady || githubAppRepos.isLoading
+											? t("createProject.githubReposLoading", { defaultValue: "Loading repositories..." })
+											: t("createProject.selectRepository", { defaultValue: "Select a repository" })}
+										searchPlaceholder={t("createProject.searchRepositories", { defaultValue: "Search repositories" })}
+										disabled={isCreating || !appRepositoriesReady || githubAppRepos.isLoading}
+										value={selectedRepoId}
+										options={(githubAppRepos.data ?? []).map((repo) => ({ value: repo.githubRepositoryId, label: repo.fullName, private: repo.isPrivate }))}
+										onChange={(nextId) => {
 												setSelectedRepoId(nextId);
 												const repo = githubAppRepos.data?.find((candidate) => candidate.githubRepositoryId === nextId);
 												if (repo) {
@@ -1807,22 +1883,7 @@ function CloudProjectCard({
 												}
 												if (projectSubmitted) setProjectSubmitted(false);
 											}}
-										>
-											<option value="">
-												{githubAppRepos.isLoading
-													? t("createProject.githubReposLoading", { defaultValue: "Loading repositories..." })
-													: t("createProject.selectRepository", { defaultValue: "Select a repository" })}
-											</option>
-											{githubAppRepos.data?.map((repo) => (
-												<option key={repo.githubRepositoryId} value={repo.githubRepositoryId}>
-													{repo.isPrivate ? "🔒 " : ""}{repo.fullName}
-												</option>
-											))}
-										</select>
-										<span className="pointer-events-none absolute inset-y-0 right-2 flex w-4 items-center justify-center text-muted-foreground">
-											<ChevronRight className="size-3 rotate-90" aria-hidden="true" />
-										</span>
-									</div>
+									/>
 									{githubAppRepos.isError ? (
 										<div className="flex items-center gap-2 text-[12px] leading-5 text-destructive" role="alert">
 											<span>{t("createProject.githubReposFailed", { defaultValue: "Failed to load repositories." })}</span>
@@ -1831,7 +1892,33 @@ function CloudProjectCard({
 											</button>
 										</div>
 									) : null}
-									{!githubAppRepos.isLoading && !githubAppRepos.isError && (githubAppRepos.data?.length ?? 0) === 0 ? (
+									{!appRepositoriesReady ? (
+										<div className="flex items-center gap-2 text-[12px] leading-5 text-muted-foreground">
+											<span>
+												{appRepositorySyncFailed
+													? t("createProject.githubReposFailed", { defaultValue: "Failed to load repositories." })
+													: t("createProject.githubReposLoading", { defaultValue: "Loading repositories..." })}
+											</span>
+											{githubOAuthError || appRepositorySyncFailed ? (
+												<button type="button" className="underline" disabled={githubOAuthBusy} onClick={() => void retryGitHubRepositorySync()}>
+													{t("createProject.retry")}
+												</button>
+											) : null}
+										</div>
+									) : !allActiveInstallationsReady && !githubAppRepos.isLoading && (githubAppRepos.data?.length ?? 0) === 0 ? (
+										<div className="flex items-center gap-2 text-[12px] leading-5 text-muted-foreground">
+											<span>
+												{appRepositorySyncFailed
+													? t("createProject.githubReposFailed", { defaultValue: "Failed to load repositories." })
+													: t("createProject.githubReposLoading", { defaultValue: "Loading repositories..." })}
+											</span>
+											{appRepositorySyncFailed ? (
+												<button type="button" className="underline" disabled={githubOAuthBusy} onClick={() => void retryGitHubRepositorySync()}>
+													{t("createProject.retry")}
+												</button>
+											) : null}
+										</div>
+									) : !githubAppRepos.isLoading && !githubAppRepos.isError && (githubAppRepos.data?.length ?? 0) === 0 ? (
 										<p className="text-[12px] leading-5 text-muted-foreground">
 											{t("createProject.githubNoRepos", { defaultValue: "This installation has no available repositories." })}{" "}
 											<button
@@ -1843,18 +1930,24 @@ function CloudProjectCard({
 												{t("createProject.githubConfigureRepos", { defaultValue: "Configure repositories" })}
 											</button>
 										</p>
-									) : (
+									) : coderAvailable ? (
 										<button
 											type="button"
 											className="text-[12px] font-medium text-muted-foreground underline decoration-dotted underline-offset-4 transition-colors hover:text-foreground disabled:opacity-60"
-											disabled={githubOAuthBusy}
-											onClick={() => void connectGitHub()}
+											disabled={isCreating}
+											onClick={() => setExtraRepos([...extraRepos, { url: "", branch: "" }])}
 										>
-											{githubOAuthBusy
-												? t("createProject.githubWaiting", { defaultValue: "Waiting for GitHub..." })
-												: t("createProject.githubManageRepos", { defaultValue: "Add or remove repositories" })}
+											{t("coder.repos.add", { defaultValue: "Add repository" })}
 										</button>
-									)}
+									) : null}
+									{appRepositoriesReady && appRepositorySyncFailed && (githubAppRepos.data?.length ?? 0) > 0 ? (
+										<div className="flex items-center gap-2 text-[12px] leading-5 text-destructive">
+											<span>{t("createProject.githubReposFailed", { defaultValue: "Failed to load repositories." })}</span>
+											<button type="button" className="underline" disabled={githubOAuthBusy} onClick={() => void retryGitHubRepositorySync()}>
+												{t("createProject.retry")}
+											</button>
+										</div>
+									) : null}
 									{githubOAuthError ? (
 										<p className="text-[12px] leading-5 text-destructive" role="alert">{githubOAuthError}</p>
 									) : null}
@@ -1888,9 +1981,30 @@ function CloudProjectCard({
 												{urlError}
 											</p>
 										) : null}
+										{coderAvailable && useManualPat ? (
+											<button
+												type="button"
+												className="text-[12px] font-medium text-muted-foreground underline decoration-dotted underline-offset-4 transition-colors hover:text-foreground disabled:opacity-60"
+												disabled={isCreating}
+												onClick={() => setExtraRepos([...extraRepos, { url: "", branch: "" }])}
+											>
+												{t("coder.repos.add", { defaultValue: "Add repository" })}
+											</button>
+										) : null}
 									</div>
 								</>
 							)}
+							{coderAvailable && (usingApp || useManualPat) ? (
+								<AdditionalRepositoriesPicker
+									repos={usingApp
+										? (githubAppRepos.data ?? []).map((repo) => ({ label: repo.fullName, url: repo.htmlUrl, private: repo.isPrivate }))
+										: (githubRepos.data ?? []).map((repo) => ({
+												label: repo.fullName,
+												url: `https://github.com/${repo.fullName}`,
+												private: repo.private,
+											}))}
+								/>
+							) : null}
 							{useManualPat ? (
 								<>
 									<div className="space-y-2">
@@ -1941,21 +2055,10 @@ function CloudProjectCard({
 					)}
 				</div>
 
-				{/* Coder dev kit: template + additional repos + size, stored on the
-					project and inherited by every session. Only when coder is offered. */}
+				{/* Coder template and size are inherited by every session. */}
 				{coderAvailable && (usingApp || useManualPat) ? (
 					<div className="space-y-2">
-						<CoderTemplatePicker
-							orgId={org?.id}
-							repos={
-								usingApp
-									? (githubAppRepos.data ?? []).map((repo) => ({ label: repo.fullName, url: repo.htmlUrl }))
-									: (githubRepos.data ?? []).map((repo) => ({
-											label: repo.fullName,
-											url: `https://github.com/${repo.fullName}`,
-										}))
-							}
-						/>
+						<CoderTemplatePicker orgId={org?.id} />
 					</div>
 				) : null}
 
