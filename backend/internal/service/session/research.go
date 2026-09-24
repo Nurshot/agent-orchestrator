@@ -85,6 +85,7 @@ func (s *Service) awaitResearchApproval(ctx context.Context, id string, event po
 	}
 }
 
+// ResolveResearchApproval submits a choice for a pending research approval.
 func (s *Service) ResolveResearchApproval(ctx context.Context, parentID domain.SessionID, id, requestID, optionID string) (domain.ResearchRun, error) {
 	rec, err := s.GetResearch(ctx, parentID, id)
 	if err != nil {
@@ -244,6 +245,7 @@ func (s *Service) runResearch(ctx context.Context, store researchStore, runner r
 	}
 }
 
+// GetResearch returns a research run belonging to the orchestrator.
 func (s *Service) GetResearch(ctx context.Context, parentID domain.SessionID, id string) (domain.ResearchRun, error) {
 	store, _, err := s.researchDeps()
 	if err != nil {
@@ -265,6 +267,7 @@ func (s *Service) GetResearch(ctx context.Context, parentID domain.SessionID, id
 	return rec, nil
 }
 
+// ListResearch returns the orchestrator's research runs.
 func (s *Service) ListResearch(ctx context.Context, parentID domain.SessionID) ([]domain.ResearchRun, error) {
 	store, _, err := s.researchDeps()
 	if err != nil {
@@ -292,6 +295,7 @@ func (s *Service) ListResearch(ctx context.Context, parentID domain.SessionID) (
 	return runs, nil
 }
 
+// CancelResearch stops an active run owned by this daemon.
 func (s *Service) CancelResearch(ctx context.Context, parentID domain.SessionID, id string) (domain.ResearchRun, error) {
 	rec, err := s.GetResearch(ctx, parentID, id)
 	if err != nil {

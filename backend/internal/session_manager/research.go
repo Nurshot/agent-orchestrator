@@ -17,10 +17,12 @@ type researchHostStopper interface {
 	StopBackgroundTask(context.Context, domain.AgentHarness, string, domain.SessionID) error
 }
 
+// SupportsResearch reports whether the selected harness supports background chat.
 func (m *Manager) SupportsResearch(harness domain.AgentHarness) bool {
 	return m.chat != nil && m.chat.SupportsChat(harness)
 }
 
+// StopResearchOrphan shuts down a provider host left by an interrupted run.
 func (m *Manager) StopResearchOrphan(ctx context.Context, rec domain.ResearchRun) error {
 	stopper, ok := m.chat.(researchHostStopper)
 	if !ok {

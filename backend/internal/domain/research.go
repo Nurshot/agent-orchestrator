@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// ErrResearchAlreadyRunning indicates that the orchestrator already has an active run.
 var ErrResearchAlreadyRunning = errors.New("research is already running for this orchestrator")
 
 // ResearchRun is one orchestrator-requested repository investigation.
@@ -24,12 +25,14 @@ type ResearchRun struct {
 	FinishedAt      *time.Time        `json:"finishedAt,omitempty"`
 }
 
+// ResearchApproval describes a provider decision awaiting the user.
 type ResearchApproval struct {
 	RequestID string                   `json:"requestId"`
 	Summary   string                   `json:"summary"`
 	Options   []ResearchApprovalOption `json:"options"`
 }
 
+// ResearchApprovalOption is one decision offered by the provider.
 type ResearchApprovalOption struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`

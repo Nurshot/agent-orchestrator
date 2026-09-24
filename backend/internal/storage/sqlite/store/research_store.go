@@ -30,6 +30,7 @@ func researchFromGen(row gen.ResearchRun) domain.ResearchRun {
 	return rec
 }
 
+// CreateResearchRun persists a run when its orchestrator has no active run.
 func (s *Store) CreateResearchRun(ctx context.Context, rec domain.ResearchRun) (domain.ResearchRun, error) {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
@@ -50,6 +51,7 @@ func (s *Store) CreateResearchRun(ctx context.Context, rec domain.ResearchRun) (
 	return researchFromGen(row), nil
 }
 
+// GetResearchRun looks up a run by ID.
 func (s *Store) GetResearchRun(ctx context.Context, id string) (domain.ResearchRun, bool, error) {
 	row, err := s.qr.GetResearchRun(ctx, id)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -61,6 +63,7 @@ func (s *Store) GetResearchRun(ctx context.Context, id string) (domain.ResearchR
 	return researchFromGen(row), true, nil
 }
 
+// ListResearchRunsByParent returns runs for one orchestrator.
 func (s *Store) ListResearchRunsByParent(ctx context.Context, id domain.SessionID) ([]domain.ResearchRun, error) {
 	rows, err := s.qr.ListResearchRunsByParent(ctx, string(id))
 	if err != nil {
@@ -73,6 +76,7 @@ func (s *Store) ListResearchRunsByParent(ctx context.Context, id domain.SessionI
 	return out, nil
 }
 
+// ListUnfinishedResearchRuns returns runs needing recovery after a restart.
 func (s *Store) ListUnfinishedResearchRuns(ctx context.Context) ([]domain.ResearchRun, error) {
 	rows, err := s.qr.ListUnfinishedResearchRuns(ctx)
 	if err != nil {
@@ -85,6 +89,7 @@ func (s *Store) ListUnfinishedResearchRuns(ctx context.Context) ([]domain.Resear
 	return out, nil
 }
 
+// MarkResearchRunning transitions a queued run to running.
 func (s *Store) MarkResearchRunning(ctx context.Context, id string, at time.Time) (bool, error) {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
@@ -92,6 +97,7 @@ func (s *Store) MarkResearchRunning(ctx context.Context, id string, at time.Time
 	return n == 1, err
 }
 
+// FinishResearchRun stores the terminal status and result of a run.
 func (s *Store) FinishResearchRun(ctx context.Context, id, status, result, message string, at time.Time) (bool, error) {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
@@ -101,6 +107,7 @@ func (s *Store) FinishResearchRun(ctx context.Context, id, status, result, messa
 	return n == 1, err
 }
 
+// CancelResearchRun marks an active run cancelled.
 func (s *Store) CancelResearchRun(ctx context.Context, id string, at time.Time) (bool, error) {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
@@ -108,6 +115,7 @@ func (s *Store) CancelResearchRun(ctx context.Context, id string, at time.Time) 
 	return n == 1, err
 }
 
+// InterruptResearchRun marks an orphaned run interrupted.
 func (s *Store) InterruptResearchRun(ctx context.Context, id, message string, at time.Time) (bool, error) {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
