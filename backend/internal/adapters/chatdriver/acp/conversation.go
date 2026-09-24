@@ -678,6 +678,7 @@ func (c *conversation) finishPrompt(
 		Kind: ports.ChatEventTurnCompleted, ProviderEventID: eventID,
 		ProviderTurnID: turnID, TurnState: state, Err: turnErr,
 	})
+
 	c.mu.Lock()
 	if c.activeTurn == turnID {
 		c.activeTurn = ""

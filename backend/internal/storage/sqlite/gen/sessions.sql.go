@@ -803,6 +803,34 @@ func (q *Queries) RenameSession(ctx context.Context, arg RenameSessionParams) (i
 	return result.RowsAffected()
 }
 
+const renameSessionIfDisplayName = `-- name: RenameSessionIfDisplayName :execrows
+UPDATE sessions
+SET display_name = ?1, updated_at = ?2
+WHERE id = ?3
+  AND display_name = ?4
+  AND is_terminated = 0
+`
+
+type RenameSessionIfDisplayNameParams struct {
+	DisplayName        string
+	UpdatedAt          time.Time
+	ID                 domain.SessionID
+	CurrentDisplayName string
+}
+
+func (q *Queries) RenameSessionIfDisplayName(ctx context.Context, arg RenameSessionIfDisplayNameParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, renameSessionIfDisplayName,
+		arg.DisplayName,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.CurrentDisplayName,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const restoreSessionControllerEpoch = `-- name: RestoreSessionControllerEpoch :execrows
 UPDATE sessions
 SET session_mode = ?1,
