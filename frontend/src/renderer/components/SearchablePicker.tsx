@@ -1,5 +1,6 @@
 import { Check, ChevronDown, Lock, Search } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "../lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 
@@ -31,6 +32,7 @@ export function SearchablePicker({
 	fixedScroll?: boolean;
 	className?: string;
 }) {
+	const { t } = useTranslation();
 	const [open, setOpen] = useState(false);
 	const [search, setSearch] = useState("");
 	const selected = options.find((option) => option.value === value);
@@ -79,7 +81,7 @@ export function SearchablePicker({
 						fixedScroll ? "repository-picker-scrollbar h-56 overflow-y-scroll" : "settings-thin-scrollbar max-h-56 overflow-y-auto",
 					)}
 				>
-					{filtered.length === 0 ? <p className="px-3 py-5 text-center text-xs text-muted-foreground">No matches</p> : null}
+					{filtered.length === 0 ? <p className="px-3 py-5 text-center text-xs text-muted-foreground">{t("common.noMatches", { defaultValue: "No matches" })}</p> : null}
 					{filtered.map((option) => (
 						<button
 							key={option.value}

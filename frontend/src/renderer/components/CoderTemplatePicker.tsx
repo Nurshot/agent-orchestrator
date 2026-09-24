@@ -205,8 +205,8 @@ export function AdditionalRepositoriesPicker({ repos = [] }: { repos?: { label: 
 								>
 									<div className="flex items-center justify-end gap-2 text-xs text-muted-foreground">
 										<span aria-live="polite">{activeRepoIndex + 1} / {extraRepos.length}</span>
-										<Button type="button" variant="ghost" aria-label="Previous repository" disabled={activeRepoIndex === 0} onClick={() => setActiveRepoIndex((index) => index - 1)}><ChevronLeft className="size-4" aria-hidden="true" /></Button>
-										<Button type="button" variant="ghost" aria-label="Next repository" disabled={activeRepoIndex === extraRepos.length - 1} onClick={() => setActiveRepoIndex((index) => index + 1)}><ChevronRight className="size-4" aria-hidden="true" /></Button>
+										<Button type="button" variant="ghost" aria-label={t("coder.repo.previous", { defaultValue: "Previous repository" })} disabled={activeRepoIndex === 0} onClick={() => setActiveRepoIndex((index) => index - 1)}><ChevronLeft className="size-4" aria-hidden="true" /></Button>
+										<Button type="button" variant="ghost" aria-label={t("coder.repo.next", { defaultValue: "Next repository" })} disabled={activeRepoIndex === extraRepos.length - 1} onClick={() => setActiveRepoIndex((index) => index + 1)}><ChevronRight className="size-4" aria-hidden="true" /></Button>
 									</div>
 								</motion.div>
 							) : null}
