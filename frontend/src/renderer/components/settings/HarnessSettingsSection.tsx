@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, Download, LoaderCircle, LogIn, RefreshCw, Search, TriangleAlert, X } from "lucide-react";
+import { Check, Copy, Download, LoaderCircle, LogIn, Search, TriangleAlert, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { components } from "../../../api/schema";
@@ -35,7 +35,7 @@ const POLL_INTERVAL_MS = 1_000;
 const AUTH_TERMINAL_LIFETIME_MS = 15 * 60_000;
 const FOCUS_HIGHLIGHT_MS = 2_000;
 
-type AgentAuthState = { pending: boolean; checking?: boolean; error: string | null };
+type AgentAuthState = { pending: boolean; error: string | null };
 type AgentAuthStates = Partial<Record<AgentId, AgentAuthState>>;
 type AgentAuthProbeResult = Awaited<ReturnType<typeof probeAgentAuth>>;
 const AUTH_STATE_RANK = {
@@ -374,7 +374,6 @@ export function HarnessSettingsSection({
 		if (existing && !fresh) return existing;
 		const check = (async () => {
 			if (existing) await existing;
-			updateAuthState(agentId, { checking: true });
 			try {
 				const result = await probeAgentAuth(agentId);
 				const readiness = await ensureAgentReadiness([agentId], "display");
@@ -382,8 +381,6 @@ export function HarnessSettingsSection({
 				return result;
 			} catch {
 				return undefined;
-			} finally {
-				updateAuthState(agentId, { checking: false });
 			}
 		})();
 		authChecksInFlight.current.set(agentId, check);
@@ -392,14 +389,14 @@ export function HarnessSettingsSection({
 		};
 		void check.then(finishCheck, finishCheck);
 		return check;
-	}, [queryClient, updateAuthState]);
+	}, [queryClient]);
 
 	const finishAuth = useCallback(async (workflow: AuthTerminalWorkflow) => {
 		if (authWorkflowRef.current?.terminal.handleId !== workflow.terminal.handleId) return;
 		setAuthWorkflow((current) => current?.terminal.handleId === workflow.terminal.handleId ? { ...current, phase: "verifying", reason: undefined } : current);
 		const result = await checkAuth(workflow.agentId, { fresh: true });
 		if (authWorkflowRef.current?.terminal.handleId !== workflow.terminal.handleId) return;
-		if (result?.agent.authStatus === "authorized" || result?.agent.authStatus === "configured") {
+		if (result?.agent.authStatus === "authorized") {
 			try {
 				await closeAuthTerminal(workflow.terminal.handleId);
 			} catch (error) {
@@ -519,11 +516,9 @@ export function HarnessSettingsSection({
 								? (isSetupAction ? t("settings.harness.configured") : t("settings.harness.loggedIn"))
 								: authPlan && !authPlan.available
 									? (authPlan.reason ?? t("settings.harness.authFailed"))
-					: authStatus === "unauthorized"
-						? (isSetupAction ? t("settings.harness.notConfigured") : t("settings.harness.notLoggedIn"))
-						: authStatus === "configured"
-							? t("settings.harness.loginUnverified")
-							: isSetupAction ? t("settings.harness.configurationUnknown") : t("settings.harness.loginUnknown");
+									: authStatus === "unauthorized"
+										? (isSetupAction ? t("settings.harness.notConfigured") : t("settings.harness.notLoggedIn"))
+										: isSetupAction ? t("settings.harness.configurationUnknown") : t("settings.harness.loginUnknown");
 					const methodLabel = installMethodLabel(selectedMethod, plan?.method);
 					const availableMethodsLabel = availableMethods.length > 0
 						? new Intl.ListFormat(i18n.resolvedLanguage ?? "en", { style: "short", type: "conjunction" }).format(availableMethods.map((method) => installMethodLabel(method) ?? method.label))
@@ -544,12 +539,6 @@ export function HarnessSettingsSection({
 									<Button data-harness-primary-action="" data-terminal-focus-handoff="true" disabled={!authPlan.available || authState?.pending || Boolean(authWorkflow)} size="sm" onClick={() => void startAuth(agentId)}>
 										{authState?.pending ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : null}
 										{authState?.pending ? t("settings.harness.loggingIn") : isSetupAction ? t("settings.harness.setup") : t("settings.harness.login")}
-									</Button>
-								) : null}
-								{authPlan.available && (authStatus === "unknown" || authStatus === "unauthorized" || authStatus === "configured") ? (
-									<Button disabled={authState?.checking} size="sm" variant="outline" onClick={() => void checkAuth(agentId)}>
-										{authState?.checking ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <RefreshCw aria-hidden="true" />}
-										{authState?.checking ? t("settings.harness.checkingLogin") : isSetupAction ? t("settings.harness.checkConfiguration") : t("settings.harness.checkLogin")}
 									</Button>
 								) : null}
 							</>

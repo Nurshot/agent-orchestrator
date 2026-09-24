@@ -219,30 +219,6 @@ describe("HarnessSettingsSection", () => {
 		expect(openExternal).toHaveBeenCalledWith("https://example.test/login");
 	});
 
-	it("renders a configured but unverified credential as neutral and recheckable", async () => {
-		const configuredCatalog = {
-			agents: catalog.agents.map((agent) => agent.id === "claude-code"
-				? { ...agent, authentication: { ...agent.authentication, state: "configured", reasonCode: "auth_configured_unverified" }, effectiveReadiness: "unknown" }
-				: agent),
-		};
-		vi.mocked(apiClient.GET).mockImplementation(async (path) => {
-			if (path === "/api/v1/agents/readiness") return { data: configuredCatalog } as never;
-			if (path === "/api/v1/agents/installers") return { data: plans } as never;
-			if (path === "/api/v1/agents/install-jobs") return { data: { jobs: [] } } as never;
-			if (path === "/api/v1/agents/auth-plans") {
-				return { data: { plans: [{ agentId: "claude-code", action: "login", launchMode: "documentation", available: true, documentationUrl: "https://example.test/login" }] } } as never;
-			}
-			return { data: undefined } as never;
-		});
-
-		renderSection();
-		const row = (await screen.findByText("Claude Code")).closest('[data-agent="claude-code"]') as HTMLElement;
-		await waitFor(() => expect(row).toHaveTextContent("Configured, unverified"));
-		expect(row).not.toHaveTextContent("Connected");
-		expect(within(row).getByRole("button", { name: "Login" })).toBeInTheDocument();
-		expect(within(row).getByRole("button", { name: "Check login" })).toBeInTheDocument();
-	});
-
 	it("shows cached readiness while silently refreshing when the page opens", async () => {
 		const refreshed = catalogWithInstalled("claude-code", "codex");
 		let current = catalog;
@@ -402,7 +378,7 @@ describe("HarnessSettingsSection", () => {
 		await within(row).findByText("Set up");
 	});
 
-	it("keeps credential rechecks available without exposing a global readiness refresh", async () => {
+	it("does not expose manual readiness controls", async () => {
 		vi.mocked(apiClient.GET).mockImplementation(async (path) => {
 			if (path === "/api/v1/agents/readiness") return { data: catalog } as never;
 			if (path === "/api/v1/agents/installers") return { data: plans } as never;
@@ -417,7 +393,7 @@ describe("HarnessSettingsSection", () => {
 		expect(await within(row).findByRole("button", { name: "Login" })).toBeInTheDocument();
 		expect(within(row).queryByRole("button", { name: "Installed" })).not.toBeInTheDocument();
 		expect(screen.queryByRole("button", { name: "Refresh harness status" })).not.toBeInTheDocument();
-		expect(within(row).getByRole("button", { name: "Check login" })).toBeInTheDocument();
+		expect(within(row).queryByRole("button", { name: "Check login" })).not.toBeInTheDocument();
 		expect(within(row).queryByRole("button", { name: "Check configuration" })).not.toBeInTheDocument();
 	});
 
