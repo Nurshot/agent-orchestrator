@@ -571,6 +571,10 @@ func launchApprovalSettings(mode ports.PermissionMode, readOnly bool) (policy, s
 	return policy, sandbox, approvalReviewer(mode)
 }
 
+func (d *Driver) StopDetachedHost(ctx context.Context, dataDir string, id domain.SessionID) error {
+	return persistenthost.Shutdown(ctx, dataDir, string(id))
+}
+
 // spawnAppServer is the real launcher.
 func spawnAppServer(ctx context.Context, bin, workdir string, env []string) (*process, error) {
 	args := []string{"app-server"}

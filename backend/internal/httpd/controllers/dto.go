@@ -198,6 +198,27 @@ type SessionIDParam struct {
 	SessionID string `path:"sessionId" description:"Session identifier, e.g. project-1."`
 }
 
+type ResearchIDParam struct {
+	ResearchID string `path:"researchId" description:"Research run identifier."`
+}
+
+type StartResearchRequest struct {
+	Prompt string `json:"prompt" description:"Repository question for the configured researcher."`
+}
+
+type ResolveResearchApprovalRequest struct {
+	RequestID string `json:"requestId"`
+	OptionID  string `json:"optionId"`
+}
+
+type ResearchRunResponse struct {
+	Research domain.ResearchRun `json:"research"`
+}
+
+type ListResearchRunsResponse struct {
+	Research []domain.ResearchRun `json:"research"`
+}
+
 // PRNumberParam is the associated pull-request number in Files routes.
 type PRNumberParam struct {
 	PRNumber int `path:"prNumber" description:"Associated pull request number." minimum:"1"`
