@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	researchTimeout   = 10 * time.Minute
+	researchTimeout   = 30 * time.Minute
 	maxResearchPrompt = 16 << 10
 	maxResearchResult = 256 << 10
 )
@@ -227,7 +227,7 @@ func (s *Service) runResearch(ctx context.Context, store researchStore, runner r
 		if errors.Is(ctx.Err(), context.Canceled) {
 			status, message = "cancelled", "Research was cancelled"
 		} else if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			message = "Research exceeded the 10-minute limit"
+			message = fmt.Sprintf("Research exceeded the %d-minute limit", int(researchTimeout/time.Minute))
 		}
 		result = ""
 	}

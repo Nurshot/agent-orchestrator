@@ -115,6 +115,71 @@ func TestResearchLifecycle(t *testing.T) {
 	}
 }
 
+func TestResearchDeadlinePersistsFailure(t *testing.T) {
+	ctx := context.Background()
+	st := sqlitetest.MustOpen(t)
+	project := domain.ProjectRecord{
+		ID: "mer", Path: t.TempDir(), RegisteredAt: time.Now(),
+		Config: domain.ProjectConfig{Researcher: domain.ResearcherConfig{Enabled: true, Harness: domain.HarnessCodex}},
+	}
+	if err := st.UpsertProject(ctx, project); err != nil {
+		t.Fatal(err)
+	}
+	parent, err := st.CreateSession(ctx, domain.SessionRecord{
+		ProjectID: domain.ProjectID(project.ID), Kind: domain.KindOrchestrator, Harness: domain.HarnessCodex,
+		CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if researchTimeout != 30*time.Minute {
+		t.Fatalf("research timeout = %s, want 30m", researchTimeout)
+	}
+
+	background, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	started := make(chan struct{})
+	runner := &researchCommander{run: func(ctx context.Context, _ domain.ResearcherConfig, _ func(context.Context, ports.ChatEvent) (ports.ChatDecision, error)) (string, error) {
+		close(started)
+		<-ctx.Done()
+		return "", ctx.Err()
+	}}
+	s := NewWithDeps(Deps{Store: st, Manager: runner, BackgroundContext: background})
+	var work func()
+	s.runBackground = func(fn func()) { work = fn }
+	run, err := s.StartResearch(ctx, parent.ID, "Wait until the deadline")
+	if err != nil {
+		t.Fatal(err)
+	}
+	finished := make(chan struct{})
+	go func() {
+		work()
+		close(finished)
+	}()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("research runner did not start")
+	}
+	running, err := s.GetResearch(ctx, parent.ID, run.ID)
+	if err != nil || running.Status != "running" {
+		t.Fatalf("active research = status %q, err %v", running.Status, err)
+	}
+	select {
+	case <-finished:
+	case <-time.After(5 * time.Second):
+		t.Fatal("research did not stop at its deadline")
+	}
+
+	got, err := s.GetResearch(ctx, parent.ID, run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "failed" || got.Error != "Research exceeded the 30-minute limit" || got.Result != "" {
+		t.Fatalf("deadline result = status %q, error %q, result length %d", got.Status, got.Error, len(got.Result))
+	}
+}
+
 func TestResearchApprovalUsesOnlyOfferedProviderChoices(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
