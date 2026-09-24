@@ -44,7 +44,7 @@ it("keeps a large result list scrollable below the search field without empty sp
 	await user.click(screen.getByRole("combobox", { name: "Template" }));
 	const list = screen.getByRole("listbox", { name: "Template" });
 	expect(list).toHaveClass("overflow-y-auto");
-	expect(list).toHaveClass("max-h-56");
+	expect(list).toHaveClass("max-h-72");
 	expect(screen.getByPlaceholderText("Search templates")).toBeInTheDocument();
 	expect(screen.getAllByRole("option")).toHaveLength(40);
 });
@@ -62,6 +62,6 @@ it("gives repository selectors a fixed, visibly scrollable result area", async (
 	/>);
 	await user.click(screen.getByRole("combobox", { name: "Repository" }));
 	const list = screen.getByRole("listbox", { name: "Repository" });
-	expect(list).toHaveClass("h-56", "overflow-y-scroll", "repository-picker-scrollbar");
+	expect(list).toHaveClass("h-72", "overflow-y-scroll", "repository-picker-scrollbar");
 	expect(screen.getAllByRole("option")).toHaveLength(40);
 });
